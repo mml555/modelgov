@@ -159,6 +159,6 @@ describe("providers (openrouter / azure)", () => {
 describe("composeFileFor", () => {
   it("maps modes", () => {
     expect(composeFileFor("simple")).toBe("-f docker-compose.simple.yml");
-    expect(composeFileFor("full")).toContain("docker-compose.full.yml");
+    expect(composeFileFor("full")).toContain("docker-compose.dev.full.yml");
   });
 });

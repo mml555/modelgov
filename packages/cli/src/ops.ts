@@ -222,7 +222,7 @@ async function dockerCompose(mode: Mode, command: string[]): Promise<void> {
 function modeConfig(mode: Mode): ModeConfig {
   switch (mode) {
     case "full":
-      return { apiPort: 3000, composeArgs: ["-f", "docker-compose.simple.yml", "-f", "docker-compose.full.yml"] };
+      return { apiPort: 3000, composeArgs: ["-f", "docker-compose.simple.yml", "-f", "docker-compose.dev.full.yml"] };
     case "local":
       return { apiPort: 3080, composeArgs: ["-f", "docker-compose.simple.yml", "-f", "docker-compose.local.yml"] };
     case "prod":

@@ -1,15 +1,16 @@
-# Observability OVERLAY — adds Langfuse on top of the simple stack.
+# Observability OVERLAY — adds Langfuse on top of the simple DEV stack.
+# The "dev." in the filename is load-bearing: this overlay ships hardcoded
+# Langfuse secrets (NEXTAUTH_SECRET, SALT, ENCRYPTION_KEY) and default admin
+# credentials for a zero-setup local experience, and must NEVER be layered
+# over docker-compose.production.yml. For production observability, run
+# Langfuse separately with real secrets and point the API at it via
+# LANGFUSE_HOST / LANGFUSE_PUBLIC_KEY / LANGFUSE_SECRET_KEY.
+#
 # Apply it layered over the simple file (the `make up-full` target does this):
-#   docker compose -f docker-compose.simple.yml -f docker-compose.full.yml up --build
+#   docker compose -f docker-compose.simple.yml -f docker-compose.dev.full.yml up --build
 #
 # One-click: Langfuse is provisioned headlessly (org/project/API keys via env)
 # and the API is wired to it automatically — no manual Langfuse UI setup.
-#
-# ⚠️  DEV-ONLY. This overlay ships hardcoded Langfuse secrets (NEXTAUTH_SECRET,
-# SALT, ENCRYPTION_KEY) and default admin credentials for a zero-setup local
-# experience. Do NOT run it in production. For production observability, run
-# Langfuse separately with real secrets and point the API at it via
-# LANGFUSE_HOST / LANGFUSE_PUBLIC_KEY / LANGFUSE_SECRET_KEY.
 name: ai-guard
 
 services:

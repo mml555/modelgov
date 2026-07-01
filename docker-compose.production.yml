@@ -18,6 +18,9 @@ services:
     environment:
       PORT: 3000
       HOST: 0.0.0.0
+      # Turns known dev-only defaults (e.g. the dev Langfuse overlay's keys)
+      # into boot errors instead of silent production footguns.
+      AI_GUARD_PRODUCTION: "true"
       AI_GUARD_API_KEY: ${AI_GUARD_API_KEY:-}
       AI_GUARD_API_KEYS: ${AI_GUARD_API_KEYS:-}
       DATABASE_URL: ${DATABASE_URL:?set a production Postgres URL}

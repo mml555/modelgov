@@ -190,6 +190,6 @@ export function modelStringsFor(opts: ScaffoldOptions): string[] {
 /** The compose invocation for the chosen mode (repo-relative). */
 export function composeFileFor(mode: DeployMode): string {
   return mode === "full"
-    ? "-f docker-compose.simple.yml -f docker-compose.full.yml"
+    ? "-f docker-compose.simple.yml -f docker-compose.dev.full.yml"
     : "-f docker-compose.simple.yml";
 }

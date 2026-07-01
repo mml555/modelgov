@@ -81,6 +81,12 @@ spec:
           env:
             - name: AI_GUARD_CONFIG
               value: /config/ai-guard.yaml
+            {{- if .Values.production }}
+            # Turns known dev-only defaults into boot errors (mirrors the
+            # chart's image-tag pinning enforcement).
+            - name: AI_GUARD_PRODUCTION
+              value: "true"
+            {{- end }}
             - name: LITELLM_BASE_URL
               value: {{ include "ai-guard.litellmUrl" . | quote }}
             {{- $redis := include "ai-guard.redisUrl" . }}

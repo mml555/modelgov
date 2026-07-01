@@ -76,6 +76,9 @@ const baseEnvSchema = z.object({
   IDEMPOTENCY_CAPTURE_CONTENT: z.enum(["true", "false"]).default("false"),
   STRICT_PRICING: z.enum(["true", "false"]).default("false"),
   METRICS_AUTH_TOKEN: z.string().min(1).optional(),
+  // Declared by the production compose/Helm deployments (mirrors the Helm
+  // chart's `production` flag). Turns known dev-only defaults into boot errors.
+  AI_GUARD_PRODUCTION: z.enum(["true", "false"]).default("false"),
   MAINTENANCE_ENABLED: z.enum(["true", "false"]).default("true"),
   IDEMPOTENCY_STALE_MS: z.coerce.number().int().positive().default(900_000),
   /** Completed idempotency replay rows older than this are pruned (default 7d). */

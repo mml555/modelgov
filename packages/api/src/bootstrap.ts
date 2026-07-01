@@ -217,6 +217,21 @@ export function createRuntimeServices(env: Env, config: AiGuardConfig): RuntimeS
     : undefined;
   const safety = createSafetyGuard({ presidio, injection });
 
+  // The dev Langfuse overlay (docker-compose.dev.full.yml) ships well-known
+  // default keys for a zero-setup local experience. A production deployment
+  // (AI_GUARD_PRODUCTION=true, set by the production compose / Helm chart)
+  // must never run with them — refuse to boot rather than trace into a
+  // Langfuse whose admin credentials and encryption key are public.
+  if (
+    env.AI_GUARD_PRODUCTION === "true" &&
+    (env.LANGFUSE_PUBLIC_KEY === "pk-lf-ai-guard-local" ||
+      env.LANGFUSE_SECRET_KEY === "sk-lf-ai-guard-local")
+  ) {
+    throw new Error(
+      "LANGFUSE_PUBLIC_KEY/LANGFUSE_SECRET_KEY are the dev-overlay defaults (docker-compose.dev.full.yml) — set real Langfuse credentials or unset OBSERVABILITY_PROVIDER for production",
+    );
+  }
+
   // OBSERVABILITY_PROVIDER env overrides the config file (lets the full-mode
   // compose flip on Langfuse without editing ai-guard.yaml).
   const observability = createObservability({
