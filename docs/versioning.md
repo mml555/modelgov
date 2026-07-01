@@ -108,7 +108,8 @@ not a hand-editable compatibility surface.
   migration guide.
 - **Images are immutable and pinned** — no floating `:latest`; pin by tag or, best,
   by digest. Every breaking change ships with a **CHANGELOG entry + migration
-  notes** (aspirational commitment for 1.0; adopt a CHANGELOG before GA).
+  notes** — see [CHANGELOG.md](../CHANGELOG.md) (breaking entries are marked
+  **⚠ Breaking** with a migration note).
 - **Deprecation before removal:** a feature/field is marked deprecated for at
   least one MINOR release (with a documented replacement) before a MAJOR removes it.
 
@@ -124,8 +125,9 @@ checked, breaking changes remain possible under 0.x semantics.
 - [ ] Freeze `/v1` route set, request/response schemas, and status-code mapping.
 - [ ] Freeze the error-envelope shape and the full `reasonCode` enumeration as
       append-only.
-- [ ] Publish `openapi.json` as a versioned artifact per release; treat it as the
-      contract of record.
+- [x] Publish `openapi.json` as a versioned artifact per release; treat it as the
+      contract of record — the `release` workflow attaches `openapi-<tag>.json` to
+      each GitHub Release (`.github/workflows/release.yml`).
 - [ ] Confirm no known breaking API change is pending (e.g. actor/subject model is
       explicitly **post-v1** and must stay additive).
 
@@ -149,7 +151,9 @@ checked, breaking changes remain possible under 0.x semantics.
 
 **Process & docs**
 
-- [ ] Adopt a maintained **CHANGELOG** with a breaking-changes section per release.
+- [x] Adopt a maintained **CHANGELOG** with a breaking-changes section per release
+      — [CHANGELOG.md](../CHANGELOG.md) (Keep a Changelog format; **⚠ Breaking**
+      entries carry migration notes).
 - [ ] Publish the deprecation policy (≥1 MINOR notice) and the supported-version
       window with concrete EOL dates.
 - [ ] Update [SECURITY.md](../SECURITY.md) supported-versions table from `0.1.x`

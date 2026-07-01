@@ -296,6 +296,10 @@ See [`.env.example`](../.env.example) and [Operations](./operations.md). Key var
 | `RESERVATION_STALE_MS` | Orphaned budget reservation release TTL (default **900000** = 15m) |
 | `BUDGET_ALERT_WEBHOOK_URL` | POST budget alert once per month when threshold crossed |
 | `BUDGET_ALERT_WEBHOOK_SECRET` | Optional HMAC secret for `X-Ai-Guard-Signature` |
+| `POLICY_STORE_ENABLED` | Load the active policy from the DB version store instead of the file (default off) |
+| `MULTI_TENANT_POLICY` | Evaluate each request against its tenant's active policy version (needs `POLICY_STORE_ENABLED`; default off) — see [multi-tenancy](./design/multi-tenancy.md) |
+| `POLICY_CACHE_TTL_MS` | Per-tenant policy cache TTL; bounds restart-free activation lag (default **30000**) |
+| `DB_RLS_ENABLED` | Opt-in Postgres RLS tenant isolation on `config_versions` (requires a non-owner DB role; default off) |
 
 ### Scoped API keys (multi-tenant operators)
 

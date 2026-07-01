@@ -40,7 +40,7 @@ exists but requires operator configuration or has gaps) · **Roadmap** (not buil
 | --- | --- | --- | --- |
 | CC7.1 Detect vulnerabilities | CI runs **Trivy** image scanning; publishes **SBOM**; dependency monitoring guidance in SECURITY.md | **Implemented** (in CI) | Operator monitors CVEs on their pinned images |
 | CC7.2 Monitor for anomalies | Prometheus `/metrics` (request rate/errors/latency, pg pool saturation); OpenTelemetry OTLP span export; budget-alert webhook; structured logs | **Implemented** | Operator wires alerting + SIEM |
-| CC7.2 Audit trail integrity | Hash-chained `admin_audit_log` for key/policy/erasure mutations; `GET /v1/admin/audit/verify` detects tampering | **Implemented** | Export to WORM/SIEM; schedule chain verification |
+| CC7.2 Audit trail integrity | Hash-chained `admin_audit_log` for key/policy/erasure mutations; `GET /v1/admin/audit/verify` detects tampering; **`audit:export` helper** streams the chain as JSONL for WORM/SIEM with a non-zero exit on tamper | **Implemented** | Schedule the export/verify (see [evidence runbook](./evidence-collection.md)) |
 | CC7.3 Evaluate security events | [Incident-response runbook](../runbooks/incident-response.md) (SEV classification, escalation, comms) | **Partial** (template) | Operationalize with your on-call |
 | CC7.4 Respond to incidents | Vuln disclosure process (SECURITY.md); incident runbook | **Partial** | Adopt + drill |
 | CC7.5 Recovery | [Disaster-recovery runbook](../runbooks/disaster-recovery.md); stateless tiers; Postgres restore | **Partial** | No built-in backup scheduler — operator wires managed snapshots/PITR |
@@ -130,9 +130,11 @@ A Type II audit tests that controls **operated effectively over a period**
    response, BCP/DR, secure SDLC — written, approved, and followed.
 8. **Operationalize the shipped audit controls**: hash-chained admin audit
    logging (key/policy/erasure mutations) and chain verification are now
-   **implemented** (`admin_audit_log`, `/v1/admin/audit/verify`); export them to
-   a WORM/SIEM sink and schedule chain verification to satisfy an auditor's
-   integrity + retention expectations.
+   **implemented** (`admin_audit_log`, `/v1/admin/audit/verify`). Ship them to a
+   WORM/SIEM sink and schedule chain verification with the **`audit:export`
+   helper** (`pnpm --filter @ai-guard/api audit:export`); the
+   [evidence-collection runbook](./evidence-collection.md) gives the cadence,
+   commands, and retention for this and the other operator-side evidence.
 9. **Engage a licensed CPA firm** to perform the examination — only they can issue
    the SOC 2 report.
 

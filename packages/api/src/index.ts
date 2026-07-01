@@ -1,10 +1,12 @@
 import { loadEnv } from "./config/env";
 import { warnUnpricedModels } from "./config/loadConfig";
+import { setConfigVersionsRls } from "./modules/policy/repo";
 import { buildServer } from "./app";
 import {
   connectRedisIfConfigured,
   createAuthProviders,
   createDbPool,
+  createPolicyResolver,
   createRuntimeServices,
   installLifecycle,
   parseCsv,
@@ -25,7 +27,13 @@ async function main(): Promise<void> {
   const env = loadEnv();
 
   const pool = await createDbPool(env);
+  // Opt-in RLS: make config_versions reads/writes set the tenant context so the
+  // app can run as a non-owner role under the RLS policy (no-op when off).
+  setConfigVersionsRls(env.DB_RLS_ENABLED === "true");
   const { config, policyMeta } = await resolvePolicy(env, pool);
+  const tenantPolicy = createPolicyResolver(env, pool, { config, policyMeta }, {
+    warn: (obj, msg) => console.warn(msg, obj),
+  });
   const { litellm, safety, observability, hasPresidio, hasInjection } =
     createRuntimeServices(env, config);
   const redis = await connectRedisIfConfigured(env);
@@ -43,6 +51,7 @@ async function main(): Promise<void> {
     jwtVerifier,
     hierarchicalBudgets: env.HIERARCHICAL_BUDGETS === "true",
     policyMeta,
+    tenantPolicy,
     idempotencyCaptureContent: env.IDEMPOTENCY_CAPTURE_CONTENT === "true",
     metrics: env.METRICS_ENABLED === "true",
     metricsAuthToken: env.METRICS_AUTH_TOKEN,

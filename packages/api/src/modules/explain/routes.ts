@@ -11,10 +11,16 @@ import {
   explainSuccessJsonSchema,
 } from "./schemas";
 import { handleExplain } from "./service";
+import type { TenantPolicyResolver } from "../policy/tenantResolver";
 
 export interface ExplainRouteDeps {
   config: AiGuardConfig;
   pool: Pool;
+  /**
+   * When set (MULTI_TENANT_POLICY), the dry-run is evaluated against the caller's
+   * tenant's active policy version instead of the boot config.
+   */
+  tenantPolicy?: TenantPolicyResolver;
 }
 
 export function registerExplainRoute(
@@ -55,7 +61,10 @@ export function registerExplainRoute(
       return sendError(reply, auth.status, auth.code, auth.details, auth.message);
     }
 
-    const result = await handleExplain(deps.config, deps.pool, auth.value);
+    const config = deps.tenantPolicy
+      ? (await deps.tenantPolicy.resolve(request.ctx.tenantId)).config
+      : deps.config;
+    const result = await handleExplain(config, deps.pool, auth.value);
     if (result instanceof PolicyConfigError) {
       return sendError(reply, 400, result.code, { detail: result.message }, result.message);
     }

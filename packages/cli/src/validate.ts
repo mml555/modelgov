@@ -1,11 +1,11 @@
 import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
 import {
   findUnpricedModels,
   parseConfig,
   resolveSafetyPlan,
   type AiGuardConfig,
 } from "@ai-guard/policy-engine";
+import { resolveUserPath } from "./paths.js";
 
 export interface ValidateIssue {
   level: "error" | "warn";
@@ -25,10 +25,10 @@ export interface ValidateOptions {
 }
 
 export function validateConfig(options: ValidateOptions): ValidateResult {
-  const text = readFileSync(resolve(options.configPath), "utf8");
+  const env = options.env ?? process.env;
+  const text = readFileSync(resolveUserPath(options.configPath, env), "utf8");
   const config = parseConfig(text, { strictPricing: options.production });
   const issues: ValidateIssue[] = [];
-  const env = options.env ?? process.env;
 
   if (options.production) {
     validateProduction(config, env, issues);

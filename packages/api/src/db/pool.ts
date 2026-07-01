@@ -108,4 +108,21 @@ export async function withTransaction<T>(
   }
 }
 
+/**
+ * Run `fn` inside a transaction with the RLS tenant context set for its duration:
+ * `app.current_tenant` is set with `is_local=true` so it is scoped to this
+ * transaction on this pooled connection and cannot leak to the next checkout.
+ * The RLS policy on `config_versions` filters on this setting (see db/rls.ts).
+ */
+export async function withTenantContext<T>(
+  pool: Pool,
+  tenantId: string,
+  fn: (client: PoolClient) => Promise<T>,
+): Promise<T> {
+  return withTransaction(pool, async (client) => {
+    await client.query("SELECT set_config('app.current_tenant', $1, true)", [tenantId]);
+    return fn(client);
+  });
+}
+
 export type { Pool, PoolClient } from "pg";

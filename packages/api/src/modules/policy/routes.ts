@@ -24,6 +24,11 @@ export interface PolicyRouteDeps {
     target?: string;
     metadata?: Record<string, unknown>;
   }) => Promise<void>;
+  /**
+   * Called after a version is activated, with the tenant whose active version
+   * changed, so a per-tenant policy cache can evict it (restart-free activation).
+   */
+  onActivated?: (tenantId: string) => void;
 }
 
 function requirePerm(ctx: RequestContext, perm: string) {
@@ -188,13 +193,19 @@ export function registerPolicyRoutes(
       throw err;
     }
     if (!record) return sendError(reply, 404, "not_found", {}, "Version not found");
+    const tenantId = request.ctx.tenantId ?? "default";
     await deps.recordAudit?.({
       actor: request.ctx.apiKeyName ?? "unknown",
       action: "policy.activate",
       target: record.id,
       metadata: { checksum: record.checksum },
     });
-    // Replicas load the active version at boot; a rolling restart applies it.
-    return reply.send({ ...record, note: "activated — rolling restart applies it across replicas" });
+    // Evict this tenant's cached policy so the change applies without a restart
+    // when per-tenant resolution is on (no-op otherwise).
+    deps.onActivated?.(tenantId);
+    const note = deps.onActivated
+      ? "activated — applied within the policy cache TTL across replicas"
+      : "activated — rolling restart applies it across replicas";
+    return reply.send({ ...record, note });
   });
 }

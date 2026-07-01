@@ -4,8 +4,13 @@ packages:
 
 onlyBuiltDependencies:
   - esbuild
+  - sharp
 
 confirmModulesPurge: false
 
 allowBuilds:
   esbuild: true
+  sharp: true
+
+overrides:
+  postcss: 8.5.16

@@ -11,6 +11,12 @@ const baseEnvSchema = z.object({
   DB_CONNECTION_TIMEOUT_MS: z.coerce.number().int().positive().default(5_000),
   DB_IDLE_TIMEOUT_MS: z.coerce.number().int().positive().default(30_000),
   DB_STATEMENT_TIMEOUT_MS: z.coerce.number().int().positive().default(30_000),
+  // Opt-in Postgres row-level security for tenant isolation on config_versions
+  // (defense-in-depth; see docs/design/multi-tenancy.md). When true: `migrate`
+  // installs the RLS policy, and the runtime sets `app.current_tenant` per
+  // config-versions transaction. Only enforces when the app connects as a
+  // NON-OWNER DB role (the table owner bypasses RLS). Default false = unchanged.
+  DB_RLS_ENABLED: z.enum(["true", "false"]).default("false"),
   AI_GUARD_API_KEY: z.string().min(1).optional(),
   AI_GUARD_API_KEYS: z.string().optional(),
   // DB-backed key store (issue/rotate/revoke live via /v1/admin/keys). Static
@@ -21,6 +27,14 @@ const baseEnvSchema = z.object({
   // the DB (seeding it from AI_GUARD_CONFIG on first run), instead of always
   // reading the file. Default false keeps file-based deploys unchanged.
   POLICY_STORE_ENABLED: z.enum(["true", "false"]).default("false"),
+  // Per-request per-tenant policy resolution: when true (and POLICY_STORE_ENABLED),
+  // each request is evaluated against its tenant's active config version (resolved
+  // from the API key's tenantId) via a TTL cache, instead of the single version
+  // loaded at boot. Default false keeps the single boot-config path.
+  MULTI_TENANT_POLICY: z.enum(["true", "false"]).default("false"),
+  // How long a resolved per-tenant policy is cached before re-reading the store.
+  // Bounds how long an activation takes to apply across replicas (like key cache).
+  POLICY_CACHE_TTL_MS: z.coerce.number().int().positive().default(30_000),
   // Hierarchical (node-tree) budgets: when true, requests carrying a budgetNodeId
   // (from the body or the API key) enforce budgets against the budget_nodes tree
   // instead of the flat dimensions. Default false keeps the flat path.
@@ -103,6 +117,7 @@ const databaseEnvSchema = baseEnvSchema.pick({
   DATABASE_URL: true,
   DATABASE_SSL: true,
   DATABASE_SSL_CA: true,
+  DB_RLS_ENABLED: true,
 });
 
 export type DatabaseEnv = z.infer<typeof databaseEnvSchema>;

@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
 import { parse as parseYaml } from "yaml";
 import {
   evaluateAiRequest,
@@ -8,6 +8,7 @@ import {
   type PolicyReasonCode,
   type UsageSnapshot,
 } from "@ai-guard/policy-engine";
+import { resolveUserPath } from "./paths.js";
 
 export interface PolicyTestCase {
   name: string;
@@ -49,7 +50,7 @@ const ZERO_USAGE: UsageSnapshot = {
 };
 
 export function loadPolicyTestFile(path: string): PolicyTestFile {
-  const raw = parseYaml(readFileSync(resolve(path), "utf8")) as PolicyTestFile;
+  const raw = parseYaml(readFileSync(resolveUserPath(path), "utf8")) as PolicyTestFile;
   if (!raw?.cases?.length) {
     throw new Error("policy test file must define at least one case");
   }
@@ -124,9 +125,14 @@ export function runPolicyTestFile(
   testFilePath: string,
   configPath?: string,
 ): { results: PolicyTestResult[]; ok: boolean } {
-  const file = loadPolicyTestFile(testFilePath);
-  const configFile = configPath ?? file.config ?? "./ai-guard.yaml";
-  const config = parseConfig(readFileSync(resolve(configFile), "utf8"));
+  const resolvedTestFilePath = resolveUserPath(testFilePath);
+  const file = loadPolicyTestFile(resolvedTestFilePath);
+  const configFile = configPath
+    ? resolveUserPath(configPath)
+    : file.config
+      ? resolve(dirname(resolvedTestFilePath), file.config)
+      : resolveUserPath("./ai-guard.yaml");
+  const config = parseConfig(readFileSync(configFile, "utf8"));
   const results = runPolicyTests(config, file.cases);
   return { results, ok: results.every((r) => r.passed) };
 }

@@ -1,5 +1,4 @@
 import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
 import {
   evaluateAiRequest,
   parseConfig,
@@ -7,6 +6,7 @@ import {
   type AiGuardConfig,
   type UsageSnapshot,
 } from "@ai-guard/policy-engine";
+import { resolveUserPath } from "./paths.js";
 
 export interface ExplainFlags {
   userId: string;
@@ -22,7 +22,7 @@ export interface ExplainFlags {
 }
 
 export function loadConfigFromPath(path: string): AiGuardConfig {
-  const text = readFileSync(resolve(path), "utf8");
+  const text = readFileSync(resolveUserPath(path), "utf8");
   return parseConfig(text);
 }
 

@@ -24,6 +24,10 @@ import {
   getActiveConfigVersion,
   saveConfigVersion,
 } from "./modules/policy/repo";
+import {
+  createTenantPolicyResolver,
+  type TenantPolicyResolver,
+} from "./modules/policy/tenantResolver";
 
 /**
  * Startup assembly. Each function builds ONE dependency (or family of related
@@ -158,6 +162,29 @@ export async function resolvePolicy(
     config: fileConfig,
     policyMeta: { configHash: seeded.checksum, policyVersion: seeded.id },
   };
+}
+
+/**
+ * Build the per-tenant policy resolver when `MULTI_TENANT_POLICY` is on. Returns
+ * undefined (single boot-config path) when off, or when the policy store is
+ * disabled — per-tenant resolution needs stored versions to resolve, so we warn
+ * and fall back rather than silently resolving everyone to the boot config.
+ */
+export function createPolicyResolver(
+  env: Env,
+  pool: Pool,
+  fallback: { config: AiGuardConfig; policyMeta: PolicyMeta },
+  log?: { warn(obj: unknown, msg: string): void },
+): TenantPolicyResolver | undefined {
+  if (env.MULTI_TENANT_POLICY !== "true") return undefined;
+  if (env.POLICY_STORE_ENABLED !== "true") {
+    log?.warn(
+      {},
+      "MULTI_TENANT_POLICY=true requires POLICY_STORE_ENABLED=true — per-tenant policy resolution is disabled",
+    );
+    return undefined;
+  }
+  return createTenantPolicyResolver({ pool, fallback, ttlMs: env.POLICY_CACHE_TTL_MS });
 }
 
 export interface RuntimeServices {

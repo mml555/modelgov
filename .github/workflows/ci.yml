@@ -58,3 +58,17 @@ jobs:
             || (echo "::error::openapi.json is stale — run 'pnpm --filter @ai-guard/api openapi:export' and commit the result" && exit 1)
       - name: API boot smoke test
         run: bash scripts/smoke-ci.sh
+
+  python-sdk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.9"
+      - name: Install Python SDK with dev extras
+        working-directory: packages/sdk-python
+        run: pip install -e ".[dev]"
+      - name: Run Python SDK tests
+        working-directory: packages/sdk-python
+        run: python -m pytest -q

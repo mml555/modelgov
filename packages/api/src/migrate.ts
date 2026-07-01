@@ -1,6 +1,7 @@
 import { loadDatabaseEnv } from "./config/env";
 import { applySchema } from "./db/init";
 import { createPool, resolveSsl } from "./db/pool";
+import { applyTenantRls } from "./db/rls";
 
 async function main(): Promise<void> {
   const env = loadDatabaseEnv();
@@ -10,6 +11,12 @@ async function main(): Promise<void> {
   try {
     await applySchema(pool);
     console.log("ai-guard schema applied");
+    // Opt-in tenant-isolation RLS on config_versions (kept OUT of the auto
+    // migration chain so it never surprises a non-owner-role deploy).
+    if (env.DB_RLS_ENABLED === "true") {
+      await applyTenantRls(pool);
+      console.log("config_versions tenant-isolation RLS applied (DB_RLS_ENABLED=true)");
+    }
   } finally {
     await pool.end();
   }

@@ -260,13 +260,6 @@ BUILD_LOCAL_IMAGE=true
 make up-prod
 ```
 
-## Data retention
-
-`request_logs` and `idempotency_keys` grow without bound in v1. Plan:
-
-- Periodic `DELETE FROM request_logs WHERE created_at < now() - interval '90 days'`
-- Idempotency rows are cleaned automatically when stale
-
 ## Local Ollama
 
 ```bash

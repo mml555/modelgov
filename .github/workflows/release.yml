@@ -1,0 +1,113 @@
+name: release
+
+# Package + contract release. Fires on a version tag (v*). The container image
+# is built and pushed separately by docker.yml on the same tag; this workflow
+# ships the SDKs (npm + PyPI) and publishes the versioned OpenAPI contract as a
+# GitHub Release asset (the API's contract of record — see docs/versioning.md).
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to release (e.g. v0.5.0); manual runs only"
+        required: true
+
+permissions:
+  contents: write # create/attach GitHub Release assets
+  id-token: write # npm provenance / PyPI trusted publishing (optional)
+
+jobs:
+  # Fail fast if the tag doesn't match the versions in the tree, so we never
+  # publish 0.5.0 artifacts under a v0.6.0 tag (or vice versa).
+  guard:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: v
+        name: Resolve + verify version
+        run: |
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          VERSION="${TAG#v}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          ROOT="$(node -p "require('./package.json').version")"
+          PY="$(grep -m1 '^version' packages/sdk-python/pyproject.toml | sed -E 's/.*"([^"]+)".*/\1/')"
+          echo "tag=$VERSION root=$ROOT python=$PY"
+          if [ "$VERSION" != "$ROOT" ] || [ "$VERSION" != "$PY" ]; then
+            echo "::error::tag $VERSION does not match package versions (root=$ROOT, python=$PY) — bump versions before tagging"
+            exit 1
+          fi
+
+  npm:
+    needs: guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.19.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      # Publish the four public leaf packages in dependency order
+      # (@ai-guard/api is the Docker-shipped server, not an npm library).
+      # pnpm rewrites the `workspace:*` deps to the published version.
+      - name: Publish to npm
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_CONFIG_PROVENANCE: "true"
+        run: |
+          for pkg in @ai-guard/policy-engine @ai-guard/sdk @ai-guard/cli create-ai-guard; do
+            echo "::group::publish $pkg"
+            pnpm --filter "$pkg" publish --access public --no-git-checks
+            echo "::endgroup::"
+          done
+
+  pypi:
+    needs: guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Build sdist + wheel
+        working-directory: packages/sdk-python
+        run: |
+          python -m pip install --upgrade build
+          python -m build
+      # Uses an API token if PYPI_API_TOKEN is set; drop `password` to switch to
+      # PyPI Trusted Publishing (OIDC) once the project is configured for it.
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: packages/sdk-python/dist
+          password: ${{ secrets.PYPI_API_TOKEN }}
+
+  openapi-artifact:
+    needs: guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # openapi.json is committed and CI guarantees it is current on every push,
+      # so it is the contract of record — publish it verbatim under a versioned
+      # name rather than re-generating (which would need a full build).
+      - name: Verify committed spec matches the tag
+        run: |
+          SPEC_VERSION="$(node -p "require('./packages/api/openapi.json').info.version")"
+          if [ "$SPEC_VERSION" != "${{ needs.guard.outputs.version }}" ]; then
+            echo "::error::openapi.json info.version ($SPEC_VERSION) != tag (${{ needs.guard.outputs.version }})"
+            exit 1
+          fi
+          cp packages/api/openapi.json "openapi-${{ github.ref_name }}.json"
+      - name: Attach OpenAPI spec to the GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: openapi-${{ github.ref_name }}.json
+          fail_on_unmatched_files: true

@@ -202,9 +202,18 @@ export function buildServer(opts: BuildServerOptions): FastifyInstance {
       });
       registerAuditRoutes(scope, opts.pool);
       registerGovernanceRoutes(scope, opts.pool, { recordAudit });
-      registerPolicyRoutes(scope, opts.pool, { recordAudit });
+      registerPolicyRoutes(scope, opts.pool, {
+        recordAudit,
+        // Activating a version evicts that tenant's cached policy so the change
+        // applies immediately on this replica (others converge within the TTL).
+        onActivated: (tenantId) => opts.tenantPolicy?.invalidate(tenantId),
+      });
     }
-    registerExplainRoute(scope, { config: opts.config, pool: opts.pool });
+    registerExplainRoute(scope, {
+      config: opts.config,
+      pool: opts.pool,
+      tenantPolicy: opts.tenantPolicy,
+    });
     registerChatRoute(scope, {
       config: opts.config,
       pool: opts.pool,
@@ -215,6 +224,7 @@ export function buildServer(opts: BuildServerOptions): FastifyInstance {
       idempotencyCaptureContent: opts.idempotencyCaptureContent,
       hierarchicalBudgets: opts.hierarchicalBudgets,
       policyMeta: opts.policyMeta,
+      tenantPolicy: opts.tenantPolicy,
     });
   });
 

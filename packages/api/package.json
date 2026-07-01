@@ -11,6 +11,7 @@
     "start": "node dist/index.js",
     "migrate": "node dist/migrate.js",
     "openapi:export": "node dist/openapiExport.js",
+    "audit:export": "tsx scripts/export-audit-log.ts",
     "db:init": "tsx src/migrate.ts"
   },
   "dependencies": {
