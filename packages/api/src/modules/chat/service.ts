@@ -4,31 +4,25 @@ import {
   type AiRequest,
   type PolicyDecision,
 } from "@ai-guard/policy-engine";
-import {
-  LiteLLMClientError,
-  ProviderError,
-  type LiteLLMChatResult,
-} from "../../services/litellm";
 import { SafetyServiceError } from "../../services/safety";
 import { logRequest } from "../usage/auditLogRepo";
 import {
   loadUsageSnapshot,
   recordActualCost,
   recordIncurredCost,
-  releaseBudget,
   reserveBudget,
-  topUpBudget,
 } from "../usage/repo";
 import { budgetErrorContext, policyErrorMessage } from "../../policyErrors";
 import {
+  bookSafetyIfAny,
+  executeProviderWithFallback,
   recordRejection,
   rejectPolicyBlock,
   rejectSafetyBlock,
-  releaseWithSafety,
-  bookSafetyIfAny,
   type IncurFn,
   type RejectionCtx,
 } from "./lifecycle";
+import { createFlatProviderBudget } from "./providerBudget";
 import { baseLog, baseObs, chatSuccessBody, fail } from "./mapper";
 import type { ChatInput, ChatResult, ChatServiceDeps } from "./types";
 import { handleGlobalBudgetAlert } from "../usage/budgetAlerts";
@@ -180,169 +174,31 @@ export async function handleChat(
     );
   }
   const leaseId = reservation.leaseId;
-  let llm: LiteLLMChatResult;
-  let usedModel = decision.resolvedModel;
-  let finalDecision = decision.decision;
-  // Amount reserved against budget counters (may increase if we top up for
-  // fallback). Includes the input-safety cost booked into the reservation above.
-  let reservedUsd = decision.estimatedCostUsd + safetyCostUsd;
-  // Best estimate of the call's cost when LiteLLM reports none. Updated to the
-  // fallback model's estimate if we fall back, so we don't book the (possibly
-  // cheaper) primary estimate for a call that actually ran on the fallback.
-  let costBasis = decision.estimatedCostUsd;
-  try {
-    try {
-      llm = await litellm.chat({
-        model: decision.resolvedModel,
-        messages,
-        maxTokens: decision.maxOutputTokens,
-        temperature: body.temperature,
-      });
-    } catch (err) {
-      if (err instanceof ProviderError && decision.fallbackModel) {
-        const fb = evaluateAiRequest({
-          request: { ...aiRequest, forceFallback: true },
-          config,
-          usage,
-        });
-        if (fb.decision === "block") {
-          await releaseWithSafety(
-            incurSafety,
-            () =>
-              releaseBudget(pool, {
-                projectId: aiRequest.projectId,
-                userId: aiRequest.userId,
-                feature: aiRequest.feature,
-                estimatedCostUsd: reservedUsd,
-                estimatedTokens: decision.estimatedTokens,
-                caps: decision.reservationCaps,
-                now,
-                leaseId,
-              }),
-            safetyCostUsd,
-          );
-          return rejectPolicyBlock(rejection, fb, { safetyCostUsd });
-        }
-        // The fallback reservation must cover the fallback model estimate plus
-        // the same safety cost already reserved.
-        const fbReserve = fb.estimatedCostUsd + safetyCostUsd;
-        if (fbReserve > reservedUsd) {
-          const topUp = await topUpBudget(pool, {
-            projectId: aiRequest.projectId,
-            userId: aiRequest.userId,
-            feature: aiRequest.feature,
-            additionalCostUsd: fbReserve - reservedUsd,
-            caps: decision.reservationCaps,
-            now,
-            leaseId,
-          });
-          if (!topUp.ok) {
-            // Historically this branch released WITHOUT booking the safety
-            // spend — the one rejection path 1.3 missed. releaseWithSafety
-            // makes that impossible to forget again.
-            await releaseWithSafety(
-              incurSafety,
-              () =>
-                releaseBudget(pool, {
-                  projectId: aiRequest.projectId,
-                  userId: aiRequest.userId,
-                  feature: aiRequest.feature,
-                  estimatedCostUsd: reservedUsd,
-                  estimatedTokens: decision.estimatedTokens,
-                  caps: decision.reservationCaps,
-                  now,
-                  leaseId,
-                }),
-              safetyCostUsd,
-            );
-            const reason = `budget_exceeded:${topUp.failedScope}`;
-            const policy = budgetErrorContext(
-              topUp.failedScope,
-              {
-                userId: aiRequest.userId,
-                userType: aiRequest.userType,
-                feature: aiRequest.feature,
-              },
-              decision.budgetRemaining,
-            );
-            return recordRejection(
-              { pool, observability },
-              { ...baseLog(aiRequest, decision, deps.policyMeta), status: "failed", error: reason, reasonCode: policy.reasonCode, ...(safetyCostUsd > 0 ? { actualCostUsd: safetyCostUsd } : {}) },
-              { ...baseObs(aiRequest, decision), status: "blocked", reason },
-              fail(
-                403,
-                "budget_exceeded",
-                {
-                  scope: topUp.failedScope,
-                  reasonCode: policy.reasonCode,
-                  budgetRemaining: decision.budgetRemaining,
-                },
-                policyErrorMessage("budget_exceeded", policy),
-                policy,
-              ),
-            );
-          }
-          reservedUsd = fbReserve;
-        }
-        log?.warn(
-          { primary: decision.resolvedModel, fallback: fb.resolvedModel },
-          "primary provider failed - routing to fallback",
-        );
-        usedModel = fb.resolvedModel;
-        finalDecision = "fallback";
-        costBasis = fb.estimatedCostUsd;
-        llm = await litellm.chat({
-          model: fb.resolvedModel,
-          messages,
-          maxTokens: fb.maxOutputTokens,
-          temperature: body.temperature,
-        });
-      } else {
-        throw err;
-      }
-    }
-  } catch (err) {
-    await releaseWithSafety(
-      incurSafety,
-      () =>
-        releaseBudget(pool, {
-          projectId: aiRequest.projectId,
-          userId: aiRequest.userId,
-          feature: aiRequest.feature,
-          estimatedCostUsd: reservedUsd,
-          estimatedTokens: decision.estimatedTokens,
-          caps: decision.reservationCaps,
-          now,
-          leaseId,
-        }),
+  const reservedUsd = decision.estimatedCostUsd + safetyCostUsd;
+  const providerBudget = createFlatProviderBudget({
+    pool,
+    aiRequest,
+    decision,
+    now,
+    leaseId,
+    initialReservedUsd: reservedUsd,
+  });
+  const provider = await executeProviderWithFallback(
+    { litellm, config, usage, log },
+    {
+      aiRequest,
+      decision,
+      messages,
+      temperature: body.temperature,
       safetyCostUsd,
-    );
-    const detail = (err as Error).message;
-    const code =
-      err instanceof LiteLLMClientError ? "upstream_rejected" : "provider_unavailable";
-    const message =
-      err instanceof LiteLLMClientError
-        ? "Upstream rejected request"
-        : "Provider unavailable";
-    return recordRejection(
-      { pool, observability },
-      {
-        ...baseLog(aiRequest, decision, deps.policyMeta),
-        resolvedModel: usedModel,
-        decision: finalDecision,
-        status: "failed",
-        error: detail,
-        ...(safetyCostUsd > 0 ? { actualCostUsd: safetyCostUsd } : {}),
-      },
-      {
-        ...baseObs(aiRequest, decision),
-        decision: finalDecision,
-        status: "error",
-        reason: detail,
-      },
-      fail(502, code, {}, message),
-    );
-  }
+      rejection,
+    },
+    providerBudget,
+  );
+  if (!provider.ok) return provider.failure;
+
+  const { llm, usedModel, finalDecision, costBasis } = provider;
+  const settledReservedUsd = provider.reservedUsd;
   // The model call happened — settle its cost now, regardless of what output
   // safety decides below. This keeps budget accounting consistent across the
   // mask / block / backend-error branches. Include the input safety pass's own
@@ -356,21 +212,21 @@ export async function handleChat(
       userId: aiRequest.userId,
       feature: aiRequest.feature,
       actualCostUsd,
-      estimatedCostUsd: reservedUsd,
+      estimatedCostUsd: settledReservedUsd,
       actualTokens,
       estimatedTokens: decision.estimatedTokens,
       caps: decision.reservationCaps,
       now,
       leaseId,
     });
-    if (actualCostUsd > reservedUsd) {
+    if (actualCostUsd > settledReservedUsd) {
       // Actual exceeded what we reserved (a pricier fallback, or an
       // under-estimate). The spend is booked truthfully — which can push a
       // counter past its cap and block subsequent requests — so surface it
       // rather than overshooting the budget silently.
       log?.warn(
         {
-          reservedUsd,
+          reservedUsd: settledReservedUsd,
           actualCostUsd,
           model: usedModel,
         },
@@ -392,7 +248,9 @@ export async function handleChat(
         userId: aiRequest.userId,
         feature: aiRequest.feature,
         actualCostUsd,
-        estimatedCostUsd: reservedUsd,
+        // Post-top-up amount — releasing only the original reservation here
+        // would strand the top-up portion in reserved_usd with the lease gone.
+        estimatedCostUsd: settledReservedUsd,
         actualTokens,
         estimatedTokens: decision.estimatedTokens,
         caps: decision.reservationCaps,

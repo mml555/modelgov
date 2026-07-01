@@ -1,10 +1,23 @@
-import type { AiRequest, PolicyDecision } from "@ai-guard/policy-engine";
+import {
+  evaluateAiRequest,
+  type AiGuardConfig,
+  type AiRequest,
+  type PolicyDecision,
+  type UsageSnapshot,
+} from "@ai-guard/policy-engine";
 import type { Pool } from "pg";
+import {
+  LiteLLMClientError,
+  ProviderError,
+  type LiteLLMChatResult,
+  type LiteLLMClient,
+} from "../../services/litellm";
 import type { ChatObservation, Observability } from "../../services/observability";
 import type { SafetyResult } from "../../services/safety";
 import { logRequest, type RequestLogRow } from "../usage/auditLogRepo";
-import { policyErrorFromDecision, policyErrorMessage } from "../../policyErrors";
+import { budgetErrorContext, policyErrorFromDecision, policyErrorMessage } from "../../policyErrors";
 import type { BudgetScope } from "../usage/repo";
+import type { ChatMessage } from "../../types";
 import { baseLog, baseObs, fail, type PolicyMeta } from "./mapper";
 import type { ChatFailure } from "./types";
 
@@ -50,6 +63,31 @@ export interface BudgetStrategy {
 }
 
 export type IncurFn = (costUsd: number) => Promise<void>;
+
+/**
+ * Budget operations needed during provider execution (after reserve). Flat
+ * supplies `topUp`; hierarchical omits it.
+ */
+export interface ProviderBudgetCtx {
+  incur: IncurFn;
+  release: () => Promise<void>;
+  topUp?: (additionalUsd: number) => Promise<TopUpOutcome>;
+  getReservedUsd: () => number;
+  setReservedUsd: (usd: number) => void;
+}
+
+export type ProviderCallDecision = "allow" | "degrade" | "fallback";
+
+export type ProviderCallSuccess = {
+  ok: true;
+  llm: LiteLLMChatResult;
+  usedModel: string;
+  finalDecision: ProviderCallDecision;
+  costBasis: number;
+  reservedUsd: number;
+};
+
+export type ProviderCallOutcome = ProviderCallSuccess | { ok: false; failure: ChatFailure };
 
 /** Everything a rejection needs to leave a correct audit trail. */
 export interface RejectionCtx {
@@ -191,4 +229,190 @@ export async function rejectSafetyBlock(
       findings: safetyResult.findings,
     }),
   );
+}
+
+/** Standard 403 budget_exceeded after a fallback top-up is rejected. */
+export async function rejectTopUpBudgetExceeded(
+  ctx: RejectionCtx,
+  decision: PolicyDecision,
+  args: { failedScope: BudgetScope; safetyCostUsd: number },
+): Promise<ChatFailure> {
+  const reason = `budget_exceeded:${args.failedScope}`;
+  const policy = budgetErrorContext(
+    args.failedScope,
+    {
+      userId: ctx.aiRequest.userId,
+      userType: ctx.aiRequest.userType,
+      feature: ctx.aiRequest.feature,
+    },
+    decision.budgetRemaining,
+  );
+  return recordRejection(
+    ctx,
+    {
+      ...baseLog(ctx.aiRequest, decision, ctx.policyMeta),
+      status: "failed",
+      error: reason,
+      reasonCode: policy.reasonCode,
+      ...(args.safetyCostUsd > 0 ? { actualCostUsd: args.safetyCostUsd } : {}),
+    },
+    { ...baseObs(ctx.aiRequest, decision), status: "blocked", reason },
+    fail(
+      403,
+      "budget_exceeded",
+      {
+        scope: args.failedScope,
+        reasonCode: policy.reasonCode,
+        budgetRemaining: decision.budgetRemaining,
+      },
+      policyErrorMessage("budget_exceeded", policy),
+      policy,
+    ),
+  );
+}
+
+/** Standard 502 provider failure after releaseWithSafety. */
+export async function rejectProviderFailure(
+  ctx: RejectionCtx,
+  args: {
+    decision: PolicyDecision;
+    usedModel: string;
+    finalDecision: ProviderCallDecision;
+    safetyCostUsd: number;
+    err: unknown;
+  },
+): Promise<ChatFailure> {
+  const detail = (args.err as Error).message;
+  const code =
+    args.err instanceof LiteLLMClientError ? "upstream_rejected" : "provider_unavailable";
+  const message =
+    args.err instanceof LiteLLMClientError
+      ? "Upstream rejected request"
+      : "Provider unavailable";
+  return recordRejection(
+    ctx,
+    {
+      ...baseLog(ctx.aiRequest, args.decision, ctx.policyMeta),
+      resolvedModel: args.usedModel,
+      decision: args.finalDecision,
+      status: "failed",
+      error: detail,
+      ...(args.safetyCostUsd > 0 ? { actualCostUsd: args.safetyCostUsd } : {}),
+    },
+    {
+      ...baseObs(ctx.aiRequest, args.decision),
+      decision: args.finalDecision,
+      status: "error",
+      reason: detail,
+    },
+    fail(502, code, {}, message),
+  );
+}
+
+/**
+ * Primary provider call with optional fallback on `ProviderError`. The
+ * `forceFallback` re-eval block check lives here exactly once — flat and
+ * hierarchical compose this instead of copying nested try/catch.
+ */
+export async function executeProviderWithFallback(
+  deps: {
+    litellm: LiteLLMClient;
+    config: AiGuardConfig;
+    usage: UsageSnapshot;
+    log?: { warn(obj: unknown, msg: string): void };
+  },
+  ctx: {
+    aiRequest: AiRequest;
+    decision: PolicyDecision;
+    messages: ChatMessage[];
+    temperature?: number;
+    safetyCostUsd: number;
+    rejection: RejectionCtx;
+    includeBudgetRemaining?: boolean;
+  },
+  budget: ProviderBudgetCtx,
+): Promise<ProviderCallOutcome> {
+  let usedModel = ctx.decision.resolvedModel;
+  let finalDecision = ctx.decision.decision as ProviderCallDecision;
+  let costBasis = ctx.decision.estimatedCostUsd;
+
+  try {
+    try {
+      const llm = await deps.litellm.chat({
+        model: ctx.decision.resolvedModel,
+        messages: ctx.messages,
+        maxTokens: ctx.decision.maxOutputTokens,
+        temperature: ctx.temperature,
+      });
+      return {
+        ok: true,
+        llm,
+        usedModel,
+        finalDecision,
+        costBasis,
+        reservedUsd: budget.getReservedUsd(),
+      };
+    } catch (err) {
+      if (err instanceof ProviderError && ctx.decision.fallbackModel) {
+        const fb = evaluateAiRequest({
+          request: { ...ctx.aiRequest, forceFallback: true },
+          config: deps.config,
+          usage: deps.usage,
+        });
+        if (fb.decision === "block") {
+          await releaseWithSafety(budget.incur, budget.release, ctx.safetyCostUsd);
+          const failure = await rejectPolicyBlock(ctx.rejection, fb, {
+            safetyCostUsd: ctx.safetyCostUsd,
+            includeBudgetRemaining: ctx.includeBudgetRemaining ?? true,
+          });
+          return { ok: false, failure };
+        }
+        const fbReserve = fb.estimatedCostUsd + ctx.safetyCostUsd;
+        if (fbReserve > budget.getReservedUsd() && budget.topUp) {
+          const topUp = await budget.topUp(fbReserve - budget.getReservedUsd());
+          if (!topUp.ok) {
+            await releaseWithSafety(budget.incur, budget.release, ctx.safetyCostUsd);
+            const failure = await rejectTopUpBudgetExceeded(ctx.rejection, ctx.decision, {
+              failedScope: topUp.failedScope!,
+              safetyCostUsd: ctx.safetyCostUsd,
+            });
+            return { ok: false, failure };
+          }
+          budget.setReservedUsd(fbReserve);
+        }
+        deps.log?.warn(
+          { primary: ctx.decision.resolvedModel, fallback: fb.resolvedModel },
+          "primary provider failed - routing to fallback",
+        );
+        usedModel = fb.resolvedModel;
+        finalDecision = "fallback";
+        costBasis = fb.estimatedCostUsd;
+        const llm = await deps.litellm.chat({
+          model: fb.resolvedModel,
+          messages: ctx.messages,
+          maxTokens: fb.maxOutputTokens,
+          temperature: ctx.temperature,
+        });
+        return {
+          ok: true,
+          llm,
+          usedModel,
+          finalDecision,
+          costBasis,
+          reservedUsd: budget.getReservedUsd(),
+        };
+      }
+      throw err;
+    }
+  } catch (err) {
+    await releaseWithSafety(budget.incur, budget.release, ctx.safetyCostUsd);
+    const failure = await rejectProviderFailure(ctx.rejection, {
+      decision: ctx.decision,
+      usedModel,
+      finalDecision,
+      safetyCostUsd: ctx.safetyCostUsd,
+      err,
+    });
+    return { ok: false, failure };
+  }
 }

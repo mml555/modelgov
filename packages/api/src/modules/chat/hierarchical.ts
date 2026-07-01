@@ -7,31 +7,26 @@ import {
   type PolicyDecision,
   type UsageSnapshot,
 } from "@ai-guard/policy-engine";
-import {
-  LiteLLMClientError,
-  ProviderError,
-  type LiteLLMChatResult,
-} from "../../services/litellm";
 import { SafetyServiceError } from "../../services/safety";
 import { logRequest } from "../usage/auditLogRepo";
 import {
   loadPathSnapshot,
   recordIncurredPathCost,
-  releasePath,
   reservePath,
   resolvePath,
   settlePath,
   type PathReservation,
 } from "../budgets/repo";
 import {
+  bookSafetyIfAny,
+  executeProviderWithFallback,
   recordRejection,
   rejectPolicyBlock,
   rejectSafetyBlock,
-  releaseWithSafety,
-  bookSafetyIfAny,
   type IncurFn,
   type RejectionCtx,
 } from "./lifecycle";
+import { createHierarchicalProviderBudget } from "./providerBudget";
 import { baseLog, baseObs, chatSuccessBody, fail } from "./mapper";
 import type { ChatInput, ChatResult, ChatServiceDeps } from "./types";
 
@@ -153,43 +148,31 @@ export async function handleChatHierarchical(
     );
   }
   const held: PathReservation = reservation.reservation;
-
-  // Model call with a simple fallback (no reservation top-up; a pricier fallback
-  // settles truthfully, matching the flat path's "actual may exceed estimate").
-  let llm: LiteLLMChatResult;
-  let usedModel = decision.resolvedModel;
-  // block was already returned above; the remaining kinds are the success set.
-  let finalDecision = decision.decision as "allow" | "degrade" | "fallback";
-  let costBasis = decision.estimatedCostUsd;
-  try {
-    try {
-      llm = await litellm.chat({ model: decision.resolvedModel, messages, maxTokens: decision.maxOutputTokens, temperature: body.temperature });
-    } catch (err) {
-      if (err instanceof ProviderError && decision.fallbackModel) {
-        const fb = evaluateAiRequest({ request: { ...aiRequest, forceFallback: true }, config, usage: ZERO_USAGE });
-        if (fb.decision === "block") {
-          await releaseWithSafety(incurSafety, () => releasePath(pool, held), safetyCostUsd);
-          return rejectPolicyBlock(rejection, fb, { safetyCostUsd, includeBudgetRemaining: false });
-        }
-        usedModel = fb.resolvedModel;
-        finalDecision = "fallback";
-        costBasis = fb.estimatedCostUsd;
-        llm = await litellm.chat({ model: fb.resolvedModel, messages, maxTokens: fb.maxOutputTokens, temperature: body.temperature });
-      } else {
-        throw err;
-      }
-    }
-  } catch (err) {
-    await releaseWithSafety(incurSafety, () => releasePath(pool, held), safetyCostUsd);
-    const code = err instanceof LiteLLMClientError ? "upstream_rejected" : "provider_unavailable";
-    const message = err instanceof LiteLLMClientError ? "Upstream rejected request" : "Provider unavailable";
-    return recordRejection(
+  const reservedUsd = decision.estimatedCostUsd + safetyCostUsd;
+  const providerBudget = createHierarchicalProviderBudget({
+    pool,
+    nodes,
+    now,
+    shardKey: body.userId,
+    held,
+    initialReservedUsd: reservedUsd,
+  });
+  const provider = await executeProviderWithFallback(
+    { litellm, config, usage: ZERO_USAGE, log },
+    {
+      aiRequest,
+      decision,
+      messages,
+      temperature: body.temperature,
+      safetyCostUsd,
       rejection,
-      { ...baseLog(aiRequest, decision, deps.policyMeta), resolvedModel: usedModel, decision: finalDecision, status: "failed", error: (err as Error).message, ...(safetyCostUsd > 0 ? { actualCostUsd: safetyCostUsd } : {}) },
-      { ...baseObs(aiRequest, decision), decision: finalDecision, status: "error", reason: (err as Error).message },
-      fail(502, code, {}, message),
-    );
-  }
+      includeBudgetRemaining: false,
+    },
+    providerBudget,
+  );
+  if (!provider.ok) return provider.failure;
+
+  const { llm, usedModel, finalDecision, costBasis } = provider;
 
   // Settle actual cost against every node on the path (plus input-safety spend).
   const actualCostUsd = (llm.actualCostUsd ?? costBasis) + safetyCostUsd;
