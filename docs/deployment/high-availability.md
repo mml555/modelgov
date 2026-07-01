@@ -197,9 +197,10 @@ offering Ai-Guard as an internal platform.
 
 - The [Helm chart](../../deploy/helm/ai-guard/) ships HA-oriented defaults —
   ≥2 replicas, a PodDisruptionBudget, node+zone topology spread, hardened
-  security contexts, and opt-in HPA / NetworkPolicy / ServiceMonitor — but you
-  still supply the data tier (managed Postgres/Redis recommended). No Terraform
-  module ships yet; provision the managed tiers with your own IaC.
+  security contexts, and opt-in HPA / NetworkPolicy / ServiceMonitor. Provision
+  the managed data tier (RDS Postgres + ElastiCache Redis, HA defaults) with the
+  [AWS Terraform module](../../deploy/terraform/aws/), which can wire its outputs
+  straight into the chart's `secret.existingSecret`.
 - The API does not split reads to a Postgres replica; the replica is for
   failover/reporting only.
 - Whether streamed (SSE, `"stream": true`) or buffered, a completion occupies a

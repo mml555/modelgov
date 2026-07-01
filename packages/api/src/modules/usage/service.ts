@@ -1,5 +1,6 @@
 import type { Pool } from "pg";
 import { dayWindowStart, monthWindowStart } from "../../services/windows";
+import { getRecentRequestStats } from "./auditLogRepo";
 import type { AuthorizedUsageQuery } from "./authorizeUsage";
 import { loadUsageSnapshot } from "./repo";
 
@@ -65,10 +66,12 @@ export async function getUsageSummary(
       })
     : null;
 
+  const dayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+  const recent = await getRecentRequestStats(pool, dayAgo, query.projectScope);
   const summary: UsageSummary = {
     asOf: now.toISOString(),
     projectId: budgetProjectId,
-    recentRequests: await recentRequestStats(pool, now, query.projectScope),
+    recentRequests: { last24h: recent.total, last24hFailed: recent.failed },
   };
 
   if (includeGlobal && globalSnap) {
@@ -112,37 +115,4 @@ export async function getUsageSummary(
   }
 
   return summary;
-}
-
-async function recentRequestStats(
-  pool: Pool,
-  now: Date,
-  projectId?: string,
-): Promise<{ last24h: number; last24hFailed: number }> {
-  const { rows } = await pool.query<{ total: string; failed: string }>(
-    projectId
-      ? `
-    SELECT
-      count(*)::text AS total,
-      count(*) FILTER (WHERE status <> 'ok')::text AS failed
-    FROM request_logs
-    WHERE created_at >= $1::timestamptz
-      AND project_id = $2
-    `
-      : `
-    SELECT
-      count(*)::text AS total,
-      count(*) FILTER (WHERE status <> 'ok')::text AS failed
-    FROM request_logs
-    WHERE created_at >= $1::timestamptz
-    `,
-    projectId
-      ? [new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString(), projectId]
-      : [new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString()],
-  );
-  const row = rows[0];
-  return {
-    last24h: Number(row?.total ?? 0),
-    last24hFailed: Number(row?.failed ?? 0),
-  };
 }

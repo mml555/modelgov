@@ -103,6 +103,43 @@ export async function cleanupOldRequestLogsForFeature(
   return total;
 }
 
+const RECENT_STATS_SQL = `
+  SELECT
+    count(*)::text AS total,
+    count(*) FILTER (WHERE status <> 'ok')::text AS failed
+  FROM request_logs
+  WHERE created_at >= $1::timestamptz
+`;
+
+const RECENT_STATS_SQL_SCOPED = `
+  SELECT
+    count(*)::text AS total,
+    count(*) FILTER (WHERE status <> 'ok')::text AS failed
+  FROM request_logs
+  WHERE created_at >= $1::timestamptz
+    AND project_id = $2
+`;
+
+/**
+ * Count request_logs rows (total and failed) since `since`, optionally scoped to
+ * a project partition. Powers the operator usage summary.
+ */
+export async function getRecentRequestStats(
+  pool: Pool,
+  since: Date,
+  projectId?: string,
+): Promise<{ total: number; failed: number }> {
+  const { rows } = await pool.query<{ total: string; failed: string }>(
+    projectId ? RECENT_STATS_SQL_SCOPED : RECENT_STATS_SQL,
+    projectId ? [since.toISOString(), projectId] : [since.toISOString()],
+  );
+  const row = rows[0];
+  return {
+    total: Number(row?.total ?? 0),
+    failed: Number(row?.failed ?? 0),
+  };
+}
+
 /** Append an audit-log row. Returns `req_<id>` when inserted; null on failure. */
 export async function logRequest(pool: Pool, row: RequestLogRow): Promise<string | null> {
   try {

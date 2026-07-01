@@ -1,6 +1,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import type { Pool } from "pg";
+import { withAdvisoryLock } from "./advisoryLock";
 
 const MIGRATIONS_DIR = fileURLToPath(new URL("./migrations", import.meta.url));
 
@@ -15,19 +16,7 @@ const MIGRATION_LOCK_KEY = 918_273_645;
 
 /** Apply the (idempotent) schema to a database. */
 export async function applySchema(pool: Pool): Promise<void> {
-  const lock = await pool.connect();
-  try {
-    await lock.query("SELECT pg_advisory_lock($1)", [MIGRATION_LOCK_KEY]);
-    try {
-      await runMigrations(pool);
-    } finally {
-      await lock
-        .query("SELECT pg_advisory_unlock($1)", [MIGRATION_LOCK_KEY])
-        .catch(() => {});
-    }
-  } finally {
-    lock.release();
-  }
+  await withAdvisoryLock(pool, MIGRATION_LOCK_KEY, () => runMigrations(pool));
 }
 
 async function runMigrations(pool: Pool): Promise<void> {

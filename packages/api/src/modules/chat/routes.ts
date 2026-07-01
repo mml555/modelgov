@@ -2,12 +2,12 @@ import type { AiGuardConfig } from "@ai-guard/policy-engine";
 import type { FastifyInstance } from "fastify";
 import type { Pool } from "pg";
 import { sendError } from "../../errors";
-import type { RequestContext } from "../../plugins/requestContext";
 import type { LiteLLMClient } from "../../services/litellm";
 import type { Observability } from "../../services/observability";
 import type { SafetyGuard } from "../../services/safety";
 import type { BudgetAlertWebhookConfig } from "../usage/budgetAlerts";
 import { requestHash, withIdempotency } from "../idempotency/service";
+import { authorizeChatInput } from "./authorize";
 import { chatBodyJsonSchema, chatBodySchema, chatSuccessJsonSchema, errorJsonSchema } from "./schemas";
 import { handleChat } from "./service";
 import { handleChatHierarchical } from "./hierarchical";
@@ -241,46 +241,6 @@ async function streamChat(
       raw.end();
     }
   }
-}
-
-function authorizeChatInput(
-  ctx: RequestContext,
-  body: ChatInput,
-): { ok: true; value: ChatInput } | {
-  ok: false;
-  status: number;
-  code: string;
-  message: string;
-  details: Record<string, unknown>;
-} {
-  if (ctx.apiKeyName && !ctx.permissions?.includes("chat:create")) {
-    return deny(403, "forbidden", "API key is not permitted to create chats");
-  }
-  if (ctx.projectId && body.projectId && body.projectId !== ctx.projectId) {
-    return deny(403, "project_mismatch", "API key is not permitted for this project");
-  }
-  if (ctx.environment && body.environment && body.environment !== ctx.environment) {
-    return deny(403, "environment_mismatch", "API key is not permitted for this environment");
-  }
-  if (ctx.allowedUserTypes?.length && !ctx.allowedUserTypes.includes(body.userType)) {
-    return deny(403, "user_type_forbidden", "API key is not permitted for this user type");
-  }
-  if (ctx.allowedUserIds?.length && !ctx.allowedUserIds.includes(body.userId)) {
-    return deny(403, "user_forbidden", "API key is not permitted for this user");
-  }
-
-  return {
-    ok: true,
-    value: {
-      ...body,
-      projectId: ctx.projectId ?? body.projectId,
-      environment: ctx.environment ?? body.environment,
-    },
-  };
-}
-
-function deny(status: number, code: string, message: string) {
-  return { ok: false as const, status, code, message, details: {} };
 }
 
 function readIdempotencyKey(header: string | string[] | undefined): string | null {

@@ -1,0 +1,20 @@
+{{- /*
+  Image-tag guard. When `production: true`, every image that will actually be
+  deployed must be pinned (version tag or @sha256 digest) — floating tags like
+  `latest` / `main-stable` are refused so a "reproducible" deploy can't silently
+  drift. This template renders nothing; it only validates.
+*/ -}}
+{{- include "ai-guard.assertPinnedImage" (dict "ctx" . "image" (printf "%s:%s" .Values.image.repository .Values.image.tag) "field" "api") -}}
+{{- if .Values.litellm.enabled -}}
+{{- include "ai-guard.assertPinnedImage" (dict "ctx" . "image" .Values.litellm.image "field" "litellm") -}}
+{{- end -}}
+{{- if .Values.redis.enabled -}}
+{{- include "ai-guard.assertPinnedImage" (dict "ctx" . "image" .Values.redis.image "field" "redis") -}}
+{{- end -}}
+{{- if .Values.presidio.enabled -}}
+{{- include "ai-guard.assertPinnedImage" (dict "ctx" . "image" .Values.presidio.analyzerImage "field" "presidio-analyzer") -}}
+{{- include "ai-guard.assertPinnedImage" (dict "ctx" . "image" .Values.presidio.anonymizerImage "field" "presidio-anonymizer") -}}
+{{- end -}}
+{{- if .Values.postgres.enabled -}}
+{{- include "ai-guard.assertPinnedImage" (dict "ctx" . "image" .Values.postgres.image "field" "postgres") -}}
+{{- end -}}

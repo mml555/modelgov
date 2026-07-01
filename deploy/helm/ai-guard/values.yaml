@@ -7,6 +7,12 @@
 nameOverride: ""
 fullnameOverride: ""
 
+# When true, the chart REFUSES to render if any deployed image uses a floating
+# tag (latest / main-stable / stable / …). Set it in production so a deploy can't
+# silently drift onto a moving tag — pin every image to a version or @sha256
+# digest. Left false by default so the quick-start dev images (below) just work.
+production: false
+
 image:
   repository: ghcr.io/ai-guard/ai-guard/ai-guard-api
   tag: v0.5.0

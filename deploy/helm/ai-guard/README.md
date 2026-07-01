@@ -58,6 +58,24 @@ baseline:
 mounted at `/tmp`; nothing else is written). Set `nodeSelector` / `tolerations`
 / `affinity` under `api.*` for placement.
 
+### Pin images in production
+
+The quick-start dev images use floating tags (`litellm:main-stable`,
+`redis:7-alpine`, `presidio:*latest`, …). Set **`production: true`** and the
+chart will **refuse to render** if any deployed image uses a floating tag —
+forcing you to pin every image to a version or `@sha256` digest so a deploy
+can't silently drift:
+
+```yaml
+production: true
+image: { tag: v0.5.0 }                                   # already pinned
+litellm: { image: "ghcr.io/berriai/litellm@sha256:…" }   # pin the rest
+redis:   { image: "redis:7.4.1-alpine" }
+```
+
+Provision the managed data tier (and skip in-cluster Postgres/Redis) with the
+[Terraform module](../../terraform/aws/).
+
 ## Production notes
 
 - Use **managed Postgres** (`postgres.enabled=false`) and set
