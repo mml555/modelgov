@@ -31,11 +31,13 @@ export default defineConfig({
         "packages/api/src/config/secrets.ts",
       ],
       exclude: ["**/*.test.ts", "**/index.ts"],
+      // Set just below measured coverage so a regression fails CI while leaving
+      // headroom for legitimate refactors.
       thresholds: {
-        lines: 80,
-        functions: 80,
-        branches: 75,
-        statements: 80,
+        lines: 90,
+        functions: 90,
+        branches: 80,
+        statements: 90,
       },
     },
   },

@@ -275,6 +275,56 @@ export function buildOpenApiDocument() {
           },
         },
       },
+      "/v1/admin/policy/versions": {
+        get: {
+          tags: ["admin"],
+          description: "List stored policy versions (metadata). Requires policy:read.",
+          security: [{ bearerAuth: [] }],
+          responses: {
+            200: { description: "Version list" },
+            401: { description: "Unauthorized", content: json(errorJsonSchema) },
+            403: { description: "Forbidden", content: json(errorJsonSchema) },
+          },
+        },
+        post: {
+          tags: ["admin"],
+          description: "Validate and store a new (inactive) policy version. Requires policy:write.",
+          security: [{ bearerAuth: [] }],
+          responses: {
+            201: { description: "Stored version" },
+            400: { description: "Invalid config", content: json(errorJsonSchema) },
+            401: { description: "Unauthorized", content: json(errorJsonSchema) },
+            403: { description: "Forbidden", content: json(errorJsonSchema) },
+          },
+        },
+      },
+      "/v1/admin/policy/active": {
+        get: {
+          tags: ["admin"],
+          description: "Active policy version metadata. Requires policy:read.",
+          security: [{ bearerAuth: [] }],
+          responses: {
+            200: { description: "Active version" },
+            401: { description: "Unauthorized", content: json(errorJsonSchema) },
+            403: { description: "Forbidden", content: json(errorJsonSchema) },
+            404: { description: "None active", content: json(errorJsonSchema) },
+          },
+        },
+      },
+      "/v1/admin/policy/versions/{id}/activate": {
+        post: {
+          tags: ["admin"],
+          description: "Activate a stored version (rollback = activate a prior id). Requires policy:write.",
+          security: [{ bearerAuth: [] }],
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          responses: {
+            200: { description: "Activated" },
+            401: { description: "Unauthorized", content: json(errorJsonSchema) },
+            403: { description: "Forbidden", content: json(errorJsonSchema) },
+            404: { description: "Not found", content: json(errorJsonSchema) },
+          },
+        },
+      },
     },
     components: {
       securitySchemes: {

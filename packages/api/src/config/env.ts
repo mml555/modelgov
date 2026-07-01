@@ -17,6 +17,10 @@ const baseEnvSchema = z.object({
   // env keys above still work and are used to bootstrap the first keys:admin key.
   API_KEYS_DB_ENABLED: z.enum(["true", "false"]).default("true"),
   API_KEY_CACHE_TTL_MS: z.coerce.number().int().positive().default(10_000),
+  // Dynamic policy store: when true, boot loads the active config version from
+  // the DB (seeding it from AI_GUARD_CONFIG on first run), instead of always
+  // reading the file. Default false keeps file-based deploys unchanged.
+  POLICY_STORE_ENABLED: z.enum(["true", "false"]).default("false"),
   // Operator SSO (OIDC). When OIDC_ISSUER + OIDC_JWKS_URI are set, JWT bearer
   // tokens are verified against the IdP and mapped to operator roles.
   OIDC_ISSUER: z.string().url().optional(),

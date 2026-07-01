@@ -54,7 +54,7 @@ customer-hosted (on your infrastructure/cloud)  ·  **License:** MIT
 | D1 | Is activity logged? | **Yes.** Every request is written to `request_logs` with `userId`, `userType`, `feature`, decision, `reasonCode`, and cost. **Metadata only — prompts/completions are not stored.** See [API `/v1/requests`](../api.md#get-v1requests). |
 | D2 | Audit trail access | `GET /v1/requests` / `/v1/requests/:id` (`requests:read`); correlation via `requestId` / `x-ai-guard-request-id`. |
 | D3 | Metrics / monitoring | Prometheus `/metrics` (request rate/errors/latency, pg pool saturation, Node defaults). `/metrics` is internal-only by default; `METRICS_AUTH_TOKEN` adds bearer auth. See [operations metrics](../operations.md#metrics). |
-| D4 | Log integrity / tamper-evidence | Audit records are append-only via the API. **No cryptographic tamper-evidence in v1** (residual R3 in the [threat model](../compliance/threat-model.md)); ship logs to a WORM/SIEM sink and use immutable backups. |
+| D4 | Log integrity / tamper-evidence | Admin mutations (key/policy/erasure) are written to a **hash-chained** `admin_audit_log`; `GET /v1/admin/audit/verify` re-walks the chain and detects any altered/deleted/inserted row. This is tamper-*detection*; export to a WORM/SIEM sink and use immutable backups for prevention/retention. |
 | D5 | Alerting | Budget-alert webhook (optional HMAC-signed) on spend thresholds; operator sets metric-based alerts. See [budget alerts](../operations.md#budget-alerts). |
 | D6 | Log retention | `request_logs` swept to `REQUEST_LOG_RETENTION_MS` (default 30 days). `[OPERATOR sets to policy.]` |
 
@@ -67,7 +67,7 @@ customer-hosted (on your infrastructure/cloud)  ·  **License:** MIT
 | E3 | PII handling / DLP | **Presidio** PII mask/block and prompt-injection block per safety preset. **Fails closed** (`503`) when Presidio is unavailable — never sends unguarded. Coverage bounded by Presidio recognizers; `dev` preset disables enforcement. See [data-flow — PII](../compliance/data-flow.md#pii-handling-dlp-via-presidio). |
 | E4 | Data retention & disposal | `request_logs` retention sweep (default 30d); idempotency/reservation leases auto-swept (15m). Content stores (if enabled) governed separately. |
 | E5 | Data residency | Fully self-hosted — data resides where the operator deploys. The only external egress is to the chosen model provider; use a regional/self-hosted model (e.g. Bedrock in-region, Ollama) to keep content in-region. See [data-flow — residency](../compliance/data-flow.md#data-residency). `[OPERATOR states hosting region.]` |
-| E6 | Data deletion / DSAR | `request_logs` deletable by retention/`DELETE`; no built-in DSAR workflow (out of scope — operator/DPA responsibility). |
+| E6 | Data deletion / DSAR | **Right-to-erasure endpoint** `POST /v1/admin/erasure` (`data:erase`) deletes a user's request-linked data (`request_logs`, `idempotency_keys`) and is audited; plus global + per-feature retention sweeps. Consent management / full DSAR orchestration remain operator/DPA responsibility. |
 
 ## F. Incident response & vulnerability management
 

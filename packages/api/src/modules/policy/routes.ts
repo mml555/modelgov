@@ -1,0 +1,135 @@
+import { PolicyConfigError } from "@ai-guard/policy-engine";
+import type { FastifyInstance } from "fastify";
+import type { Pool } from "pg";
+import { z } from "zod";
+import { sendError } from "../../errors";
+import type { RequestContext } from "../../plugins/requestContext";
+import { errorJsonSchema } from "../chat/schemas";
+import {
+  activateConfigVersion,
+  getActiveConfigVersion,
+  listConfigVersions,
+  saveConfigVersion,
+} from "./repo";
+
+const UUID_OR_INT = /^\d+$/;
+const saveBodySchema = z.object({ yaml: z.string().min(1), note: z.string().max(500).optional() });
+
+export interface PolicyRouteDeps {
+  recordAudit?: (event: {
+    actor: string;
+    action: string;
+    target?: string;
+    metadata?: Record<string, unknown>;
+  }) => Promise<void>;
+}
+
+function requirePerm(ctx: RequestContext, perm: string) {
+  if (!ctx.permissions?.includes(perm)) {
+    return { ok: false as const, status: 403, code: "forbidden", message: `API key is not permitted (${perm})` };
+  }
+  return { ok: true as const };
+}
+
+export function registerPolicyRoutes(
+  app: FastifyInstance,
+  pool: Pool,
+  deps: PolicyRouteDeps = {},
+): void {
+  app.get("/v1/admin/policy/versions", {
+    schema: {
+      tags: ["admin"],
+      description: "List stored policy versions (metadata). Requires policy:read.",
+      response: { 200: { type: "object", additionalProperties: true }, 401: errorJsonSchema, 403: errorJsonSchema },
+    },
+  }, async (request, reply) => {
+    const auth = requirePerm(request.ctx, "policy:read");
+    if (!auth.ok) return sendError(reply, auth.status, auth.code, {}, auth.message);
+    return reply.send({ items: await listConfigVersions(pool) });
+  });
+
+  app.get("/v1/admin/policy/active", {
+    schema: {
+      tags: ["admin"],
+      description: "Get the active policy version's metadata. Requires policy:read.",
+      response: { 200: { type: "object", additionalProperties: true }, 401: errorJsonSchema, 403: errorJsonSchema, 404: errorJsonSchema },
+    },
+  }, async (request, reply) => {
+    const auth = requirePerm(request.ctx, "policy:read");
+    if (!auth.ok) return sendError(reply, auth.status, auth.code, {}, auth.message);
+    const active = await getActiveConfigVersion(pool);
+    if (!active) return sendError(reply, 404, "not_found", {}, "No active policy version");
+    return reply.send(active.record);
+  });
+
+  app.post("/v1/admin/policy/versions", {
+    schema: {
+      tags: ["admin"],
+      description: "Validate and store a new (inactive) policy version. Requires policy:write.",
+      response: { 201: { type: "object", additionalProperties: true }, 400: errorJsonSchema, 401: errorJsonSchema, 403: errorJsonSchema },
+    },
+  }, async (request, reply) => {
+    const auth = requirePerm(request.ctx, "policy:write");
+    if (!auth.ok) return sendError(reply, auth.status, auth.code, {}, auth.message);
+
+    const parsed = saveBodySchema.safeParse(request.body);
+    if (!parsed.success) {
+      return sendError(reply, 400, "invalid_request", {
+        detail: parsed.error.issues.map((i) => i.message).join("; "),
+      });
+    }
+    let record;
+    try {
+      record = await saveConfigVersion(pool, {
+        yaml: parsed.data.yaml,
+        note: parsed.data.note,
+        author: request.ctx.apiKeyName,
+      });
+    } catch (err) {
+      if (err instanceof PolicyConfigError) {
+        return sendError(reply, 400, "invalid_config", { detail: err.message }, err.message);
+      }
+      throw err;
+    }
+    await deps.recordAudit?.({
+      actor: request.ctx.apiKeyName ?? "unknown",
+      action: "policy.save",
+      target: record.id,
+      metadata: { checksum: record.checksum, note: record.note },
+    });
+    return reply.code(201).send(record);
+  });
+
+  app.post("/v1/admin/policy/versions/:id/activate", {
+    schema: {
+      tags: ["admin"],
+      description: "Activate a stored policy version (rollback = activate a prior id). Requires policy:write.",
+      params: { type: "object", required: ["id"], properties: { id: { type: "string" } } },
+      response: { 200: { type: "object", additionalProperties: true }, 401: errorJsonSchema, 403: errorJsonSchema, 404: errorJsonSchema },
+    },
+  }, async (request, reply) => {
+    const auth = requirePerm(request.ctx, "policy:write");
+    if (!auth.ok) return sendError(reply, auth.status, auth.code, {}, auth.message);
+
+    const id = (request.params as { id: string }).id;
+    if (!UUID_OR_INT.test(id)) return sendError(reply, 404, "not_found", {}, "Version not found");
+    let record;
+    try {
+      record = await activateConfigVersion(pool, id);
+    } catch (err) {
+      if (err instanceof PolicyConfigError) {
+        return sendError(reply, 400, "invalid_config", { detail: err.message }, err.message);
+      }
+      throw err;
+    }
+    if (!record) return sendError(reply, 404, "not_found", {}, "Version not found");
+    await deps.recordAudit?.({
+      actor: request.ctx.apiKeyName ?? "unknown",
+      action: "policy.activate",
+      target: record.id,
+      metadata: { checksum: record.checksum },
+    });
+    // Replicas load the active version at boot; a rolling restart applies it.
+    return reply.send({ ...record, note: "activated — rolling restart applies it across replicas" });
+  });
+}

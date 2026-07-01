@@ -12,6 +12,7 @@ import { registerAuth, type ApiKeyPrincipal, type ResolvedPrincipal } from "./pl
 import { registerKeysRoutes } from "./modules/keys/routes";
 import { registerAuditRoutes } from "./modules/audit/routes";
 import { registerGovernanceRoutes } from "./modules/governance/routes";
+import { registerPolicyRoutes } from "./modules/policy/routes";
 import { appendAudit } from "./modules/audit/repo";
 import { registerMetrics } from "./plugins/metrics";
 import { registerOpenApi } from "./plugins/openApi";
@@ -195,6 +196,7 @@ export function buildServer(opts: BuildServerOptions): FastifyInstance {
     });
     registerAuditRoutes(app, opts.pool);
     registerGovernanceRoutes(app, opts.pool, { recordAudit });
+    registerPolicyRoutes(app, opts.pool, { recordAudit });
   }
   registerExplainRoute(app, { config: opts.config, pool: opts.pool });
   registerChatRoute(app, {

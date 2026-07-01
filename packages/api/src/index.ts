@@ -10,9 +10,15 @@ import {
   createRateLimitRedis,
 } from "./services/rateLimitRedis";
 import type Redis from "ioredis";
+import { readFileSync } from "node:fs";
 import { resolveSafetyPlan } from "@ai-guard/policy-engine";
 import { createDbKeyResolver } from "./modules/keys/resolver";
 import { createOidcVerifier } from "./modules/authz/oidc";
+import {
+  activateConfigVersion,
+  getActiveConfigVersion,
+  saveConfigVersion,
+} from "./modules/policy/repo";
 import { buildServer } from "./app";
 
 /**
@@ -74,7 +80,7 @@ function assertPublicHttpUrl(raw: string): void {
 async function main(): Promise<void> {
   const env = loadEnv();
 
-  const config = loadConfigFromFile(env.AI_GUARD_CONFIG, env.envRefs, {
+  let config = loadConfigFromFile(env.AI_GUARD_CONFIG, env.envRefs, {
     strictPricing: env.STRICT_PRICING === "true",
   });
 
@@ -95,6 +101,25 @@ async function main(): Promise<void> {
   } catch (err) {
     await pool.end().catch(() => {});
     throw new Error(`database unreachable at startup: ${redactError(err)}`);
+  }
+
+  // Dynamic policy store (opt-in): use the active DB version if present, else
+  // seed it from AI_GUARD_CONFIG so the file becomes version 1. Applied at boot;
+  // activating a new version is picked up by a rolling restart.
+  if (env.POLICY_STORE_ENABLED === "true") {
+    const active = await getActiveConfigVersion(pool);
+    if (active) {
+      config = active.config;
+      console.log(`loaded active policy version ${active.record.id} from the config store`);
+    } else {
+      const seeded = await saveConfigVersion(pool, {
+        yaml: readFileSync(env.AI_GUARD_CONFIG, "utf8"),
+        author: "bootstrap",
+        note: "seeded from AI_GUARD_CONFIG",
+      });
+      await activateConfigVersion(pool, seeded.id);
+      console.log(`seeded policy store with version ${seeded.id} from AI_GUARD_CONFIG`);
+    }
   }
 
   const litellm = createLiteLLMClient({

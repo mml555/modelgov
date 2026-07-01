@@ -75,7 +75,7 @@ followed; where they are not, threats that they mitigate become residual.
 | Threat | Mitigation (shipped) | Residual |
 | --- | --- | --- |
 | Tamper with budget counters to over-spend | Atomic reservations under row locks; counters only mutated by the API | Direct Postgres write access bypasses this — restrict DB to private network + least-privilege roles |
-| Alter/delete audit records | Append-only write path via API; DB access controlled by operator | No cryptographic tamper-evidence (e.g. hash chain) in v1 — residual; use DB audit/immutable backups |
+| Alter/delete audit records | **Hash-chained admin audit log** (`admin_audit_log`): each row's SHA-256 over the prior row's hash; `GET /v1/admin/audit/verify` re-walks the chain and detects any altered/deleted/inserted row | Detection (not prevention) — pair with WORM/SIEM export + immutable DB backups; the request-audit `request_logs` table is not yet chained |
 | Modify policy (`ai-guard.yaml`) to widen limits | Config is operator-controlled; `policy-admin` role gates policy writes; `ai-guard validate --production` | File/ConfigMap write access = policy control — protect via GitOps + RBAC on the deploy pipeline |
 | Tamper with budget-alert webhook payload | Optional `X-Ai-Guard-Signature` HMAC (`BUDGET_ALERT_WEBHOOK_SECRET`) | Only if secret is set |
 | Container/image tampering | CI publishes **SBOM + provenance attestations**; Trivy scan; no floating `:latest` (pin by digest) | Operator must actually pin digests and verify attestations |
@@ -85,7 +85,7 @@ followed; where they are not, threats that they mitigate become residual.
 | Threat | Mitigation (shipped) | Residual |
 | --- | --- | --- |
 | Caller denies making a request | Every request logged to `request_logs` with decision, cost, `userId`, `userType`, `feature`, `requestId`; correlation IDs returned in responses/headers | Metadata only (no content) unless Langfuse capture enabled; log integrity depends on DB controls |
-| Operator denies an admin action | Admin key actions run through the API; OIDC identity (`sub`/name claim) attributable | Admin-action audit granularity is limited in v1 — residual; ship API logs to a WORM/SIEM sink |
+| Operator denies an admin action | Privileged mutations (key create/rotate/revoke, policy save/activate, data erasure) are written to the hash-chained `admin_audit_log` with actor (API-key name or OIDC `sub`), action, target, and timestamp | Detection via chain verify; export to WORM/SIEM for long-term retention |
 
 ### I — Information disclosure (confidentiality)
 
@@ -129,8 +129,8 @@ Risks that remain the operator's responsibility even with all shipped mitigation
 | --- | --- | --- |
 | R1 | No built-in TLS | Terminate TLS at LB/proxy; enforce HTTPS end to end |
 | R2 | Direct Postgres write access bypasses budget/audit integrity | Private network, least-privilege DB roles, no broad write grants |
-| R3 | Audit log is not cryptographically tamper-evident in v1 | Ship logs to WORM/SIEM; immutable DB backups |
-| R4 | Admin-action audit granularity is limited | Centralize API logs; alert on `keys:admin` and `policy:write` use |
+| R3 | Hash-chained audit gives *detection*, not prevention; `request_logs` isn't chained | Export `admin_audit_log` to WORM/SIEM; run `/v1/admin/audit/verify` on a schedule; immutable DB backups |
+| R4 | Audit covers admin mutations; app-level events depend on host logging | Centralize API logs; alert on `keys:admin` / `policy:write` / `data:erase` use |
 | R5 | Content capture, if enabled, creates a sensitive-data store | Keep defaults off; if on, protect + set retention (see [data-flow](./data-flow.md)) |
 | R6 | Safety coverage bounded by Presidio recognizers; `dev` preset disables it | Use `balanced`/`strict` in production; extend recognizers as needed |
 | R7 | Global-counter throughput ceiling | Monitor contention; shard the counter at scale |
