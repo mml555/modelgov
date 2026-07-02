@@ -1,0 +1,52 @@
+name: Feature request
+description: Propose a new capability or an enhancement to Ai-Guard.
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Preflight
+      options:
+        - label: I searched [existing issues](https://github.com/mml555/Ai-Guard/issues?q=is%3Aissue) and this isn't already proposed.
+          required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / motivation
+      description: What are you trying to do that Ai-Guard makes hard or impossible today? Focus on the problem, not a specific solution.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: What should Ai-Guard do? If it touches policy/config, sketch the `ai-guard.yaml` shape or the API/SDK surface.
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Affected area
+      options:
+        - Policy engine (budgets / routing / safety)
+        - API / gateway
+        - SDKs (TypeScript / Python)
+        - CLI / scaffolding
+        - Deploy (Helm / Compose / Terraform)
+        - Operator console
+        - Observability / audit
+        - Docs
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Workarounds you've tried, or other designs you weighed.
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Links, related issues, or use-case detail.
