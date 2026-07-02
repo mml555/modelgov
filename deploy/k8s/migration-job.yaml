@@ -1,0 +1,28 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: ai-guard-migrate
+  namespace: ai-guard
+spec:
+  ttlSecondsAfterFinished: 300
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: migrate
+          image: ghcr.io/your-org/ai-guard-api:REPLACE_TAG
+          command: ["node", "dist/migrate.js"]
+          envFrom:
+            - secretRef:
+                name: ai-guard-secrets
+          env:
+            - name: AI_GUARD_CONFIG
+              value: /config/ai-guard.yaml
+          volumeMounts:
+            - name: config
+              mountPath: /config
+              readOnly: true
+      volumes:
+        - name: config
+          configMap:
+            name: ai-guard-config

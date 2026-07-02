@@ -1,0 +1,49 @@
+project:
+  name: document-extraction-demo
+  environment: development
+
+providers:
+  openai:
+    api_key: env/OPENAI_API_KEY
+  anthropic:
+    api_key: env/ANTHROPIC_API_KEY
+
+budgets:
+  global:
+    monthly_usd: 200
+    alert_at_percent: 80
+    hard_stop_at_percent: 100
+  by_user_type:
+    workflow:
+      daily_usd: 2.00
+      daily_requests: 5
+      models: ["standard"]
+
+features:
+  document_extraction:
+    safety: strict
+    model_class: standard
+    max_tokens: 2000
+    budget:
+      monthly_usd: 25
+
+routing:
+  degrade_at_percent: 85
+
+model_classes:
+  standard:
+    primary: anthropic/claude-sonnet
+    fallback: openai/gpt-4o
+  cheap:
+    primary: openai/gpt-4o-mini
+    fallback: anthropic/claude-haiku
+
+safety:
+  preset: strict
+  protect:
+    pii: block
+    prompt_injection: block
+  injection_model: openai/gpt-4o-mini
+
+observability:
+  provider: none

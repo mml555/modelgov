@@ -1,0 +1,19 @@
+# Route the vision model class → Google Gemini (a cheap, fast multimodal model).
+# Needs only a GEMINI_API_KEY (no multi-GB local download). If a model reports
+# "free_tier limit: 0", enable billing on the key's project (or fall back to
+# gemini-flash-lite-latest, which tends to have broad free quota).
+model_list:
+  - model_name: openai/gpt-4o
+    litellm_params:
+      model: gemini/gemini-2.5-flash
+      api_key: os.environ/GEMINI_API_KEY
+  - model_name: openai/gpt-4o-mini
+    litellm_params:
+      model: gemini/gemini-2.5-flash
+      api_key: os.environ/GEMINI_API_KEY
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY
+
+litellm_settings:
+  drop_params: true

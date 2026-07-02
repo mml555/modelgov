@@ -1,0 +1,59 @@
+# Demo policy for the chatbot. Tuned so limits are easy to SEE:
+# anonymous hits the token cap after a message or two; logged_in/admin get more.
+# Model names are "cloud" (openai/anthropic) but LiteLLM routes them to local
+# Ollama (see litellm.ollama.yaml) — so it runs with no cloud key.
+project:
+  name: chatbot-demo
+  environment: development
+
+budgets:
+  global:
+    monthly_usd: 50
+    alert_at_percent: 80
+    hard_stop_at_percent: 100
+    monthly_tokens: 5000000
+  by_user_type:
+    anonymous:
+      daily_usd: 1
+      daily_requests: 50
+      # Estimate per msg = 500 (default input) + 200 (max_tokens) = 700. Cap 720
+      # lets the 1st message through, then the 2nd trips the TOKEN limit.
+      daily_tokens: 720
+      models: ["cheap"]
+    logged_in:
+      daily_usd: 5
+      daily_requests: 200
+      daily_tokens: 100000
+      models: ["cheap", "standard"]
+    admin:
+      daily_usd: 20
+      daily_requests: 2000
+      models: ["cheap", "standard", "premium"]
+
+features:
+  support_chat:
+    safety: dev              # set to `strict` to demo PII blocking (needs Presidio)
+    model_class: cheap
+    max_tokens: 200
+  notes_helper:
+    safety: dev
+    model_class: standard    # anonymous can't use this class → model_class_not_permitted
+    max_tokens: 200
+
+routing:
+  degrade_at_percent: 80
+
+model_classes:
+  cheap:
+    primary: openai/gpt-4o-mini
+  standard:
+    primary: openai/gpt-4o
+    fallback: openai/gpt-4o-mini
+  premium:
+    primary: openai/gpt-4o
+
+safety:
+  preset: dev
+
+observability:
+  provider: none

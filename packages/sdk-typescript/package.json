@@ -1,0 +1,23 @@
+{
+  "name": "@ai-guard/sdk",
+  "version": "0.0.0",
+  "license": "MIT",
+  "description": "Ai-Guard API client. `feature` and `userType` are mandatory at the type level.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "pnpm run -w generate-sdk-types && tsup src/index.ts --format esm --dts --clean",
+    "typecheck": "tsc --noEmit"
+  }
+}

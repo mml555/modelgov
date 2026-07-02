@@ -1,0 +1,35 @@
+{{- /*
+  Image-tag guard. When `production: true`, every image that will actually be
+  deployed must be pinned (version tag or @sha256 digest) — floating tags like
+  `latest` / `main-stable` are refused so a "reproducible" deploy can't silently
+  drift. This template renders nothing; it only validates.
+*/ -}}
+{{- include "ai-guard.assertPinnedImage" (dict "ctx" . "image" (printf "%s:%s" .Values.image.repository .Values.image.tag) "field" "api") -}}
+{{- if .Values.litellm.enabled -}}
+{{- include "ai-guard.assertPinnedImage" (dict "ctx" . "image" .Values.litellm.image "field" "litellm") -}}
+{{- end -}}
+{{- if .Values.redis.enabled -}}
+{{- include "ai-guard.assertPinnedImage" (dict "ctx" . "image" .Values.redis.image "field" "redis") -}}
+{{- end -}}
+{{- if .Values.presidio.enabled -}}
+{{- include "ai-guard.assertPinnedImage" (dict "ctx" . "image" .Values.presidio.analyzerImage "field" "presidio-analyzer") -}}
+{{- include "ai-guard.assertPinnedImage" (dict "ctx" . "image" .Values.presidio.anonymizerImage "field" "presidio-anonymizer") -}}
+{{- end -}}
+{{- if .Values.postgres.enabled -}}
+{{- include "ai-guard.assertPinnedImage" (dict "ctx" . "image" .Values.postgres.image "field" "postgres") -}}
+{{- end -}}
+
+{{- if and .Values.production .Values.api.metricsEnabled (not .Values.api.metricsAllowPublic) (not .Values.secret.metricsAuthToken) (not .Values.secret.existingSecret) -}}
+{{- fail "production=true with api.metricsEnabled=true requires secret.metricsAuthToken, secret.existingSecret containing METRICS_AUTH_TOKEN, or api.metricsAllowPublic=true" -}}
+{{- end -}}
+
+{{- /* Refuse the old shipped-default LiteLLM master key in production. */ -}}
+{{- if and .Values.production (not .Values.secret.existingSecret) (eq .Values.secret.litellmMasterKey "sk-ai-guard-litellm") -}}
+{{- fail "production=true with the known default secret.litellmMasterKey ('sk-ai-guard-litellm'). Set a strong random value or use secret.existingSecret." -}}
+{{- end -}}
+
+{{- $inlineConfig := default "" .Values.config.aiGuardYaml -}}
+{{- $usesPresidioSafety := or (regexMatch "(?m)^\\s*safety:\\s*(balanced|strict)\\s*$" $inlineConfig) (regexMatch "(?m)^\\s*preset:\\s*(balanced|strict)\\s*$" $inlineConfig) -}}
+{{- if and (not .Values.presidio.enabled) (not .Values.config.existingConfigMap) $usesPresidioSafety -}}
+{{- fail "presidio.enabled=false but inline config uses balanced/strict safety. Enable Presidio or change config.aiGuardYaml to a safety preset that does not require PII enforcement." -}}
+{{- end -}}

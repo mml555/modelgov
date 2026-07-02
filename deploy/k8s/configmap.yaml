@@ -1,0 +1,31 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ai-guard-config
+  namespace: ai-guard
+data:
+  ai-guard.yaml: |
+    # Paste your production ai-guard.yaml here, or use kubectl create configmap --from-file
+    project:
+      name: production
+      environment: production
+    budgets:
+      global:
+        monthly_usd: 500
+      by_user_type:
+        logged_in:
+          daily_usd: 1
+          daily_requests: 100
+          models: ["cheap"]
+    features:
+      support_chat:
+        safety: dev
+        model_class: cheap
+        max_tokens: 500
+    model_classes:
+      cheap:
+        primary: openai/gpt-4o-mini
+    safety:
+      preset: dev
+    observability:
+      provider: none

@@ -1,0 +1,25 @@
+{
+  "name": "create-ai-guard",
+  "version": "0.0.0",
+  "license": "MIT",
+  "description": "Scaffold an ai-guard.yaml + .env for a new project.",
+  "type": "module",
+  "bin": {
+    "create-ai-guard": "./dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup src/index.ts --format esm --clean",
+    "typecheck": "tsc --noEmit",
+    "dev": "tsx src/index.ts"
+  },
+  "dependencies": {
+    "@clack/prompts": "^0.8.2",
+    "yaml": "^2.6.1"
+  },
+  "devDependencies": {
+    "@ai-guard/policy-engine": "workspace:*"
+  }
+}

@@ -1,0 +1,56 @@
+# Hybrid OCR pipeline — policy for extracting structured data from PDFs/images.
+#
+# Each page runs one governed VISION call: local Tesseract OCR text + the page
+# image are sent together to a vision model, which returns structured JSON.
+# The model call is budgeted, audited, and (optionally) PII-masked by the gateway.
+#
+# Model names are "cloud" but LiteLLM routes them to a local Ollama vision model
+# (litellm.ollama.yaml), so the demo runs with no cloud key.
+project:
+  name: ocr-pipeline
+  environment: development
+
+budgets:
+  global:
+    monthly_usd: 100
+    alert_at_percent: 80
+    hard_stop_at_percent: 100
+  by_user_type:
+    # The extraction worker (a batch/queue job).
+    workflow:
+      daily_usd: 10
+      daily_requests: 2000
+      models: ["vision"]
+
+features:
+  document_extraction:
+    model_class: vision
+    # Headroom for the JSON output PLUS a reasoning model's thinking tokens
+    # (e.g. gemini-2.5-flash), which otherwise truncate the completion.
+    max_tokens: 2048
+    safety:
+      preset: dev
+      protect:
+        pii: mask
+        pii_scope: output  # Presidio masks PII (names, emails, card numbers) in
+                           # the extracted OUTPUT (the model still reads the doc)
+    data_sensitivity: documents
+
+routing:
+  degrade_at_percent: 80
+
+model_classes:
+  vision:
+    primary: openai/gpt-4o
+    fallback: openai/gpt-4o-mini
+
+# Restrict document data to approved vision model classes (governance demo).
+data_classes:
+  documents:
+    allowed_model_classes: ["vision"]
+
+safety:
+  preset: dev
+
+observability:
+  provider: none

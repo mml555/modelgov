@@ -1,0 +1,48 @@
+# Minimal docker-compose stack for CI e2e (postgres + api only — no cloud keys).
+# Used by scripts/example-e2e-ci.sh to prove the published Dockerfile boots and
+# serves /health, /ready, and /v1/chat against a real Postgres volume.
+name: ai-guard-ci-e2e
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: aiguard
+    ports: ["127.0.0.1:55433:5432"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  api:
+    build:
+      context: .
+      dockerfile: packages/api/Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PORT: 3000
+      HOST: 0.0.0.0
+      AI_GUARD_API_KEY: ci-e2e-key
+      AI_GUARD_CONFIG: /app/ai-guard.yaml
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/aiguard
+      LITELLM_BASE_URL: http://127.0.0.1:1
+      OBSERVABILITY_PROVIDER: none
+      METRICS_ENABLED: "false"
+      MAINTENANCE_ENABLED: "false"
+      RATE_LIMIT_MAX: "1000"
+    volumes:
+      - ./scripts/smoke-ai-guard.yaml:/app/ai-guard.yaml:ro
+    ports: ["127.0.0.1:3098:3000"]
+    healthcheck:
+      test:
+        - "CMD"
+        - "node"
+        - "-e"
+        - "fetch('http://localhost:3000/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 5s
+      timeout: 3s
+      retries: 24

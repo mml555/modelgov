@@ -1,0 +1,23 @@
+{{- if not .Values.config.existingConfigMap }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "ai-guard.configMapName" . }}
+  labels:
+    {{- include "ai-guard.labels" . | nindent 4 }}
+data:
+  ai-guard.yaml: |
+{{ .Values.config.aiGuardYaml | indent 4 }}
+{{- end }}
+{{- if .Values.litellm.enabled }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "ai-guard.fullname" . }}-litellm
+  labels:
+    {{- include "ai-guard.labels" . | nindent 4 }}
+data:
+  config.yaml: |
+{{ .Values.litellm.config | indent 4 }}
+{{- end }}

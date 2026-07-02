@@ -1,0 +1,70 @@
+# RAG support chatbot — policy for a grounded, no-hallucination assistant.
+#
+# Two governed AI calls happen per user question:
+#   1. embed the question   → feature `kb_embedding` (embed model class)
+#   2. answer from context  → feature `support_chat` (grounded, cheap class)
+#
+# Model names are "cloud" but LiteLLM routes them to local Ollama
+# (litellm.ollama.yaml), so the demo runs with NO cloud key.
+project:
+  name: rag-support
+  environment: development
+
+budgets:
+  global:
+    monthly_usd: 50
+    alert_at_percent: 80
+    hard_stop_at_percent: 100
+  by_user_type:
+    # The ingestion job that embeds the knowledge base. Embeddings only.
+    ingestor:
+      daily_usd: 5
+      daily_requests: 5000
+      models: ["embed"]
+    # End users chatting on the website. Small daily cap so budget blocks are
+    # easy to SEE; may embed its own query and call the grounded chat.
+    visitor:
+      daily_usd: 0.50
+      daily_requests: 100
+      models: ["embed", "cheap"]
+
+features:
+  # Embedding KB chunks (ingest) and the visitor's question (query time).
+  kb_embedding:
+    model_class: embed
+    max_tokens: 1
+  # The grounded support answer: no hallucinations, no outside sources.
+  # grounding=strict makes the gateway own the prompt, require a context block,
+  # force verbatim citations, and verify them (unverifiable → safe refusal).
+  support_chat:
+    model_class: cheap
+    max_tokens: 400
+    safety:
+      preset: dev
+      protect:
+        pii: mask
+        pii_scope: input   # Presidio masks PII in the QUESTION only (keeps the
+                           # grounded answer intact — no over-masking of dates)
+      grounding: strict
+
+routing:
+  degrade_at_percent: 80
+
+model_classes:
+  embed:
+    primary: openai/text-embedding-3-small
+  cheap:
+    primary: openai/gpt-4o-mini
+
+# text-embedding-3-small isn't in the built-in price table; declare it so
+# budget estimates are accurate. (Local Ollama runs are billed $0 by LiteLLM.)
+pricing:
+  openai/text-embedding-3-small:
+    input_per_1k: 0.00002
+    output_per_1k: 0
+
+safety:
+  preset: dev
+
+observability:
+  provider: none

@@ -1,0 +1,141 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "ai-guard.fullname" . }}
+  labels:
+    {{- include "ai-guard.labels" . | nindent 4 }}
+    app.kubernetes.io/component: api
+spec:
+  replicas: {{ .Values.api.replicas }}
+  selector:
+    matchLabels:
+      {{- include "ai-guard.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: api
+  template:
+    metadata:
+      labels:
+        {{- include "ai-guard.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: api
+      annotations:
+        # Roll pods when the config or litellm config changes.
+        checksum/config: {{ .Values.config.aiGuardYaml | sha256sum }}
+        {{- with .Values.api.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ include "ai-guard.serviceAccountName" . }}
+      automountServiceAccountToken: {{ .Values.serviceAccount.automountServiceAccountToken }}
+      terminationGracePeriodSeconds: {{ .Values.api.terminationGracePeriodSeconds }}
+      {{- with .Values.api.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.api.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.api.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.api.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if .Values.api.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml .Values.api.topologySpreadConstraints | nindent 8 }}
+      {{- else }}
+      # Default: spread replicas across nodes (and zones where labeled) so the
+      # loss of one node/zone can't take out every API pod. ScheduleAnyway keeps
+      # scheduling possible on small/single-zone clusters.
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              {{- include "ai-guard.selectorLabels" . | nindent 14 }}
+              app.kubernetes.io/component: api
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              {{- include "ai-guard.selectorLabels" . | nindent 14 }}
+              app.kubernetes.io/component: api
+      {{- end }}
+      containers:
+        - name: api
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- with .Values.api.containerSecurityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          ports:
+            - containerPort: 3000
+          envFrom:
+            - secretRef:
+                name: {{ include "ai-guard.secretName" . }}
+          env:
+            - name: AI_GUARD_CONFIG
+              value: /config/ai-guard.yaml
+            {{- if .Values.production }}
+            # Turns known dev-only defaults into boot errors (mirrors the
+            # chart's image-tag pinning enforcement).
+            - name: AI_GUARD_PRODUCTION
+              value: "true"
+            {{- end }}
+            - name: LITELLM_BASE_URL
+              value: {{ include "ai-guard.litellmUrl" . | quote }}
+            {{- $redis := include "ai-guard.redisUrl" . }}
+            {{- if $redis }}
+            - name: REDIS_URL
+              value: {{ $redis | quote }}
+            {{- end }}
+            {{- if .Values.presidio.enabled }}
+            - name: PRESIDIO_ANALYZER_URL
+              value: {{ printf "http://%s-presidio-analyzer:3000" (include "ai-guard.fullname" .) | quote }}
+            - name: PRESIDIO_ANONYMIZER_URL
+              value: {{ printf "http://%s-presidio-anonymizer:3000" (include "ai-guard.fullname" .) | quote }}
+            {{- end }}
+            - name: METRICS_ENABLED
+              value: {{ .Values.api.metricsEnabled | quote }}
+            - name: METRICS_ALLOW_PUBLIC
+              value: {{ .Values.api.metricsAllowPublic | quote }}
+            - name: IDEMPOTENCY_CAPTURE_CONTENT
+              value: {{ .Values.api.idempotencyCaptureContent | quote }}
+            - name: OBSERVABILITY_CAPTURE_CONTENT
+              value: {{ .Values.api.observabilityCaptureContent | quote }}
+            {{- include "ai-guard.deployProfileEnv" . | nindent 12 }}
+            {{- with .Values.api.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          volumeMounts:
+            - name: config
+              mountPath: /config
+              readOnly: true
+            # readOnlyRootFilesystem needs a writable scratch dir.
+            - name: tmp
+              mountPath: /tmp
+          # /health is process-only (a DB blip must not restart pods);
+          # /ready gates on the DB and drives traffic routing.
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 3000
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.api.resources | nindent 12 }}
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "ai-guard.configMapName" . }}
+        - name: tmp
+          emptyDir: {}

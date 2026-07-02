@@ -1,0 +1,19 @@
+# Route the chatbot's model names through Azure OpenAI. Set AZURE_API_KEY,
+# AZURE_API_BASE, AZURE_API_VERSION in .env. Use YOUR deployment names below.
+model_list:
+  - model_name: openai/gpt-4o-mini
+    litellm_params:
+      model: azure/gpt-4o-mini          # your Azure deployment name
+      api_key: os.environ/AZURE_API_KEY
+      api_base: os.environ/AZURE_API_BASE
+      api_version: os.environ/AZURE_API_VERSION
+  - model_name: openai/gpt-4o
+    litellm_params:
+      model: azure/gpt-4o               # your Azure deployment name
+      api_key: os.environ/AZURE_API_KEY
+      api_base: os.environ/AZURE_API_BASE
+      api_version: os.environ/AZURE_API_VERSION
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY
+litellm_settings:
+  drop_params: true

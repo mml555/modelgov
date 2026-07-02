@@ -1,0 +1,34 @@
+# Minimal policy for CI smoke tests (dev safety — no Presidio / classifier required).
+project:
+  name: smoke
+  environment: test
+
+budgets:
+  global:
+    monthly_usd: 100
+    hard_stop_at_percent: 100
+  by_user_type:
+    logged_in:
+      daily_usd: 1
+      daily_requests: 100
+      models: ["cheap"]
+
+features:
+  support_chat:
+    safety: dev
+    model_class: cheap
+    max_tokens: 100
+
+model_classes:
+  cheap:
+    primary: openai/gpt-4o-mini
+    fallback: anthropic/claude-haiku
+  standard:
+    primary: anthropic/claude-sonnet
+    fallback: openai/gpt-4o
+
+safety:
+  preset: dev
+
+observability:
+  provider: none

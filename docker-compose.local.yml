@@ -1,0 +1,25 @@
+# Local-provider OVERLAY for end-to-end testing with Ollama (no external keys).
+# Layer it over the simple stack:
+#   docker compose -f docker-compose.simple.yml -f docker-compose.local.yml up --build
+#
+# Points LiteLLM at a local Ollama (host.docker.internal:11434). Mounts the
+# local config at a distinct path and overrides the command to use it, so it
+# doesn't collide with the simple stack's config mount.
+name: ai-guard
+
+services:
+  litellm:
+    command: ["--config", "/app/config.local.yaml", "--port", "4000"]
+    volumes:
+      - ./litellm_config.local.yaml:/app/config.local.yaml:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  # Avoid host-port conflicts during local testing. `!override` replaces the
+  # base ports list instead of concatenating. Postgres needs no host publish
+  # (the API reaches it over the compose network; tests use `docker exec`).
+  postgres:
+    ports: !override []
+
+  api:
+    ports: !override ["3080:3000"]

@@ -1,0 +1,67 @@
+# Observability OVERLAY — adds Langfuse on top of the simple DEV stack.
+# The "dev." in the filename is load-bearing: this overlay ships hardcoded
+# Langfuse secrets (NEXTAUTH_SECRET, SALT, ENCRYPTION_KEY) and default admin
+# credentials for a zero-setup local experience, and must NEVER be layered
+# over docker-compose.production.yml. For production observability, run
+# Langfuse separately with real secrets and point the API at it via
+# LANGFUSE_HOST / LANGFUSE_PUBLIC_KEY / LANGFUSE_SECRET_KEY.
+#
+# Apply it layered over the simple file (the `make up-full` target does this):
+#   docker compose -f docker-compose.simple.yml -f docker-compose.dev.full.yml up --build
+#
+# One-click: Langfuse is provisioned headlessly (org/project/API keys via env)
+# and the API is wired to it automatically — no manual Langfuse UI setup.
+name: ai-guard
+
+services:
+  langfuse-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: langfuse
+    volumes:
+      - langfuse_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  langfuse:
+    image: langfuse/langfuse:2
+    depends_on:
+      langfuse-db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@langfuse-db:5432/langfuse
+      NEXTAUTH_URL: http://localhost:3001
+      NEXTAUTH_SECRET: change-me-in-prod
+      SALT: change-me-in-prod
+      # 64-hex-char key required by Langfuse v2; replace for any real deployment.
+      ENCRYPTION_KEY: "0000000000000000000000000000000000000000000000000000000000000000"
+      TELEMETRY_ENABLED: "false"
+      # Headless init: provision org, project, user, and the API keys on boot.
+      LANGFUSE_INIT_ORG_ID: ai-guard
+      LANGFUSE_INIT_ORG_NAME: AiGuard
+      LANGFUSE_INIT_PROJECT_ID: ai-guard
+      LANGFUSE_INIT_PROJECT_NAME: AiGuard
+      LANGFUSE_INIT_PROJECT_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-pk-lf-ai-guard-local}
+      LANGFUSE_INIT_PROJECT_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-sk-lf-ai-guard-local}
+      LANGFUSE_INIT_USER_EMAIL: ${LANGFUSE_INIT_USER_EMAIL:-admin@example.com}
+      LANGFUSE_INIT_USER_NAME: Admin
+      LANGFUSE_INIT_USER_PASSWORD: ${LANGFUSE_INIT_USER_PASSWORD:-ai-guard-admin}
+    ports: ["127.0.0.1:3001:3000"]
+
+  # Layered onto the simple `api` service: env maps and depends_on merge.
+  api:
+    depends_on:
+      langfuse:
+        condition: service_started
+    environment:
+      OBSERVABILITY_PROVIDER: langfuse
+      LANGFUSE_HOST: http://langfuse:3000
+      LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-pk-lf-ai-guard-local}
+      LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-sk-lf-ai-guard-local}
+
+volumes:
+  langfuse_pgdata:

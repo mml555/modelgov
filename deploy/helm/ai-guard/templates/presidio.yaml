@@ -1,0 +1,50 @@
+{{- if .Values.presidio.enabled }}
+{{- range $svc := (list (dict "name" "analyzer" "image" $.Values.presidio.analyzerImage) (dict "name" "anonymizer" "image" $.Values.presidio.anonymizerImage)) }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "ai-guard.fullname" $ }}-presidio-{{ $svc.name }}
+  labels:
+    {{- include "ai-guard.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: presidio-{{ $svc.name }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "ai-guard.selectorLabels" $ | nindent 6 }}
+      app.kubernetes.io/component: presidio-{{ $svc.name }}
+  template:
+    metadata:
+      labels:
+        {{- include "ai-guard.selectorLabels" $ | nindent 8 }}
+        app.kubernetes.io/component: presidio-{{ $svc.name }}
+    spec:
+      containers:
+        - name: presidio-{{ $svc.name }}
+          image: {{ $svc.image | quote }}
+          ports:
+            - containerPort: 3000
+          resources:
+            requests:
+              cpu: 100m
+              memory: 512Mi
+            limits:
+              memory: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "ai-guard.fullname" $ }}-presidio-{{ $svc.name }}
+  labels:
+    {{- include "ai-guard.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: presidio-{{ $svc.name }}
+spec:
+  selector:
+    {{- include "ai-guard.selectorLabels" $ | nindent 4 }}
+    app.kubernetes.io/component: presidio-{{ $svc.name }}
+  ports:
+    - port: 3000
+      targetPort: 3000
+---
+{{- end }}
+{{- end }}

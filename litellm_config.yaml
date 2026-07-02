@@ -1,0 +1,36 @@
+# LiteLLM proxy config. `model_name` is what Ai-Guard sends (must match the
+# model strings in ai-guard.yaml model_classes); `litellm_params.model` is the
+# concrete provider model LiteLLM calls. Provider keys come from the env.
+
+model_list:
+  - model_name: openai/gpt-4o-mini
+    litellm_params:
+      model: openai/gpt-4o-mini
+      api_key: os.environ/OPENAI_API_KEY
+  - model_name: openai/gpt-4o
+    litellm_params:
+      model: openai/gpt-4o
+      api_key: os.environ/OPENAI_API_KEY
+  # gpt-5 stand-in for the demo; swap to openai/gpt-5 when available to you.
+  - model_name: openai/gpt-5
+    litellm_params:
+      model: openai/gpt-4o
+      api_key: os.environ/OPENAI_API_KEY
+  - model_name: anthropic/claude-haiku
+    litellm_params:
+      model: anthropic/claude-3-5-haiku-latest
+      api_key: os.environ/ANTHROPIC_API_KEY
+  - model_name: anthropic/claude-sonnet
+    litellm_params:
+      model: anthropic/claude-3-5-sonnet-latest
+      api_key: os.environ/ANTHROPIC_API_KEY
+  - model_name: anthropic/claude-opus
+    litellm_params:
+      model: anthropic/claude-3-opus-latest
+      api_key: os.environ/ANTHROPIC_API_KEY
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY
+
+litellm_settings:
+  drop_params: true

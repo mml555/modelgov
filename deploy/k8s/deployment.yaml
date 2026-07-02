@@ -1,0 +1,60 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai-guard-api
+  namespace: ai-guard
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: ai-guard-api
+  template:
+    metadata:
+      labels:
+        app: ai-guard-api
+    spec:
+      containers:
+        - name: api
+          image: ghcr.io/your-org/ai-guard-api:REPLACE_TAG
+          ports:
+            - containerPort: 3000
+          envFrom:
+            - secretRef:
+                name: ai-guard-secrets
+          env:
+            - name: AI_GUARD_CONFIG
+              value: /config/ai-guard.yaml
+            - name: LITELLM_BASE_URL
+              value: http://litellm:4000
+            - name: REDIS_URL
+              value: redis://redis:6379
+            - name: METRICS_ENABLED
+              value: "true"
+            - name: IDEMPOTENCY_CAPTURE_CONTENT
+              value: "false"
+            - name: OBSERVABILITY_CAPTURE_CONTENT
+              value: "false"
+          volumeMounts:
+            - name: config
+              mountPath: /config
+              readOnly: true
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 3000
+            periodSeconds: 10
+          resources:
+            requests:
+              memory: 256Mi
+              cpu: 100m
+            limits:
+              memory: 512Mi
+      volumes:
+        - name: config
+          configMap:
+            name: ai-guard-config

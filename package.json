@@ -1,0 +1,52 @@
+{
+  "name": "ai-guard",
+  "version": "0.0.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "packageManager": "pnpm@10.19.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "generate-sdk-types": "tsx scripts/generate-sdk-types.ts",
+    "build": "pnpm generate-sdk-types && pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "eslint packages examples scripts --max-warnings 0",
+    "test": "bash scripts/vitest-with-db.sh",
+    "test:coverage": "bash scripts/vitest-with-db.sh --coverage",
+    "test:db": "bash scripts/test-with-db.sh",
+    "smoke:ci": "bash scripts/smoke-ci.sh",
+    "smoke:compose-e2e": "bash scripts/example-e2e-ci.sh",
+    "test:packages": "pnpm exec vitest run packages/cli/test packages/sdk-typescript/test packages/create-ai-guard/test",
+    "verify": "pnpm build && pnpm typecheck && pnpm lint && pnpm test:packages && pnpm test:coverage && pnpm --filter @ai-guard/api openapi:export && bash scripts/verify-versions.sh && pnpm exec tsx scripts/doctor-production-example.ts && OPENAI_API_KEY=x ANTHROPIC_API_KEY=x pnpm ai-guard validate --config ai-guard.production.example.yaml --production",
+    "doctor:production": "pnpm ai-guard doctor production",
+    "test:watch": "vitest",
+    "dev": "pnpm --filter @ai-guard/api dev",
+    "db:init": "pnpm --filter @ai-guard/api db:init",
+    "ai-guard": "pnpm --filter @ai-guard/cli dev --",
+    "setup": "pnpm ai-guard setup simple",
+    "up": "pnpm ai-guard up simple",
+    "up:full": "pnpm ai-guard up full",
+    "up:local": "pnpm ai-guard up local",
+    "status": "pnpm ai-guard status simple",
+    "doctor": "pnpm ai-guard doctor simple",
+    "smoke": "pnpm ai-guard smoke simple",
+    "build-image": "bash scripts/build-api-image.sh",
+    "down": "pnpm ai-guard down simple",
+    "down:full": "pnpm ai-guard down full",
+    "down:local": "pnpm ai-guard down local"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.17.0",
+    "@types/node": "^22.10.0",
+    "eslint": "^9.17.0",
+    "typescript-eslint": "^8.18.0",
+    "tsup": "^8.3.5",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8",
+    "@vitest/coverage-v8": "^2.1.8",
+    "wait-on": "^8.0.1"
+  }
+}

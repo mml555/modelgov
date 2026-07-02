@@ -1,0 +1,101 @@
+# Simple deploy: Ai-Guard API + LiteLLM + Postgres + Presidio.
+#   cp .env.example .env   (set OPENAI_API_KEY, ANTHROPIC_API_KEY)
+#   docker compose -f docker-compose.simple.yml up --build
+#
+# Backing services publish to 127.0.0.1 only (dev-local). Third-party images use
+# floating tags here for convenience; production pins them via required env vars
+# in docker-compose.production.yml — see .env.production.example.
+name: ai-guard
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: aiguard
+    ports: ["127.0.0.1:5432:5432"]
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+
+  litellm:
+    image: ghcr.io/berriai/litellm:main-stable
+    command: ["--config", "/app/config.yaml", "--port", "4000"]
+    environment:
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY}
+    volumes:
+      - ./litellm_config.yaml:/app/config.yaml:ro
+    ports: ["127.0.0.1:4000:4000"]
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+
+  presidio-analyzer:
+    image: mcr.microsoft.com/presidio-analyzer:latest
+    ports: ["127.0.0.1:5002:3000"]
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+
+  presidio-anonymizer:
+    image: mcr.microsoft.com/presidio-anonymizer:latest
+    ports: ["127.0.0.1:5001:3000"]
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  api:
+    build:
+      context: .
+      dockerfile: packages/api/Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+      litellm:
+        condition: service_started
+      presidio-analyzer:
+        condition: service_started
+      presidio-anonymizer:
+        condition: service_started
+    environment:
+      PORT: 3000
+      AI_GUARD_API_KEY: ${AI_GUARD_API_KEY}
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/aiguard
+      LITELLM_BASE_URL: http://litellm:4000
+      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY}
+      AI_GUARD_CONFIG: /app/ai-guard.yaml
+      PRESIDIO_ANALYZER_URL: http://presidio-analyzer:3000
+      PRESIDIO_ANONYMIZER_URL: http://presidio-anonymizer:3000
+    volumes:
+      - ./ai-guard.yaml:/app/ai-guard.yaml:ro
+    ports: ["127.0.0.1:3000:3000"]
+    healthcheck:
+      # Node-based (no dependency on wget/busybox being present in the image).
+      test:
+        - "CMD"
+        - "node"
+        - "-e"
+        - "fetch('http://localhost:3000/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+volumes:
+  pgdata:

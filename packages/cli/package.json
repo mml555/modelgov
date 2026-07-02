@@ -1,0 +1,25 @@
+{
+  "name": "@ai-guard/cli",
+  "version": "0.0.0",
+  "license": "MIT",
+  "description": "Ai-Guard CLI for setup, operations, validation, and policy decisions.",
+  "type": "module",
+  "bin": {
+    "ai-guard": "./dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup src/index.ts --format esm --clean",
+    "typecheck": "tsc --noEmit",
+    "dev": "tsx src/index.ts"
+  },
+  "dependencies": {
+    "@ai-guard/policy-engine": "workspace:*",
+    "yaml": "^2.6.1"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.2"
+  }
+}

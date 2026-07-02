@@ -1,0 +1,18 @@
+# Maps the "cloud" vision model names → a local Ollama vision model, so the OCR
+# demo runs with no cloud key. Pull a vision model first, e.g.:
+#   ollama pull llama3.2-vision      (or: ollama pull llava)
+model_list:
+  - model_name: openai/gpt-4o
+    litellm_params:
+      model: ollama/llama3.2-vision
+      api_base: http://host.docker.internal:11434
+  - model_name: openai/gpt-4o-mini
+    litellm_params:
+      model: ollama/llava
+      api_base: http://host.docker.internal:11434
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY
+
+litellm_settings:
+  drop_params: true

@@ -1,0 +1,176 @@
+name: ai-guard-prod
+
+services:
+  api:
+    image: ${AI_GUARD_API_IMAGE:?AI_GUARD_API_IMAGE must point to a built immutable image}
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      litellm:
+        condition: service_healthy
+      presidio-analyzer:
+        condition: service_healthy
+      presidio-anonymizer:
+        condition: service_healthy
+    environment:
+      PORT: 3000
+      HOST: 0.0.0.0
+      # Turns known dev-only defaults (e.g. the dev Langfuse overlay's keys)
+      # into boot errors instead of silent production footguns.
+      AI_GUARD_PRODUCTION: "true"
+      AI_GUARD_API_KEY: ${AI_GUARD_API_KEY:-}
+      AI_GUARD_API_KEYS: ${AI_GUARD_API_KEYS:-}
+      DATABASE_URL: ${DATABASE_URL:?set a production Postgres URL}
+      LITELLM_BASE_URL: http://litellm:4000
+      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:?set a LiteLLM master key}
+      AI_GUARD_CONFIG: /app/ai-guard.yaml
+      PRESIDIO_ANALYZER_URL: http://presidio-analyzer:3000
+      PRESIDIO_ANONYMIZER_URL: http://presidio-anonymizer:3000
+      REQUEST_BODY_LIMIT_BYTES: ${REQUEST_BODY_LIMIT_BYTES:-1048576}
+      RATE_LIMIT_MAX: ${RATE_LIMIT_MAX:-120}
+      RATE_LIMIT_WINDOW_MS: ${RATE_LIMIT_WINDOW_MS:-60000}
+      MAINTENANCE_ENABLED: ${MAINTENANCE_ENABLED:-true}
+      IDEMPOTENCY_STALE_MS: ${IDEMPOTENCY_STALE_MS:-900000}
+      IDEMPOTENCY_COMPLETED_RETENTION_MS: ${IDEMPOTENCY_COMPLETED_RETENTION_MS:-604800000}
+      RESERVATION_STALE_MS: ${RESERVATION_STALE_MS:-900000}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      BUDGET_ALERT_WEBHOOK_URL: ${BUDGET_ALERT_WEBHOOK_URL:-}
+      BUDGET_ALERT_WEBHOOK_SECRET: ${BUDGET_ALERT_WEBHOOK_SECRET:-}
+      OBSERVABILITY_PROVIDER: ${OBSERVABILITY_PROVIDER:-none}
+      OBSERVABILITY_CAPTURE_CONTENT: ${OBSERVABILITY_CAPTURE_CONTENT:-false}
+      IDEMPOTENCY_CAPTURE_CONTENT: ${IDEMPOTENCY_CAPTURE_CONTENT:-false}
+      STRICT_PRICING: ${STRICT_PRICING:-false}
+      METRICS_AUTH_TOKEN: ${METRICS_AUTH_TOKEN:-}
+      LANGFUSE_HOST: ${LANGFUSE_HOST:-}
+      LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-}
+      LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-}
+      # TLS to the DB (set verify-full + DATABASE_SSL_CA for a managed Postgres).
+      DATABASE_SSL: ${DATABASE_SSL:-require}
+      DATABASE_SSL_CA: ${DATABASE_SSL_CA:-}
+      # Trust your proxy's IP/CIDR so client IPs (and rate-limit fallback) are real.
+      TRUST_PROXY: ${TRUST_PROXY:-}
+      CORS_ALLOW_ORIGINS: ${CORS_ALLOW_ORIGINS:-}
+      REQUEST_TIMEOUT_MS: ${REQUEST_TIMEOUT_MS:-60000}
+      LITELLM_TIMEOUT_MS: ${LITELLM_TIMEOUT_MS:-60000}
+      DB_POOL_MAX: ${DB_POOL_MAX:-10}
+      METRICS_ENABLED: ${METRICS_ENABLED:-true}
+      RATE_LIMIT_FAIL_OPEN: ${RATE_LIMIT_FAIL_OPEN:-false}
+      REQUEST_LOG_RETENTION_MS: ${REQUEST_LOG_RETENTION_MS:-2592000000}
+      BUDGET_ALERT_WEBHOOK_ALLOW_PRIVATE: ${BUDGET_ALERT_WEBHOOK_ALLOW_PRIVATE:-false}
+    volumes:
+      - ./ai-guard.yaml:/app/ai-guard.yaml:ro
+    ports:
+      - "${AI_GUARD_PUBLIC_PORT:-3000}:3000"
+    healthcheck:
+      # Node-based (no dependency on wget/busybox in the runtime image).
+      test:
+        - "CMD"
+        - "node"
+        - "-e"
+        - "fetch('http://localhost:3000/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 10s
+      timeout: 3s
+      retries: 12
+    deploy:
+      resources:
+        limits:
+          memory: ${API_MEMORY_LIMIT:-512M}
+
+  postgres:
+    image: ${POSTGRES_IMAGE:?set a pinned postgres image}
+    restart: unless-stopped
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set a production DB password}
+      POSTGRES_DB: ${POSTGRES_DB:-aiguard}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    deploy:
+      resources:
+        limits:
+          memory: ${POSTGRES_MEMORY_LIMIT:-2G}
+
+  litellm:
+    image: ${LITELLM_IMAGE:?set a pinned LiteLLM image}
+    restart: unless-stopped
+    command: ["--config", "/app/config.yaml", "--port", "4000"]
+    environment:
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:?set a LiteLLM master key}
+    volumes:
+      - ./litellm_config.yaml:/app/config.yaml:ro
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:4000/health')\"",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: ${LITELLM_MEMORY_LIMIT:-1G}
+
+  presidio-analyzer:
+    image: ${PRESIDIO_ANALYZER_IMAGE:?set a pinned Presidio analyzer image}
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:3000/health')\"",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          memory: ${PRESIDIO_MEMORY_LIMIT:-1G}
+
+  presidio-anonymizer:
+    image: ${PRESIDIO_ANONYMIZER_IMAGE:?set a pinned Presidio anonymizer image}
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:3000/health')\"",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  redis:
+    image: ${REDIS_IMAGE:?set a pinned Redis image}
+    restart: unless-stopped
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    deploy:
+      resources:
+        limits:
+          memory: ${REDIS_MEMORY_LIMIT:-256M}
+
+volumes:
+  pgdata:

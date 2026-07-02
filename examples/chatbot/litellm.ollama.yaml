@@ -1,0 +1,19 @@
+# Maps "cloud" model names → local Ollama, so the demo needs no cloud key.
+# Pull the models first:  ollama pull llama3.2:1b && ollama pull llama3.2:3b
+model_list:
+  - model_name: openai/gpt-4o-mini
+    litellm_params:
+      model: ollama/llama3.2:1b
+      api_base: http://host.docker.internal:11434
+  - model_name: openai/gpt-4o
+    litellm_params:
+      model: ollama/llama3.2:3b
+      api_base: http://host.docker.internal:11434
+  - model_name: anthropic/claude-haiku
+    litellm_params:
+      model: ollama/llama3.2:1b
+      api_base: http://host.docker.internal:11434
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY
+litellm_settings:
+  drop_params: true

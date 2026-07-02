@@ -1,0 +1,30 @@
+Ai-Guard {{ .Chart.AppVersion }} installed as release "{{ .Release.Name }}".
+
+The API service is: {{ include "ai-guard.fullname" . }}:{{ .Values.service.port }}
+
+Port-forward and smoke test:
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "ai-guard.fullname" . }} {{ .Values.service.port }}:{{ .Values.service.port }}
+  curl -s localhost:{{ .Values.service.port }}/ready
+
+Send a guarded request (use your AI_GUARD_API_KEY):
+  curl -sX POST localhost:{{ .Values.service.port }}/v1/chat \
+    -H "authorization: Bearer <AI_GUARD_API_KEY>" -H "content-type: application/json" \
+    -d '{"userId":"u1","userType":"logged_in","feature":"support_chat","messages":[{"role":"user","content":"hi"}]}'
+
+Wiring:
+{{- if .Values.secret.existingSecret }}
+  • Secrets: using existing secret "{{ .Values.secret.existingSecret }}".
+{{- else }}
+  • Secrets: chart-created "{{ include "ai-guard.secretName" . }}" (set secret.aiGuardApiKey / secret.databaseUrl).
+{{- end }}
+  • LiteLLM: {{ if .Values.litellm.enabled }}in-cluster ({{ include "ai-guard.litellmUrl" . }}){{ else }}external ({{ .Values.litellm.baseUrl | default "UNSET — set litellm.baseUrl" }}){{ end }}
+  • Redis:   {{ if .Values.redis.enabled }}in-cluster (shared rate limits){{ else }}{{ .Values.redis.url | default "none (per-replica limits)" }}{{ end }}
+  • Safety:  {{ if .Values.presidio.enabled }}Presidio enabled{{ else }}Presidio OFF — PII/injection presets that require it will 503{{ end }}
+{{- if .Values.postgres.enabled }}
+  • Postgres: IN-CLUSTER (dev). Set migrations.enabled=false and rely on the API's advisory-locked self-migration.
+{{- else }}
+  • Postgres: external (managed) via DATABASE_URL — recommended.
+{{- end }}
+
+Edit policy: change values.config.aiGuardYaml (or config.existingConfigMap) and
+`helm upgrade` — the API pods roll on the config checksum change.

@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Northwind Cloud — Demo Site</title>
+    <style>
+      body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 0; color: #111; }
+      header { background: #111827; color: #fff; padding: 18px 32px; font-weight: 700; }
+      main { max-width: 720px; margin: 0 auto; padding: 48px 24px; line-height: 1.6; }
+      h1 { font-size: 30px; }
+      .card { background: #f7f7fb; border: 1px solid #e5e7eb; border-radius: 12px; padding: 18px 20px; margin: 22px 0; }
+      code { background: #eef; padding: 1px 5px; border-radius: 4px; }
+      .hint { color: #6b7280; font-size: 14px; }
+    </style>
+  </head>
+  <body>
+    <header>☁ Northwind Cloud</header>
+    <main>
+      <h1>Welcome to Northwind Cloud</h1>
+      <p>
+        This is a stand-in "customer website." The support assistant in the
+        bottom-right corner is the embeddable Ai-Guard RAG widget — it answers
+        <strong>only</strong> from our help docs, cites its sources, and shows a
+        per-reply governance receipt.
+      </p>
+      <div class="card">
+        <p><strong>Try grounded questions</strong> (answered from the KB):</p>
+        <ul>
+          <li>How long do refunds take?</li>
+          <li>How do I reset my password?</li>
+          <li>What does the Business plan cost?</li>
+        </ul>
+        <p><strong>Try an out-of-scope question</strong> (should be refused, not guessed):</p>
+        <ul>
+          <li>Do you have a mobile app for Android?</li>
+          <li>What's your CEO's home address?</li>
+        </ul>
+      </div>
+      <p class="hint">
+        The widget is included with a single tag:
+        <code>&lt;script src="/widget.js" data-endpoint="/api/chat"&gt;&lt;/script&gt;</code>
+      </p>
+    </main>
+
+    <!-- The one line a customer adds to their site: -->
+    <script src="/widget.js" data-endpoint="/api/chat" data-title="Northwind Support"></script>
+  </body>
+</html>
