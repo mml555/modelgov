@@ -1,11 +1,11 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: ai-guard-api
-  namespace: ai-guard
+  name: modelgov-api
+  namespace: modelgov
 spec:
   selector:
-    app: ai-guard-api
+    app: modelgov-api
   ports:
     - port: 3000
       targetPort: 3000

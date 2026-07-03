@@ -8,11 +8,11 @@
 
 export type DeployProfile = "selfhost" | "multitenant";
 
-export const DEPLOY_PROFILE_ENV = "AI_GUARD_DEPLOY_PROFILE";
+export const DEPLOY_PROFILE_ENV = "MODELGOV_DEPLOY_PROFILE";
 
 /** Env flags a profile sets (values merged into Helm / compose). */
 export interface ProfileEnvFlags {
-  AI_GUARD_DEPLOY_PROFILE: DeployProfile;
+  MODELGOV_DEPLOY_PROFILE: DeployProfile;
   HIERARCHICAL_BUDGETS: "true" | "false";
   MULTI_TENANT_POLICY: "true" | "false";
   POLICY_STORE_ENABLED: "true" | "false";
@@ -28,7 +28,7 @@ export interface DeployProfileCheck {
 }
 
 const SELFHOST_FLAGS: ProfileEnvFlags = {
-  AI_GUARD_DEPLOY_PROFILE: "selfhost",
+  MODELGOV_DEPLOY_PROFILE: "selfhost",
   HIERARCHICAL_BUDGETS: "false",
   MULTI_TENANT_POLICY: "false",
   POLICY_STORE_ENABLED: "false",
@@ -36,7 +36,7 @@ const SELFHOST_FLAGS: ProfileEnvFlags = {
 };
 
 const MULTITENANT_FLAGS: ProfileEnvFlags = {
-  AI_GUARD_DEPLOY_PROFILE: "multitenant",
+  MODELGOV_DEPLOY_PROFILE: "multitenant",
   HIERARCHICAL_BUDGETS: "false",
   MULTI_TENANT_POLICY: "true",
   POLICY_STORE_ENABLED: "true",
@@ -50,7 +50,7 @@ export function profileEnvFlags(profile: DeployProfile): ProfileEnvFlags {
 }
 
 /**
- * Resolve the active profile from env. Explicit `AI_GUARD_DEPLOY_PROFILE` wins;
+ * Resolve the active profile from env. Explicit `MODELGOV_DEPLOY_PROFILE` wins;
  * otherwise infer multitenant when per-tenant policy is on.
  */
 export function resolveDeployProfile(
@@ -82,7 +82,7 @@ export function deployProfileChecks(
   opts: { production?: boolean } = {},
 ): DeployProfileCheck[] {
   const checks: DeployProfileCheck[] = [];
-  const production = opts.production ?? env.AI_GUARD_PRODUCTION === "true";
+  const production = opts.production ?? env.MODELGOV_PRODUCTION === "true";
   const profile = resolveDeployProfile(env);
 
   const push = (
@@ -185,7 +185,7 @@ export function deployProfileChecks(
         "warn",
         "selfhost_multitenant_mismatch",
         "selfhost profile but MULTI_TENANT_POLICY=true",
-        "Set AI_GUARD_DEPLOY_PROFILE=multitenant or disable MULTI_TENANT_POLICY",
+        "Set MODELGOV_DEPLOY_PROFILE=multitenant or disable MULTI_TENANT_POLICY",
       );
     }
     if (env.POLICY_STORE_ENABLED === "true") {
@@ -193,7 +193,7 @@ export function deployProfileChecks(
         "warn",
         "selfhost_policy_store",
         "selfhost profile but POLICY_STORE_ENABLED=true",
-        "Use file-based policy or set AI_GUARD_DEPLOY_PROFILE=multitenant",
+        "Use file-based policy or set MODELGOV_DEPLOY_PROFILE=multitenant",
       );
     }
     if (env.HIERARCHICAL_BUDGETS === "true") {
@@ -215,7 +215,7 @@ export function deployProfileChecks(
           production ? "fail" : "warn",
           "profile_drift",
           `${key}=${env[key] ?? "(unset)"} does not match ${profile} profile (expected ${value})`,
-          `Align ${key} with deploy/helm/ai-guard/values-${profile}.yaml`,
+          `Align ${key} with deploy/helm/modelgov/values-${profile}.yaml`,
         );
       }
     }
@@ -228,7 +228,7 @@ export function deployProfileChecks(
 export function assertDeployProfilePosture(
   env: Record<string, string | undefined>,
 ): void {
-  if (env.AI_GUARD_PRODUCTION !== "true") return;
+  if (env.MODELGOV_PRODUCTION !== "true") return;
   const failures = deployProfileChecks(env, { production: true }).filter(
     (c) => c.severity === "fail",
   );

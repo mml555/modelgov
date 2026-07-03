@@ -17,17 +17,17 @@ interface IssuedKey extends KeyRecord {
   secret: string;
 }
 
-const USAGE = `ai-guard keys — manage DB-backed API keys (requires a keys:admin key)
+const USAGE = `modelgov keys — manage DB-backed API keys (requires a keys:admin key)
 
 Usage:
-  ai-guard keys list [--include-revoked] [--project <id>]
-  ai-guard keys create --name <name> [--permissions chat:create,usage:read]
+  modelgov keys list [--include-revoked] [--project <id>]
+  modelgov keys create --name <name> [--permissions chat:create,usage:read]
                        [--project <id>] [--environment <env>] [--expires <iso8601>]
-  ai-guard keys rotate <id>
-  ai-guard keys revoke <id>
+  modelgov keys rotate <id>
+  modelgov keys revoke <id>
 
-Auth: set AI_GUARD_API_KEY to a key with the keys:admin permission,
-and AI_GUARD_URL to the API base URL (default http://localhost:3000).
+Auth: set MODELGOV_API_KEY to a key with the keys:admin permission,
+and MODELGOV_URL to the API base URL (default http://localhost:3000).
 `;
 
 export async function runKeysCommand(args: string[]): Promise<void> {

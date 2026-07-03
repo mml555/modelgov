@@ -1,7 +1,7 @@
 #!/usr/bin/env tsx
 /**
  * CI guard: a filled-in .env.production.example must pass production deploy
- * checks, and known dev keys must fail when AI_GUARD_PRODUCTION=true.
+ * checks, and known dev keys must fail when MODELGOV_PRODUCTION=true.
  */
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -24,12 +24,12 @@ function parseEnvExample(text: string): Record<string, string> {
 
 function fillProductionExample(raw: Record<string, string>): Record<string, string> {
   const env = { ...raw };
-  env.AI_GUARD_PRODUCTION = "true";
-  env.AI_GUARD_API_KEY = "sk-production-example-" + "x".repeat(32);
+  env.MODELGOV_PRODUCTION = "true";
+  env.MODELGOV_API_KEY = "sk-production-example-" + "x".repeat(32);
   env.DATABASE_SSL = "require";
   env.METRICS_ENABLED = "true";
   env.METRICS_AUTH_TOKEN = "metrics-token-" + "y".repeat(32);
-  env.DATABASE_URL = "postgres://postgres:secret@postgres:5432/aiguard";
+  env.DATABASE_URL = "postgres://postgres:secret@postgres:5432/modelgov";
   env.LITELLM_MASTER_KEY = "litellm-" + "z".repeat(32);
   return env;
 }
@@ -43,7 +43,7 @@ if (warns.length > 0) {
   console.warn("production example warnings (non-blocking):\n" + warns.map((w) => `  ${w}`).join("\n"));
 }
 
-const bad = { ...filled, AI_GUARD_API_KEY: "sk-ai-guard-api-local" };
+const bad = { ...filled, MODELGOV_API_KEY: "sk-modelgov-api-local" };
 let rejected = false;
 try {
   assertProductionDeploy(bad);

@@ -1,29 +1,29 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: ai-guard-api
-  namespace: ai-guard
+  name: modelgov-api
+  namespace: modelgov
 spec:
   replicas: 2
   selector:
     matchLabels:
-      app: ai-guard-api
+      app: modelgov-api
   template:
     metadata:
       labels:
-        app: ai-guard-api
+        app: modelgov-api
     spec:
       containers:
         - name: api
-          image: ghcr.io/your-org/ai-guard-api:REPLACE_TAG
+          image: ghcr.io/your-org/modelgov-api:REPLACE_TAG
           ports:
             - containerPort: 3000
           envFrom:
             - secretRef:
-                name: ai-guard-secrets
+                name: modelgov-secrets
           env:
-            - name: AI_GUARD_CONFIG
-              value: /config/ai-guard.yaml
+            - name: MODELGOV_CONFIG
+              value: /config/modelgov.yaml
             - name: LITELLM_BASE_URL
               value: http://litellm:4000
             - name: REDIS_URL
@@ -57,4 +57,4 @@ spec:
       volumes:
         - name: config
           configMap:
-            name: ai-guard-config
+            name: modelgov-config

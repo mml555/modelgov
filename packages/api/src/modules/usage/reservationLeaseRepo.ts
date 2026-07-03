@@ -1,4 +1,4 @@
-import type { ReservationCaps } from "@ai-guard/policy-engine";
+import type { ReservationCaps } from "@modelgov/policy-engine";
 import type { Pool } from "pg";
 
 export interface StaleReservationLeaseRow {

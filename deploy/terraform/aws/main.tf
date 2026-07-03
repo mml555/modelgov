@@ -1,5 +1,5 @@
 locals {
-  tags = merge({ "app.kubernetes.io/managed-by" = "terraform", "app" = "ai-guard" }, var.tags)
+  tags = merge({ "app.kubernetes.io/managed-by" = "terraform", "app" = "modelgov" }, var.tags)
 }
 
 # ── Credentials ──────────────────────────────────────────────────────────────
@@ -23,7 +23,7 @@ resource "aws_db_subnet_group" "this" {
 
 resource "aws_security_group" "postgres" {
   name        = "${var.name}-pg"
-  description = "Ai-Guard Postgres access"
+  description = "Modelgov Postgres access"
   vpc_id      = var.vpc_id
   tags        = local.tags
 }
@@ -90,7 +90,7 @@ resource "aws_elasticache_subnet_group" "this" {
 resource "aws_security_group" "redis" {
   count       = var.redis_enabled ? 1 : 0
   name        = "${var.name}-redis"
-  description = "Ai-Guard Redis access"
+  description = "Modelgov Redis access"
   vpc_id      = var.vpc_id
   tags        = local.tags
 }
@@ -118,7 +118,7 @@ resource "aws_security_group_rule" "redis_from_cidr" {
 resource "aws_elasticache_replication_group" "this" {
   count                = var.redis_enabled ? 1 : 0
   replication_group_id = "${var.name}-redis"
-  description          = "Ai-Guard rate-limit Redis"
+  description          = "Modelgov rate-limit Redis"
 
   engine         = "redis"
   engine_version = var.redis_version
@@ -143,13 +143,13 @@ resource "aws_elasticache_replication_group" "this" {
 }
 
 # ── Optional: wire outputs into a Kubernetes Secret for the Helm chart ─────────
-resource "kubernetes_secret" "ai_guard" {
+resource "kubernetes_secret" "modelgov" {
   count = var.create_k8s_secret ? 1 : 0
 
   metadata {
     name      = var.k8s_secret_name
     namespace = var.k8s_namespace
-    labels    = { "app.kubernetes.io/name" = "ai-guard" }
+    labels    = { "app.kubernetes.io/name" = "modelgov" }
   }
 
   # Keys match what the Helm chart's deployment expects via envFrom.
@@ -158,7 +158,7 @@ resource "kubernetes_secret" "ai_guard" {
       DATABASE_URL = local.database_url
     },
     var.redis_enabled ? { REDIS_URL = local.redis_url } : {},
-    var.ai_guard_api_key != "" ? { AI_GUARD_API_KEY = var.ai_guard_api_key } : {},
+    var.modelgov_api_key != "" ? { MODELGOV_API_KEY = var.modelgov_api_key } : {},
   )
 
   type = "Opaque"

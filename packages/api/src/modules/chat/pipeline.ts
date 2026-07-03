@@ -1,4 +1,4 @@
-import type { PolicyDecision, SafetyPlan, UsageSnapshot } from "@ai-guard/policy-engine";
+import type { PolicyDecision, SafetyPlan, UsageSnapshot } from "@modelgov/policy-engine";
 import { SafetyServiceError } from "../../services/safety";
 import { logRequest } from "../usage/auditLogRepo";
 import { recordActualCost } from "../usage/repo";
@@ -43,7 +43,7 @@ export type BudgetHold =
     };
 
 export interface PreparedCall {
-  aiRequest: import("@ai-guard/policy-engine").AiRequest;
+  aiRequest: import("@modelgov/policy-engine").AiRequest;
   decision: PolicyDecision;
   messages: ChatMessage[];
   now: Date;

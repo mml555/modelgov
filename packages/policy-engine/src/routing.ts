@@ -1,4 +1,4 @@
-import type { AiGuardConfig } from "./types";
+import type { ModelgovConfig } from "./types";
 
 // Model-class tiers are ordered cheapest → most expensive. "Degrade" means
 // stepping DOWN to a cheaper tier. This built-in order is the default; a config
@@ -23,7 +23,7 @@ export interface ResolvedModelInfo {
  * fallback model (falling back to primary if no fallback is configured).
  */
 export function resolveModelInfo(
-  config: AiGuardConfig,
+  config: ModelgovConfig,
   className: string,
   useFallback: boolean,
 ): ResolvedModelInfo {
@@ -44,7 +44,7 @@ export function resolveModelInfo(
 export function nextPermittedCheaperClass(
   current: string,
   permitted: readonly string[],
-  config: AiGuardConfig,
+  config: ModelgovConfig,
 ): string | null {
   // Configurable order (cheapest → most expensive), else the built-in tiers.
   const order: readonly string[] = config.routing.classOrder ?? CLASS_TIERS;

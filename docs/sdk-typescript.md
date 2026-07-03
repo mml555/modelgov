@@ -1,28 +1,28 @@
 # TypeScript SDK
 
-Package: `@ai-guard/sdk` (monorepo: `packages/sdk-typescript`).
+Package: `@modelgov/sdk` (monorepo: `packages/sdk-typescript`).
 
-The SDK is a **thin HTTP client** to the Ai-Guard API. Policy enforcement is
+The SDK is a **thin HTTP client** to the Modelgov API. Policy enforcement is
 always server-side.
 
 ## Install
 
-From the Ai-Guard monorepo (workspace):
+From the Modelgov monorepo (workspace):
 
 ```json
-{ "dependencies": { "@ai-guard/sdk": "workspace:*" } }
+{ "dependencies": { "@modelgov/sdk": "workspace:*" } }
 ```
 
-When published to npm (future): `npm install @ai-guard/sdk`.
+When published to npm (future): `npm install @modelgov/sdk`.
 
 ## Create a client
 
 ```typescript
-import { createAiGuardClient } from "@ai-guard/sdk";
+import { createModelgovClient } from "@modelgov/sdk";
 
-const ai = createAiGuardClient({
-  baseUrl: process.env.AI_GUARD_URL ?? "http://localhost:3000",
-  apiKey: process.env.AI_GUARD_API_KEY,
+const ai = createModelgovClient({
+  baseUrl: process.env.MODELGOV_URL ?? "http://localhost:3000",
+  apiKey: process.env.MODELGOV_API_KEY,
   timeoutMs: 60_000, // default; set null to disable
 });
 ```
@@ -32,7 +32,7 @@ const ai = createAiGuardClient({
 ```typescript
 const res = await ai.chat({
   userId: string,           // your end-user id
-  userType: UserTypeName,   // must match ai-guard.yaml budgets
+  userType: UserTypeName,   // must match modelgov.yaml budgets
   feature: FeatureName,     // required — registered feature
   messages: ChatMessage[],
   modelClass?: ModelClassName,
@@ -47,7 +47,7 @@ const res = await ai.chat({
 ### Generated types
 
 `FeatureName`, `UserTypeName`, and `ModelClassName` are generated from
-`ai-guard.yaml`:
+`modelgov.yaml`:
 
 ```bash
 pnpm generate-sdk-types
@@ -135,10 +135,10 @@ interface ChatStreamDone {
 | --- | --- |
 | `PolicyBlockedError` | 403 `policy_blocked` or `budget_exceeded` |
 | `SafetyBlockedError` | 403 `safety_blocked` |
-| `AiGuardError` | Other 4xx/5xx |
+| `ModelgovError` | Other 4xx/5xx |
 
 ```typescript
-import { PolicyBlockedError, SafetyBlockedError } from "@ai-guard/sdk";
+import { PolicyBlockedError, SafetyBlockedError } from "@modelgov/sdk";
 
 try {
   await ai.chat({ ... });
@@ -181,7 +181,7 @@ await ai.chat(request, {
 4. Return res.message.content to user
 ```
 
-Never call Ai-Guard before your app has decided the user may use this feature.
+Never call Modelgov before your app has decided the user may use this feature.
 
 ## Example
 

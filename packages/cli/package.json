@@ -1,11 +1,11 @@
 {
-  "name": "@ai-guard/cli",
+  "name": "@modelgov/cli",
   "version": "1.0.0",
   "license": "MIT",
-  "description": "Ai-Guard CLI for setup, operations, validation, and policy decisions.",
+  "description": "Modelgov CLI for setup, operations, validation, and policy decisions.",
   "type": "module",
   "bin": {
-    "ai-guard": "./dist/index.js"
+    "modelgov": "./dist/index.js"
   },
   "files": [
     "dist"
@@ -16,7 +16,7 @@
     "dev": "tsx src/index.ts"
   },
   "dependencies": {
-    "@ai-guard/policy-engine": "workspace:*",
+    "@modelgov/policy-engine": "workspace:*",
     "yaml": "^2.6.1"
   },
   "devDependencies": {

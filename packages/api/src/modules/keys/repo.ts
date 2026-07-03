@@ -3,7 +3,7 @@ import type { Pool } from "pg";
 
 type Queryable = Pick<Pool, "query">;
 
-const KEY_TOKEN_PREFIX = "sk-ai-guard-";
+const KEY_TOKEN_PREFIX = "sk-modelgov-";
 /** Chars of the full secret kept for non-secret display/identification. */
 const DISPLAY_PREFIX_LEN = KEY_TOKEN_PREFIX.length + 8;
 

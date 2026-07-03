@@ -35,8 +35,8 @@ jobs:
           bash scripts/verify-versions.sh
           ROOT="$(node -p "require('./package.json').version")"
           PY="$(grep -m1 '^version' packages/sdk-python/pyproject.toml | sed -E 's/.*"([^"]+)".*/\1/')"
-          PY_INIT="$(grep -m1 '__version__' packages/sdk-python/ai_guard/__init__.py | sed -E 's/.*"([^"]+)".*/\1/')"
-          HELM="$(grep -m1 '^appVersion' deploy/helm/ai-guard/Chart.yaml | sed -E 's/.*"([^"]+)".*/\1/')"
+          PY_INIT="$(grep -m1 '__version__' packages/sdk-python/modelgov/__init__.py | sed -E 's/.*"([^"]+)".*/\1/')"
+          HELM="$(grep -m1 '^appVersion' deploy/helm/modelgov/Chart.yaml | sed -E 's/.*"([^"]+)".*/\1/')"
           OPENAPI_PLUGIN="$(grep -m1 'OPENAPI_VERSION' packages/api/src/plugins/openApi.ts | sed -E 's/.*"([^"]+)".*/\1/')"
           echo "tag=$VERSION root=$ROOT python=$PY py_init=$PY_INIT helm=$HELM openapi_plugin=$OPENAPI_PLUGIN"
           if [ "$VERSION" != "$ROOT" ] || [ "$VERSION" != "$PY" ] || [ "$VERSION" != "$PY_INIT" ]; then
@@ -49,8 +49,8 @@ jobs:
           fi
           # The npm job below publishes these four leaf packages, so their
           # versions must match the tag too — otherwise a tag could ship e.g.
-          # @ai-guard/sdk@0.0.0 against a v0.x.0 API contract.
-          for pkgdir in packages/policy-engine packages/sdk-typescript packages/cli packages/create-ai-guard; do
+          # @modelgov/sdk@0.0.0 against a v0.x.0 API contract.
+          for pkgdir in packages/policy-engine packages/sdk-typescript packages/cli packages/create-modelgov; do
             PN="$(node -p "require('./$pkgdir/package.json').name")"
             PV="$(node -p "require('./$pkgdir/package.json').version")"
             if [ "$VERSION" != "$PV" ]; then
@@ -75,14 +75,14 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
       # Publish the four public leaf packages in dependency order
-      # (@ai-guard/api is the Docker-shipped server, not an npm library).
+      # (@modelgov/api is the Docker-shipped server, not an npm library).
       # pnpm rewrites the `workspace:*` deps to the published version.
       - name: Publish to npm
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           NPM_CONFIG_PROVENANCE: "true"
         run: |
-          for pkg in @ai-guard/policy-engine @ai-guard/sdk @ai-guard/cli create-ai-guard; do
+          for pkg in @modelgov/policy-engine @modelgov/sdk @modelgov/cli create-modelgov; do
             echo "::group::publish $pkg"
             pnpm --filter "$pkg" publish --access public --no-git-checks
             echo "::endgroup::"

@@ -1,5 +1,5 @@
-import type { AiGuardConfig } from "@ai-guard/policy-engine";
-import { PolicyConfigError } from "@ai-guard/policy-engine";
+import type { ModelgovConfig } from "@modelgov/policy-engine";
+import { PolicyConfigError } from "@modelgov/policy-engine";
 import type { FastifyInstance } from "fastify";
 import type { Pool } from "pg";
 import { sendError } from "../../errors";
@@ -14,7 +14,7 @@ import { handleExplain } from "./service";
 import type { TenantPolicyResolver } from "../policy/tenantResolver";
 
 export interface ExplainRouteDeps {
-  config: AiGuardConfig;
+  config: ModelgovConfig;
   pool: Pool;
   /**
    * When set (MULTI_TENANT_POLICY), the dry-run is evaluated against the caller's

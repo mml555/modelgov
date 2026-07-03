@@ -14,31 +14,31 @@ export interface DomainMetrics {
 
 export function createDomainMetrics(register: Registry): DomainMetrics {
   const requests = new Counter({
-    name: "ai_guard_chat_requests_total",
+    name: "modelgov_chat_requests_total",
     help: "Chat requests by feature, policy decision, and outcome status.",
     labelNames: ["feature", "decision", "status"] as const,
     registers: [register],
   });
   const cost = new Counter({
-    name: "ai_guard_chat_cost_usd_total",
+    name: "modelgov_chat_cost_usd_total",
     help: "Cumulative settled model+safety cost (USD) by feature.",
     labelNames: ["feature"] as const,
     registers: [register],
   });
   const fallbacks = new Counter({
-    name: "ai_guard_chat_fallbacks_total",
+    name: "modelgov_chat_fallbacks_total",
     help: "Requests served by the fallback model after a primary provider failure.",
     labelNames: ["feature"] as const,
     registers: [register],
   });
   const budgetBlocks = new Counter({
-    name: "ai_guard_budget_blocks_total",
+    name: "modelgov_budget_blocks_total",
     help: "Requests rejected because a budget (flat or node) was exhausted.",
     labelNames: ["feature"] as const,
     registers: [register],
   });
   const safetyBlocks = new Counter({
-    name: "ai_guard_safety_blocks_total",
+    name: "modelgov_safety_blocks_total",
     help: "Requests blocked by input/output safety (PII or prompt injection).",
     labelNames: ["feature"] as const,
     registers: [register],

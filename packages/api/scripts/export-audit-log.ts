@@ -7,10 +7,10 @@
  * script streams it as JSON Lines and re-verifies the chain end to end.
  *
  *   # Full export to a file, verify the chain (non-zero exit if tampered):
- *   DATABASE_URL=postgres://... pnpm --filter @ai-guard/api audit:export > audit.jsonl
+ *   DATABASE_URL=postgres://... pnpm --filter @modelgov/api audit:export > audit.jsonl
  *
  *   # Incremental export for a nightly WORM ship (only rows after the last id):
- *   DATABASE_URL=postgres://... pnpm --filter @ai-guard/api audit:export -- --since-id 4210
+ *   DATABASE_URL=postgres://... pnpm --filter @modelgov/api audit:export -- --since-id 4210
  *
  * Flags:
  *   --since-id <n>   Only export rows with id > n (incremental shipping). Chain

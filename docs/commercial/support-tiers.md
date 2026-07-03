@@ -1,9 +1,9 @@
 # Support tiers (template)
 
-> **Template only.** Ai-Guard is open-source, self-hosted software. "Community"
+> **Template only.** Modelgov is open-source, self-hosted software. "Community"
 > reflects the reality of the open-source project (best-effort, no guarantees);
 > "Business" and "Enterprise" describe paid tiers an **operating provider** could
-> offer. Replace **`[BRACKETED]`** values. Nothing here binds the Ai-Guard project.
+> offer. Replace **`[BRACKETED]`** values. Nothing here binds the Modelgov project.
 
 ## Tier comparison
 
@@ -30,7 +30,7 @@ paid tier.*
 ## Escalation flow
 
 ```text
-Customer report (with requestId / x-ai-guard-request-id)
+Customer report (with requestId / x-modelgov-request-id)
         │
         ▼
  [SUPPORT CHANNEL / PORTAL]  ── triage & severity assignment (SEV1–4)
@@ -61,9 +61,9 @@ Customer report (with requestId / x-ai-guard-request-id)
 To hit response targets, include:
 
 - Approximate timestamps (UTC) and affected `feature` / `userType`.
-- `requestId` and/or `x-ai-guard-request-id` (see [API correlation](../api.md#request-correlation)).
+- `requestId` and/or `x-modelgov-request-id` (see [API correlation](../api.md#request-correlation)).
 - Observed vs expected behavior; error `code` and `reasonCode` if present.
-- Deployment mode (self-hosted managed, compose, k8s) and Ai-Guard image
+- Deployment mode (self-hosted managed, compose, k8s) and Modelgov image
   tag/digest.
 - Relevant `/metrics` snapshot for availability/latency issues.
 

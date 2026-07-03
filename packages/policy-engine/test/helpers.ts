@@ -1,5 +1,5 @@
 import { parseConfigObject } from "../src/config";
-import type { AiGuardConfig, AiRequest, UsageSnapshot } from "../src/types";
+import type { ModelgovConfig, AiRequest, UsageSnapshot } from "../src/types";
 
 // A self-consistent base config (snake_case raw → parsed) reused across tests.
 export const RAW_CONFIG = {
@@ -42,7 +42,7 @@ export const RAW_CONFIG = {
   },
 };
 
-export function baseConfig(): AiGuardConfig {
+export function baseConfig(): ModelgovConfig {
   return parseConfigObject(RAW_CONFIG);
 }
 

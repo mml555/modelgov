@@ -1,5 +1,5 @@
-import { AiGuardError } from "@ai-guard/sdk";
-import { ai } from "./aiguard.js";
+import { ModelgovError } from "@modelgov/sdk";
+import { ai } from "./modelgov.js";
 import { extractDocument } from "./extract.js";
 
 /**
@@ -13,8 +13,8 @@ async function main(): Promise<void> {
     console.error("  (no sample? run `pnpm sample` to generate one)");
     process.exit(2);
   }
-  if (!process.env.AI_GUARD_API_KEY) {
-    console.error("AI_GUARD_API_KEY is required (see .env.example)");
+  if (!process.env.MODELGOV_API_KEY) {
+    console.error("MODELGOV_API_KEY is required (see .env.example)");
     process.exit(2);
   }
 
@@ -23,8 +23,8 @@ async function main(): Promise<void> {
   try {
     pages = await extractDocument(ai, input);
   } catch (err) {
-    if (err instanceof AiGuardError) {
-      console.error(`⛔ blocked by Ai-Guard (${err.code}): ${JSON.stringify(err.body)}`);
+    if (err instanceof ModelgovError) {
+      console.error(`⛔ blocked by Modelgov (${err.code}): ${JSON.stringify(err.body)}`);
       process.exit(1);
     }
     throw err;

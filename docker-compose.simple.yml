@@ -1,18 +1,18 @@
-# Simple deploy: Ai-Guard API + LiteLLM + Postgres + Presidio.
+# Simple deploy: Modelgov API + LiteLLM + Postgres + Presidio.
 #   cp .env.example .env   (set OPENAI_API_KEY, ANTHROPIC_API_KEY)
 #   docker compose -f docker-compose.simple.yml up --build
 #
 # Backing services publish to 127.0.0.1 only (dev-local). Third-party images use
 # floating tags here for convenience; production pins them via required env vars
 # in docker-compose.production.yml — see .env.production.example.
-name: ai-guard
+name: modelgov
 
 services:
   postgres:
     image: postgres:16-alpine
     environment:
       POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: aiguard
+      POSTGRES_DB: modelgov
     ports: ["127.0.0.1:5432:5432"]
     volumes:
       - pgdata:/var/lib/postgresql/data
@@ -72,15 +72,15 @@ services:
         condition: service_started
     environment:
       PORT: 3000
-      AI_GUARD_API_KEY: ${AI_GUARD_API_KEY}
-      DATABASE_URL: postgres://postgres:postgres@postgres:5432/aiguard
+      MODELGOV_API_KEY: ${MODELGOV_API_KEY}
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/modelgov
       LITELLM_BASE_URL: http://litellm:4000
       LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY}
-      AI_GUARD_CONFIG: /app/ai-guard.yaml
+      MODELGOV_CONFIG: /app/modelgov.yaml
       PRESIDIO_ANALYZER_URL: http://presidio-analyzer:3000
       PRESIDIO_ANONYMIZER_URL: http://presidio-anonymizer:3000
     volumes:
-      - ./ai-guard.yaml:/app/ai-guard.yaml:ro
+      - ./modelgov.yaml:/app/modelgov.yaml:ro
     ports: ["127.0.0.1:3000:3000"]
     healthcheck:
       # Node-based (no dependency on wget/busybox being present in the image).

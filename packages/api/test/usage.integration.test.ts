@@ -1,4 +1,4 @@
-import type { ReservationCaps } from "@ai-guard/policy-engine";
+import type { ReservationCaps } from "@modelgov/policy-engine";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { applySchema } from "../src/db/init";
 import { createPool, type Pool } from "../src/db/pool";

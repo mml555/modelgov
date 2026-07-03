@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseConfigObject } from "@ai-guard/policy-engine";
+import { parseConfigObject } from "@modelgov/policy-engine";
 import { buildServer } from "../src/server";
 import { NoopObservability } from "../src/services/observability";
 import { NoopGuard } from "../src/services/safety";
@@ -76,7 +76,7 @@ describe("chat path contract", () => {
     expect(err).not.toHaveProperty("userType");
     expect(err.details.feature).toBe("support_chat");
     expect(err.details.userType).toBe("logged_in");
-    expect(res.headers["x-ai-guard-request-id"]).toBeTruthy();
+    expect(res.headers["x-modelgov-request-id"]).toBeTruthy();
     await server.close();
   });
 

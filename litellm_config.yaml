@@ -1,5 +1,5 @@
-# LiteLLM proxy config. `model_name` is what Ai-Guard sends (must match the
-# model strings in ai-guard.yaml model_classes); `litellm_params.model` is the
+# LiteLLM proxy config. `model_name` is what Modelgov sends (must match the
+# model strings in modelgov.yaml model_classes); `litellm_params.model` is the
 # concrete provider model LiteLLM calls. Provider keys come from the env.
 
 model_list:

@@ -7,7 +7,7 @@ import {
   resolveEnvRefs,
   warnUnpricedModels,
 } from "../src/config/loadConfig";
-import { parseConfigObject } from "@ai-guard/policy-engine";
+import { parseConfigObject } from "@modelgov/policy-engine";
 
 const MINIMAL_YAML = `
 project:
@@ -58,8 +58,8 @@ describe("resolveEnvRefs", () => {
 
 describe("loadConfigFromFile", () => {
   it("loads YAML from disk and resolves env refs", () => {
-    const dir = mkdtempSync(join(tmpdir(), "aiguard-loadcfg-"));
-    const path = join(dir, "ai-guard.yaml");
+    const dir = mkdtempSync(join(tmpdir(), "modelgov-loadcfg-"));
+    const path = join(dir, "modelgov.yaml");
     writeFileSync(path, MINIMAL_YAML);
     const config = loadConfigFromFile(path, { OPENAI_API_KEY: "sk-from-env" });
     expect(config.project.name).toBe("load-test");
@@ -67,8 +67,8 @@ describe("loadConfigFromFile", () => {
   });
 
   it("passes strictPricing to the parser", () => {
-    const dir = mkdtempSync(join(tmpdir(), "aiguard-loadcfg-"));
-    const path = join(dir, "ai-guard.yaml");
+    const dir = mkdtempSync(join(tmpdir(), "modelgov-loadcfg-"));
+    const path = join(dir, "modelgov.yaml");
     writeFileSync(path, MINIMAL_YAML);
     expect(() => loadConfigFromFile(path, {}, { strictPricing: true })).not.toThrow();
   });

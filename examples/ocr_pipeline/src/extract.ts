@@ -1,5 +1,5 @@
-import type { AiGuardClient } from "@ai-guard/sdk";
-import { EXTRACT_FEATURE, WORKFLOW } from "./aiguard.js";
+import type { ModelgovClient } from "@modelgov/sdk";
+import { EXTRACT_FEATURE, WORKFLOW } from "./modelgov.js";
 import { imageDataUrl, ocrText, renderPages } from "./render.js";
 
 const INSTRUCTION = `You are a document data-extraction engine. Using BOTH the OCR text and the document image, extract the key fields as a single JSON object and return ONLY that JSON (no prose, no code fences).
@@ -85,7 +85,7 @@ function estimateTokens(ocr: string): number {
  * is budgeted + audited; PII in the output is masked if the feature enables it.
  */
 export async function extractPage(
-  ai: AiGuardClient,
+  ai: ModelgovClient,
   imagePath: string,
   page: number,
 ): Promise<PageExtraction> {
@@ -124,7 +124,7 @@ export async function extractPage(
 }
 
 /** Render a PDF/image to pages and extract each page. */
-export async function extractDocument(ai: AiGuardClient, inputPath: string): Promise<PageExtraction[]> {
+export async function extractDocument(ai: ModelgovClient, inputPath: string): Promise<PageExtraction[]> {
   const { pages, cleanup } = await renderPages(inputPath);
   const out: PageExtraction[] = [];
   try {

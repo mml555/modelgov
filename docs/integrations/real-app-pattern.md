@@ -1,6 +1,6 @@
 # Real app integration pattern
 
-This document shows how to embed Ai-Guard in a **real product flow** — not a
+This document shows how to embed Modelgov in a **real product flow** — not a
 generic chat demo. The reference implementation is
 [`examples/event_intake_app`](../../examples/event_intake_app): Jewgo-style event
 flyer extraction.
@@ -8,14 +8,14 @@ flyer extraction.
 ## Boundary (read this first)
 
 ```text
-Your app                          Ai-Guard
+Your app                          Modelgov
 ────────                          ────────
 Who may use this feature?    →    Is this AI call allowed?
 Business RBAC / auth              Budget, model class, safety
 Creates domain objects            Never creates product records
 ```
 
-Ai-Guard never replaces your authorization. It gates **AI execution** after your
+Modelgov never replaces your authorization. It gates **AI execution** after your
 app has already decided the user may attempt the action.
 
 ## End-to-end flow
@@ -24,8 +24,8 @@ app has already decided the user may attempt the action.
 1. User action (upload flyer)
 2. App auth check (admin can create drafts)
 3. App selects feature + model class from product context
-4. App calls Ai-Guard POST /v1/chat (or SDK ai.chat)
-5. Ai-Guard evaluates policy → allow | block | degrade | fallback
+4. App calls Modelgov POST /v1/chat (or SDK ai.chat)
+5. Modelgov evaluates policy → allow | block | degrade | fallback
 6. On allow: LiteLLM runs; structured result returns to app
 7. App persists domain object (event draft) + logs correlation ids
 ```
@@ -34,19 +34,19 @@ app has already decided the user may attempt the action.
 
 ### 1. Auth check (your app)
 
-Verify business permissions **before** calling Ai-Guard:
+Verify business permissions **before** calling Modelgov:
 
 ```ts
 const session = requireAdmin(req.headers.authorization);
 if (!session) return res.status(401).json({ error: "unauthorized" });
 ```
 
-Ai-Guard API keys protect the gateway, not your end users. Pass `userId` and
-`userType` from your session — Ai-Guard uses them for budget and model policy.
+Modelgov API keys protect the gateway, not your end users. Pass `userId` and
+`userType` from your session — Modelgov uses them for budget and model policy.
 
 ### 2. Feature selection
 
-Every call must declare a `feature` defined in `ai-guard.yaml`:
+Every call must declare a `feature` defined in `modelgov.yaml`:
 
 ```yaml
 features:
@@ -68,10 +68,10 @@ modelClass: "standard"   // admin extraction
 modelClass: "cheap"      // low-stakes preview
 ```
 
-Ai-Guard enforces whether that class is permitted for the `userType` and whether
+Modelgov enforces whether that class is permitted for the `userType` and whether
 budget allows it.
 
-### 4. Ai-Guard call
+### 4. Modelgov call
 
 ```ts
 const result = await ai.chat({
@@ -100,7 +100,7 @@ add explicit rules later. Keep values small (≤32 keys).
 Catch typed SDK errors and return a product-appropriate response:
 
 ```ts
-import { PolicyBlockedError } from "@ai-guard/sdk";
+import { PolicyBlockedError } from "@modelgov/sdk";
 
 try {
   const result = await ai.chat({ ... });
@@ -124,23 +124,23 @@ Every successful chat response includes `requestId` (`req_<n>`):
 
 ```ts
 console.log(
-  `jewgo_event_draft=${draftId} ai_guard_request_id=${result.requestId}`,
+  `jewgo_event_draft=${draftId} modelgov_request_id=${result.requestId}`,
 );
 ```
 
 On policy blocks, use `error.details.auditRequestId` (same format). The SDK
 also exposes this as `err.auditRequestId`; the raw HTTP response usually also
-has the `x-ai-guard-request-id` header.
+has the `x-modelgov-request-id` header.
 
-Store both your domain id and Ai-Guard's id in your database for support.
+Store both your domain id and Modelgov's id in your database for support.
 
 ### 7. Usage / debug flow
 
 When something fails in production:
 
 ```bash
-ai-guard requests show req_123
-ai-guard usage summary --since 24h
+modelgov requests show req_123
+modelgov usage summary --since 24h
 ```
 
 See [Integration debugging runbook](../runbooks/integration-debugging.md).
@@ -150,7 +150,7 @@ See [Integration debugging runbook](../runbooks/integration-debugging.md).
 Use explain in CI or admin tools to preview decisions without spend:
 
 ```bash
-ai-guard explain --local \
+modelgov explain --local \
   --userType admin --feature event_flyer_extraction --modelClass standard
 ```
 
@@ -158,13 +158,13 @@ ai-guard explain --local \
 
 | Step | Owner | Done? |
 | --- | --- | --- |
-| Feature defined in `ai-guard.yaml` | Platform | |
-| App auth before Ai-Guard call | App team | |
+| Feature defined in `modelgov.yaml` | Platform | |
+| App auth before Modelgov call | App team | |
 | `feature` + `userType` on every call | App team | |
 | `PolicyBlockedError` handled | App team | |
 | Correlation ids logged | App team | |
-| `ai-guard test-policy` in CI | Platform | |
-| `ai-guard validate --production` in deploy | Platform | |
+| `modelgov test-policy` in CI | Platform | |
+| `modelgov validate --production` in deploy | Platform | |
 
 ## Examples
 

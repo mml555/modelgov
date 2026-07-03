@@ -4,10 +4,10 @@ import { parse as parseYaml } from "yaml";
 import {
   evaluateAiRequest,
   parseConfig,
-  type AiGuardConfig,
+  type ModelgovConfig,
   type PolicyReasonCode,
   type UsageSnapshot,
-} from "@ai-guard/policy-engine";
+} from "@modelgov/policy-engine";
 import { resolveUserPath } from "./paths.js";
 
 export interface PolicyTestCase {
@@ -58,13 +58,13 @@ export function loadPolicyTestFile(path: string): PolicyTestFile {
 }
 
 export function runPolicyTests(
-  config: AiGuardConfig,
+  config: ModelgovConfig,
   cases: PolicyTestCase[],
 ): PolicyTestResult[] {
   return cases.map((testCase) => runOne(config, testCase));
 }
 
-function runOne(config: AiGuardConfig, testCase: PolicyTestCase): PolicyTestResult {
+function runOne(config: ModelgovConfig, testCase: PolicyTestCase): PolicyTestResult {
   const usage: UsageSnapshot = { ...ZERO_USAGE, ...testCase.usage };
   try {
     const decision = evaluateAiRequest({
@@ -131,7 +131,7 @@ export function runPolicyTestFile(
     ? resolveUserPath(configPath)
     : file.config
       ? resolve(dirname(resolvedTestFilePath), file.config)
-      : resolveUserPath("./ai-guard.yaml");
+      : resolveUserPath("./modelgov.yaml");
   const config = parseConfig(readFileSync(configFile, "utf8"));
   const results = runPolicyTests(config, file.cases);
   return { results, ok: results.every((r) => r.passed) };

@@ -1,14 +1,14 @@
 # Commercial & procurement pack
 
-Templates for teams offering Ai-Guard as a supported product or internal platform,
+Templates for teams offering Modelgov as a supported product or internal platform,
 and pre-filled answers for enterprise procurement/security review.
 
-> **Status — read first.** Ai-Guard is **open-source, self-hosted software (MIT)**.
+> **Status — read first.** Modelgov is **open-source, self-hosted software (MIT)**.
 > There is **no hosted SaaS and no vendor-operated SLA today** (self-host only, per
 > [self-host overview](../self-host.md) and [operations known limitations](../operations.md#known-limitations-v1)).
 > The SLA and support-tier documents here are **templates** for whoever operates
-> Ai-Guard — a commercial provider, or your own platform team running it internally
-> for downstream teams. They are **not** commitments from the Ai-Guard project.
+> Modelgov — a commercial provider, or your own platform team running it internally
+> for downstream teams. They are **not** commitments from the Modelgov project.
 > The security questionnaire answers describe the **software's real architecture**
 > and are safe to use in vendor reviews, but organizational answers (who staffs
 > on-call, where you host) must be filled in by the operating entity.

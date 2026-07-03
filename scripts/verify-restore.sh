@@ -1,23 +1,23 @@
 #!/usr/bin/env bash
-# Smoke-test a restored Ai-Guard database by booting the API and checking /ready.
-# Usage: DATABASE_URL=... AI_GUARD_API_KEY=... scripts/verify-restore.sh
+# Smoke-test a restored Modelgov database by booting the API and checking /ready.
+# Usage: DATABASE_URL=... MODELGOV_API_KEY=... scripts/verify-restore.sh
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
 : "${DATABASE_URL:?DATABASE_URL is required}"
-: "${AI_GUARD_API_KEY:?AI_GUARD_API_KEY is required}"
+: "${MODELGOV_API_KEY:?MODELGOV_API_KEY is required}"
 
 pnpm build >/dev/null 2>&1 || pnpm build
 
 export PORT="${VERIFY_RESTORE_PORT:-3098}"
 export HOST="127.0.0.1"
-export AI_GUARD_CONFIG="${AI_GUARD_CONFIG:-${ROOT}/scripts/smoke-ai-guard.yaml}"
+export MODELGOV_CONFIG="${MODELGOV_CONFIG:-${ROOT}/scripts/smoke-modelgov.yaml}"
 export LITELLM_BASE_URL="${LITELLM_BASE_URL:-http://127.0.0.1:1}"
 export OBSERVABILITY_PROVIDER=none
 export METRICS_ENABLED=false
-export AI_GUARD_PRODUCTION=false
+export MODELGOV_PRODUCTION=false
 
 node packages/api/dist/index.js &
 API_PID=$!

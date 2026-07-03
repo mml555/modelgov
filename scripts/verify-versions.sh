@@ -7,12 +7,12 @@ cd "$ROOT"
 
 VERSION="$(node -p "require('./package.json').version")"
 PY="$(grep -m1 '^version' packages/sdk-python/pyproject.toml | sed -E 's/.*"([^"]+)".*/\1/')"
-PY_INIT="$(grep -m1 '__version__' packages/sdk-python/ai_guard/__init__.py | sed -E 's/.*"([^"]+)".*/\1/')"
-HELM_APP="$(grep -m1 '^appVersion' deploy/helm/ai-guard/Chart.yaml | sed -E 's/.*"([^"]+)".*/\1/')"
-HELM_CHART="$(grep -m1 '^version:' deploy/helm/ai-guard/Chart.yaml | awk '{print $2}')"
+PY_INIT="$(grep -m1 '__version__' packages/sdk-python/modelgov/__init__.py | sed -E 's/.*"([^"]+)".*/\1/')"
+HELM_APP="$(grep -m1 '^appVersion' deploy/helm/modelgov/Chart.yaml | sed -E 's/.*"([^"]+)".*/\1/')"
+HELM_CHART="$(grep -m1 '^version:' deploy/helm/modelgov/Chart.yaml | awk '{print $2}')"
 OPENAPI_PLUGIN="$(grep -m1 'OPENAPI_VERSION' packages/api/src/plugins/openApi.ts | sed -E 's/.*"([^"]+)".*/\1/')"
 OPENAPI_JSON="$(node -p "require('./packages/api/openapi.json').info.version")"
-HELM_TAG="$(grep -m1 'tag:' deploy/helm/ai-guard/values.yaml | sed -E 's/.*v([0-9.]+).*/\1/')"
+HELM_TAG="$(grep -m1 'tag:' deploy/helm/modelgov/values.yaml | sed -E 's/.*v([0-9.]+).*/\1/')"
 
 fail=0
 check() {
@@ -28,14 +28,14 @@ check() {
 echo "Canonical version: $VERSION"
 check "package.json" "$VERSION"
 check "pyproject.toml" "$PY"
-check "ai_guard/__init__.py" "$PY_INIT"
+check "modelgov/__init__.py" "$PY_INIT"
 check "Helm appVersion" "$HELM_APP"
 check "Helm chart version" "$HELM_CHART"
 check "OPENAPI_VERSION" "$OPENAPI_PLUGIN"
 check "openapi.json info.version" "$OPENAPI_JSON"
 check "Helm values image.tag (without v)" "$HELM_TAG"
 
-for pkgdir in packages/policy-engine packages/sdk-typescript packages/cli packages/create-ai-guard; do
+for pkgdir in packages/policy-engine packages/sdk-typescript packages/cli packages/create-modelgov; do
   PV="$(node -p "require('./$pkgdir/package.json').version")"
   PN="$(node -p "require('./$pkgdir/package.json').name")"
   check "$PN" "$PV"

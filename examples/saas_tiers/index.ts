@@ -1,11 +1,11 @@
 import {
-  createAiGuardClient,
+  createModelgovClient,
   PolicyBlockedError,
-} from "@ai-guard/sdk";
+} from "@modelgov/sdk";
 
-const client = createAiGuardClient({
-  baseUrl: process.env.AI_GUARD_URL ?? "http://localhost:3000",
-  apiKey: process.env.AI_GUARD_API_KEY,
+const client = createModelgovClient({
+  baseUrl: process.env.MODELGOV_URL ?? "http://localhost:3000",
+  apiKey: process.env.MODELGOV_API_KEY,
 });
 
 const userId = process.env.DEMO_USER_ID ?? "demo-user-1";
@@ -13,8 +13,8 @@ const userType = process.env.DEMO_USER_TYPE ?? "free_user";
 const prompt = process.argv.slice(2).join(" ") || "What can I do on the free plan?";
 
 async function main(): Promise<void> {
-  if (!process.env.AI_GUARD_API_KEY) {
-    throw new Error("AI_GUARD_API_KEY is required");
+  if (!process.env.MODELGOV_API_KEY) {
+    throw new Error("MODELGOV_API_KEY is required");
   }
 
   console.log(`\n→ SaaS tier demo: user=${userId} type=${userType}`);

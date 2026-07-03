@@ -1,4 +1,4 @@
-import type { SafetyPlan } from "@ai-guard/policy-engine";
+import type { SafetyPlan } from "@modelgov/policy-engine";
 import { describe, expect, it, vi } from "vitest";
 import type { LiteLLMChatResult } from "../src/services/litellm";
 import {

@@ -1,4 +1,4 @@
-import type { PolicyDecisionKind } from "@ai-guard/policy-engine";
+import type { PolicyDecisionKind } from "@modelgov/policy-engine";
 import type { ExplainResponse } from "./types";
 
 /** Human-readable policy explanation for CLI output and API `summary`. */

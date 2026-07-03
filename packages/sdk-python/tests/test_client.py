@@ -1,4 +1,4 @@
-"""Tests for the Ai-Guard Python SDK, using respx to mock httpx transport."""
+"""Tests for the Modelgov Python SDK, using respx to mock httpx transport."""
 
 from __future__ import annotations
 
@@ -8,19 +8,19 @@ import httpx
 import pytest
 import respx
 
-from ai_guard import (
-    AiGuardClient,
-    AiGuardError,
+from modelgov import (
+    ModelgovClient,
+    ModelgovError,
     PolicyBlockedError,
     SafetyBlockedError,
 )
 
 BASE_URL = "http://localhost:3000"
-API_KEY = "sk-ai-guard-test"
+API_KEY = "sk-modelgov-test"
 
 
-def make_client() -> AiGuardClient:
-    return AiGuardClient(base_url=BASE_URL, api_key=API_KEY)
+def make_client() -> ModelgovClient:
+    return ModelgovClient(base_url=BASE_URL, api_key=API_KEY)
 
 
 CHAT_SUCCESS_BODY = {
@@ -313,7 +313,7 @@ def test_policy_blocked_error_mapping() -> None:
             )
 
     err = exc_info.value
-    assert isinstance(err, AiGuardError)
+    assert isinstance(err, ModelgovError)
     assert err.status == 403
     assert err.code == "policy_blocked"
     assert err.message == "Model class not permitted for user type logged_in"
@@ -375,7 +375,7 @@ def test_generic_error_maps_to_base_error() -> None:
     )
 
     with make_client() as client:
-        with pytest.raises(AiGuardError) as exc_info:
+        with pytest.raises(ModelgovError) as exc_info:
             client.chat(
                 user_id="u",
                 user_type="logged_in",
@@ -395,7 +395,7 @@ def test_error_with_non_json_body() -> None:
     )
 
     with make_client() as client:
-        with pytest.raises(AiGuardError) as exc_info:
+        with pytest.raises(ModelgovError) as exc_info:
             client.chat(
                 user_id="u",
                 user_type="logged_in",
@@ -575,7 +575,7 @@ def test_base_url_trailing_slash_stripped() -> None:
         return_value=httpx.Response(200, json=CHAT_SUCCESS_BODY)
     )
 
-    client = AiGuardClient(base_url=f"{BASE_URL}/", api_key=API_KEY)
+    client = ModelgovClient(base_url=f"{BASE_URL}/", api_key=API_KEY)
     client.chat(
         user_id="u",
         user_type="logged_in",

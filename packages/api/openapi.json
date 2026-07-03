@@ -1,7 +1,7 @@
 {
   "openapi": "3.0.3",
   "info": {
-    "title": "Ai-Guard API",
+    "title": "Modelgov API",
     "version": "1.0.0",
     "description": "Self-hosted AI policy gateway. Every completion is checked against budget, token, model-access, and safety policy before a provider is called."
   },

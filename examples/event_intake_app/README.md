@@ -4,7 +4,7 @@ Demonstrates a **real product workflow** — not chat — with a clear boundary:
 
 ```text
 Jewgo verifies admin can create drafts  →  your app auth
-Ai-Guard verifies AI extraction call    →  AI policy
+Modelgov verifies AI extraction call    →  AI policy
 ```
 
 ## Flow
@@ -13,7 +13,7 @@ Ai-Guard verifies AI extraction call    →  AI policy
 Admin uploads flyer text
   → POST /events/intake (this app)
   → auth check (Bearer admin token)
-  → Ai-Guard feature=event_flyer_extraction
+  → Modelgov feature=event_flyer_extraction
   → structured JSON extraction
   → draft created response + aiGuard.requestId
 ```
@@ -21,7 +21,7 @@ Admin uploads flyer text
 ## Setup
 
 ```bash
-export AI_GUARD_CONFIG=examples/event_intake_app/ai-guard.yaml
+export MODELGOV_CONFIG=examples/event_intake_app/modelgov.yaml
 make up
 
 cd examples/event_intake_app
@@ -46,7 +46,7 @@ curl -s -X POST http://localhost:3010/events/intake \
 Response includes `aiGuard.requestId` (e.g. `req_123`). Debug with:
 
 ```bash
-ai-guard requests show req_123
+modelgov requests show req_123
 ```
 
 ## Correlation logging
@@ -54,14 +54,14 @@ ai-guard requests show req_123
 The server logs:
 
 ```text
-jewgo_event_draft=draft_evt_456 ai_guard_request_id=req_123 decision=allow
+jewgo_event_draft=draft_evt_456 modelgov_request_id=req_123 decision=allow
 ```
 
 Store both IDs in your product database for support workflows.
 
 ## Policy
 
-See [`ai-guard.yaml`](./ai-guard.yaml):
+See [`modelgov.yaml`](./modelgov.yaml):
 
 - Feature `event_flyer_extraction` — standard model, balanced safety
 - Admin user type — 5 extractions/day, standard model only

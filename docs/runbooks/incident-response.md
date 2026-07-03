@@ -1,7 +1,7 @@
 # Incident response runbook
 
 How to classify, escalate, communicate, and learn from incidents affecting an
-Ai-Guard deployment. This is an **operational template** — Ai-Guard ships the
+Modelgov deployment. This is an **operational template** — Modelgov ships the
 technical signals (health/readiness, `/metrics`, structured logs, correlation
 IDs, stable error contract) that this process relies on; the on-call staffing,
 comms channels, and cadence are the operator's to fill in (`[BRACKETED]`).
@@ -13,7 +13,7 @@ process in [SECURITY.md](../../SECURITY.md), not this runbook.
 
 ## Severity classification
 
-| Sev | Definition | Examples (Ai-Guard) | Response |
+| Sev | Definition | Examples (Modelgov) | Response |
 | --- | --- | --- | --- |
 | **SEV1 — Critical** | Full outage or data-loss risk; all/most valid traffic failing | `/ready` failing fleet-wide; Postgres down (`500` on `/v1/chat`); suspected data loss/corruption; active security breach | Page on-call immediately; assign incident commander; customer comms |
 | **SEV2 — High** | Major function impaired, no workaround | Safety failing closed cluster-wide (`503 safety_unavailable` — all Presidio down); DB failover in progress; sustained elevated 5xx; Redis down causing fleet-wide `429` (fail-closed) | Page on-call; comms if customer-visible |
@@ -27,13 +27,13 @@ process in [SECURITY.md](../../SECURITY.md), not this runbook.
 - `429` rate-limit rejections from legitimate over-limit traffic.
 - `502 provider_unavailable` caused by an **upstream provider** outage after
   fallback is exhausted — this is a provider incident; track it, escalate to the
-  provider, but it is excluded from Ai-Guard availability.
+  provider, but it is excluded from Modelgov availability.
 
 Confirm severity fast with:
 
 ```bash
-curl -sf "$AI_GUARD_URL/ready" | jq .        # db/litellm/presidio status
-curl -s  "$AI_GUARD_URL/metrics" -H "Authorization: Bearer $METRICS_TOKEN" \
+curl -sf "$MODELGOV_URL/ready" | jq .        # db/litellm/presidio status
+curl -s  "$MODELGOV_URL/metrics" -H "Authorization: Bearer $METRICS_TOKEN" \
   | grep -E 'http_requests_total|pg_pool_clients_waiting|http_request_duration'
 ```
 
@@ -121,7 +121,7 @@ Next update: {UTC time}
 ```
 Investigating — {UTC time}
 We are investigating {elevated errors / degraded availability} affecting the
-Ai-Guard API. Some requests may {fail / be delayed}. Note: policy, budget, and
+Modelgov API. Some requests may {fail / be delayed}. Note: policy, budget, and
 safety blocks are functioning normally and are not part of this incident.
 We will post an update within {30 minutes}.
 ```
@@ -133,12 +133,12 @@ Resolved — {UTC time}
 The issue affecting {component} has been resolved as of {UTC time}. Root cause:
 {one line}. Total impact window: {start–end UTC}. A post-mortem will follow within
 {5 business days}. If you continue to see errors, contact {SUPPORT CHANNEL} with
-your requestId / x-ai-guard-request-id.
+your requestId / x-modelgov-request-id.
 ```
 
-Ask customers to include `requestId` / `x-ai-guard-request-id` — every response
+Ask customers to include `requestId` / `x-modelgov-request-id` — every response
 and most errors carry it (see [API correlation](../api.md#request-correlation)),
-which maps directly to an audit row via `ai-guard requests show`.
+which maps directly to an audit row via `modelgov requests show`.
 
 ---
 

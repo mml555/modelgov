@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import type { Pool } from "pg";
 import type Redis from "ioredis";
-import { type AiGuardConfig, resolveSafetyPlan } from "@ai-guard/policy-engine";
+import { type ModelgovConfig, resolveSafetyPlan } from "@modelgov/policy-engine";
 import type { loadEnv } from "./config/env";
 import { loadConfigFromFile } from "./config/loadConfig";
 import { assertPoolReachable, createPool, resolveSsl } from "./db/pool";
@@ -120,14 +120,14 @@ export async function createDbPool(env: Env): Promise<Pool> {
 /**
  * Resolve the effective policy config and the identity stamped on every request
  * log. With POLICY_STORE_ENABLED, the active DB version wins (seeding version 1
- * from AI_GUARD_CONFIG on first boot); otherwise the file config is used and
+ * from MODELGOV_CONFIG on first boot); otherwise the file config is used and
  * stamped with its own hash.
  */
 export async function resolvePolicy(
   env: Env,
   pool: Pool,
-): Promise<{ config: AiGuardConfig; policyMeta: PolicyMeta }> {
-  const fileConfig = loadConfigFromFile(env.AI_GUARD_CONFIG, env.envRefs, {
+): Promise<{ config: ModelgovConfig; policyMeta: PolicyMeta }> {
+  const fileConfig = loadConfigFromFile(env.MODELGOV_CONFIG, env.envRefs, {
     strictPricing: env.STRICT_PRICING === "true",
   });
 
@@ -136,7 +136,7 @@ export async function resolvePolicy(
       config: fileConfig,
       policyMeta: {
         configHash: createHash("sha256")
-          .update(readFileSync(env.AI_GUARD_CONFIG, "utf8"))
+          .update(readFileSync(env.MODELGOV_CONFIG, "utf8"))
           .digest("hex"),
         policyVersion: "file",
       },
@@ -152,12 +152,12 @@ export async function resolvePolicy(
     };
   }
   const seeded = await saveConfigVersion(pool, {
-    yaml: readFileSync(env.AI_GUARD_CONFIG, "utf8"),
+    yaml: readFileSync(env.MODELGOV_CONFIG, "utf8"),
     author: "bootstrap",
-    note: "seeded from AI_GUARD_CONFIG",
+    note: "seeded from MODELGOV_CONFIG",
   });
   await activateConfigVersion(pool, seeded.id);
-  console.log(`seeded policy store with version ${seeded.id} from AI_GUARD_CONFIG`);
+  console.log(`seeded policy store with version ${seeded.id} from MODELGOV_CONFIG`);
   return {
     config: fileConfig,
     policyMeta: { configHash: seeded.checksum, policyVersion: seeded.id },
@@ -173,7 +173,7 @@ export async function resolvePolicy(
 export function createPolicyResolver(
   env: Env,
   pool: Pool,
-  fallback: { config: AiGuardConfig; policyMeta: PolicyMeta },
+  fallback: { config: ModelgovConfig; policyMeta: PolicyMeta },
   log?: { warn(obj: unknown, msg: string): void },
 ): TenantPolicyResolver | undefined {
   if (env.MULTI_TENANT_POLICY !== "true") return undefined;
@@ -198,7 +198,7 @@ export interface RuntimeServices {
 }
 
 /** Build the LiteLLM client, safety guard, and observability sink from env+config. */
-export function createRuntimeServices(env: Env, config: AiGuardConfig): RuntimeServices {
+export function createRuntimeServices(env: Env, config: ModelgovConfig): RuntimeServices {
   const litellm = createLiteLLMClient({
     baseUrl: env.LITELLM_BASE_URL,
     apiKey: env.LITELLM_MASTER_KEY,
@@ -219,13 +219,13 @@ export function createRuntimeServices(env: Env, config: AiGuardConfig): RuntimeS
 
   // The dev Langfuse overlay (docker-compose.dev.full.yml) ships well-known
   // default keys for a zero-setup local experience. A production deployment
-  // (AI_GUARD_PRODUCTION=true, set by the production compose / Helm chart)
+  // (MODELGOV_PRODUCTION=true, set by the production compose / Helm chart)
   // must never run with them — refuse to boot rather than trace into a
   // Langfuse whose admin credentials and encryption key are public.
   if (
-    env.AI_GUARD_PRODUCTION === "true" &&
-    (env.LANGFUSE_PUBLIC_KEY === "pk-lf-ai-guard-local" ||
-      env.LANGFUSE_SECRET_KEY === "sk-lf-ai-guard-local")
+    env.MODELGOV_PRODUCTION === "true" &&
+    (env.LANGFUSE_PUBLIC_KEY === "pk-lf-modelgov-local" ||
+      env.LANGFUSE_SECRET_KEY === "sk-lf-modelgov-local")
   ) {
     throw new Error(
       "LANGFUSE_PUBLIC_KEY/LANGFUSE_SECRET_KEY are the dev-overlay defaults (docker-compose.dev.full.yml) — set real Langfuse credentials or unset OBSERVABILITY_PROVIDER for production",
@@ -233,7 +233,7 @@ export function createRuntimeServices(env: Env, config: AiGuardConfig): RuntimeS
   }
 
   // OBSERVABILITY_PROVIDER env overrides the config file (lets the full-mode
-  // compose flip on Langfuse without editing ai-guard.yaml).
+  // compose flip on Langfuse without editing modelgov.yaml).
   const observability = createObservability({
     provider: env.OBSERVABILITY_PROVIDER ?? config.observability.provider,
     publicKey: env.LANGFUSE_PUBLIC_KEY,
@@ -300,7 +300,7 @@ export function createAuthProviders(env: Env, pool: Pool): AuthProviders {
       roleMap,
     });
     if (!env.OIDC_AUDIENCE) {
-      if (env.AI_GUARD_PRODUCTION === "true") {
+      if (env.MODELGOV_PRODUCTION === "true") {
         throw new Error(
           "OIDC_AUDIENCE is required when operator SSO is enabled in production",
         );
@@ -323,7 +323,7 @@ export function createAuthProviders(env: Env, pool: Pool): AuthProviders {
 /** Start the periodic maintenance sweep when enabled; returns its timer (if any). */
 export function startBackgroundJobs(
   env: Env,
-  config: AiGuardConfig,
+  config: ModelgovConfig,
   pool: Pool,
   log: FastifyInstance["log"],
 ): NodeJS.Timeout | undefined {
@@ -363,7 +363,7 @@ export function startBackgroundJobs(
  * but its backend is missing (it would otherwise surface only as a runtime 503).
  */
 export function warnMissingSafetyBackends(
-  config: AiGuardConfig,
+  config: ModelgovConfig,
   log: FastifyInstance["log"],
   backends: { hasPresidio: boolean; hasInjection: boolean },
 ): void {

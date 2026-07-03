@@ -1,4 +1,4 @@
-import type { TraceTags } from "@ai-guard/policy-engine";
+import type { TraceTags } from "@modelgov/policy-engine";
 import { describe, expect, it } from "vitest";
 import {
   createObservability,
@@ -72,7 +72,7 @@ describe("OtelObservability", () => {
 
     const o = new OtelObservability({
       endpoint: "http://collector:4318/",
-      serviceName: "ai-guard-test",
+      serviceName: "modelgov-test",
       fetchImpl,
       now: () => 1_700_000_000_000,
       randomHex: (n) => "a".repeat(n * 2),
@@ -93,8 +93,8 @@ describe("OtelObservability", () => {
     expect(span.status.code).toBe(1);
     expect(span.traceId).toHaveLength(32);
     const attrKeys = span.attributes.map((a: { key: string }) => a.key);
-    expect(attrKeys).toContain("ai_guard.cost_usd");
-    expect(attrKeys).toContain("ai_guard.model");
+    expect(attrKeys).toContain("modelgov.cost_usd");
+    expect(attrKeys).toContain("modelgov.model");
   });
 
   it("marks error status and never throws on a failing exporter", async () => {

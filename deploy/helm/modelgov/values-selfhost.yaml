@@ -1,0 +1,23 @@
+# Single-tenant self-host production overlay.
+#
+# Flat budgets (default). Enable HIERARCHICAL_BUDGETS only when you need nested
+# caps or measured global-row contention — see docs/deployment/benchmarks.md.
+#
+# Install:
+#   helm upgrade --install modelgov ./deploy/helm/modelgov \
+#     -f deploy/helm/modelgov/values-selfhost.yaml \
+#     --set secret.databaseUrl='...' \
+#     --set secret.aiGuardApiKey='...' \
+#     --set-string secret.providerKeys.OPENAI_API_KEY='...'
+
+production: true
+deployProfile: selfhost
+
+api:
+  replicas: 1
+
+redis:
+  enabled: true
+
+postgres:
+  enabled: false

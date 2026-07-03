@@ -1,6 +1,6 @@
-import { PolicyBlockedError, SafetyBlockedError } from "@ai-guard/sdk";
+import { PolicyBlockedError, SafetyBlockedError } from "@modelgov/sdk";
 import { NextResponse } from "next/server";
-import { ai } from "@/lib/ai-guard";
+import { ai } from "@/lib/modelgov";
 import { getSession } from "@/lib/session";
 
 export async function POST(request: Request): Promise<NextResponse> {
@@ -22,7 +22,7 @@ export async function POST(request: Request): Promise<NextResponse> {
   }
 
   // Product authorization already happened via getSession().
-  // Ai-Guard enforces AI policy only.
+  // Modelgov enforces AI policy only.
   try {
     const res = await ai.chat({
       userId: session.userId,
@@ -56,7 +56,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     if (err instanceof SafetyBlockedError) {
       return NextResponse.json({ error: "safety_blocked" }, { status: 400 });
     }
-    console.error("ai-guard request failed", err);
+    console.error("modelgov request failed", err);
     return NextResponse.json({ error: "upstream_error" }, { status: 502 });
   }
 }

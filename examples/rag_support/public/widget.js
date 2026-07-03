@@ -1,5 +1,5 @@
 /*
- * Ai-Guard RAG support widget — drop-in, dependency-free.
+ * Modelgov RAG support widget — drop-in, dependency-free.
  * Embed on ANY site:
  *   <script src="https://your-host/widget.js" data-endpoint="https://your-host/api/chat"></script>
  * It renders a floating chat bubble that talks to the grounded /api/chat
@@ -14,10 +14,10 @@
   var title = (script && script.getAttribute("data-title")) || "Support";
 
   // Stable per-browser session id so per-visitor budgets are meaningful.
-  var sessionId = localStorage.getItem("aiguard_sid");
+  var sessionId = localStorage.getItem("modelgov_sid");
   if (!sessionId) {
     sessionId = "web-" + Math.random().toString(36).slice(2, 10);
-    localStorage.setItem("aiguard_sid", sessionId);
+    localStorage.setItem("modelgov_sid", sessionId);
   }
 
   var css =

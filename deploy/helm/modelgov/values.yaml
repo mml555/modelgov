@@ -1,0 +1,236 @@
+# Modelgov Helm values. Turnkey k8s companion to the docker-compose scaffold.
+#
+# Minimum to install: set the image, an API key, and a DATABASE_URL (managed
+# Postgres recommended). LiteLLM + Redis run in-cluster by default; Presidio and
+# an in-cluster Postgres are opt-in.
+
+nameOverride: ""
+fullnameOverride: ""
+
+# When true, the chart REFUSES to render if any deployed image uses a floating
+# tag (latest / main-stable / stable / …). Set it in production so a deploy can't
+# silently drift onto a moving tag — pin every image to a version or @sha256
+# digest. Left false by default so the quick-start dev images (below) just work.
+production: false
+
+# Deployment profile — sets recommended API env flags (flat budgets default).
+#   selfhost    — single-tenant self-host (flat policy file, no per-tenant store)
+#   multitenant — SaaS control plane (policy store + per-tenant policy + RLS)
+# Use the matching overlay: values-selfhost.yaml or values-multitenant.yaml
+deployProfile: ""
+
+image:
+  # Matches the image published by .github/workflows/docker.yml
+  # (ghcr.io/<owner>/<repo>/modelgov-api). Override for a mirror/private registry.
+  repository: ghcr.io/mml555/modelgov/modelgov-api
+  tag: v1.0.0
+  pullPolicy: IfNotPresent
+
+api:
+  replicas: 2
+  # Extra env vars (name/value) appended to the API container.
+  extraEnv: []
+  metricsEnabled: true
+  # Production render fails when metrics are enabled without auth unless this is
+  # explicitly true. Prefer a token; public metrics should only be used on a
+  # private scrape network with external access controls.
+  metricsAllowPublic: false
+  idempotencyCaptureContent: false
+  observabilityCaptureContent: false
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 512Mi
+  # Shared rate limits require Redis; the atomic budget reserve is the real
+  # spend guard regardless. When redis.enabled, REDIS_URL is wired automatically.
+  podAnnotations: {}
+
+  # ── Security hardening (defaults are the hardened baseline) ────────────────
+  # Pod-level context. The image already runs as the non-root `node` user
+  # (uid/gid 1000); these enforce it at the k8s admission layer too.
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    runAsGroup: 1000
+    fsGroup: 1000
+    seccompProfile:
+      type: RuntimeDefault
+  # Container-level context: no privilege escalation, read-only root fs (a
+  # writable emptyDir is mounted at /tmp), all Linux capabilities dropped.
+  containerSecurityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop: ["ALL"]
+
+  # ── Scheduling / spreading (survive a node or zone loss) ───────────────────
+  # Spread replicas across nodes (and zones if labeled). Empty = the chart
+  # injects a sensible hostname+zone spread; set to override entirely.
+  topologySpreadConstraints: []
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  # Give the scheduler a moment before killing a rolling pod's connections.
+  terminationGracePeriodSeconds: 30
+
+# API pods don't call the Kubernetes API, so the token isn't mounted.
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+  automountServiceAccountToken: false
+
+# Keep at least one API pod during voluntary disruptions (node drains, rollouts).
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+  # maxUnavailable: ""   # set one of minAvailable / maxUnavailable
+
+# Horizontal autoscaling. Off by default (needs metrics-server, and conflicts
+# with a static api.replicas); enable in clusters that have it.
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 6
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 0   # 0 = don't scale on memory
+
+# Default-deny NetworkPolicy for the API. Clusters without an enforcing CNI will
+# ignore it; clusters with policy support get restricted ingress/egress by default.
+networkPolicy:
+  enabled: true
+  # Namespaces allowed to reach the API on the service port. Empty list = allow
+  # from within the release namespace only.
+  ingressNamespaceSelectors: []
+  # Extra egress rules (e.g. to a managed Postgres/Redis outside the cluster).
+  extraEgress: []
+
+# Prometheus Operator ServiceMonitor (needs the monitoring.coreos.com CRD).
+serviceMonitor:
+  enabled: false
+  interval: 30s
+  scrapeTimeout: 10s
+  path: /metrics
+  labels: {}
+  # If secret.metricsAuthToken is set and the chart creates the Secret, the
+  # ServiceMonitor is wired automatically. With secret.existingSecret, set this
+  # to the secret/key Prometheus should use for Authorization: Bearer.
+  bearerTokenSecret:
+    name: ""
+    key: METRICS_AUTH_TOKEN
+
+# DB migrations run once as a pre-install/pre-upgrade Job hook (never N replicas
+# racing). Matches the "run one migrator on deploy" operations guidance.
+migrations:
+  enabled: true
+
+service:
+  type: ClusterIP
+  port: 3000
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  host: modelgov.example.com
+  tls: false
+  tlsSecretName: modelgov-tls
+
+# ── Secrets ────────────────────────────────────────────────────────────────
+# Provide an existingSecret (recommended: sync from Vault/CSI/Sealed Secrets),
+# OR let the chart create one from the values below. The secret carries the
+# API key, DATABASE_URL, LiteLLM master key, optional metrics token, and any
+# provider keys.
+secret:
+  existingSecret: ""
+  aiGuardApiKey: ""
+  databaseUrl: ""
+  # REQUIRED (unless using existingSecret). No default: a shipped default key
+  # would let anyone with cluster network reach drive the bundled LiteLLM proxy
+  # — and thus the provider account — bypassing every Modelgov budget/policy/
+  # audit control. Generate a strong random value per install.
+  litellmMasterKey: ""
+  metricsAuthToken: ""
+  # Provider keys consumed by LiteLLM (e.g. OPENAI_API_KEY, ANTHROPIC_API_KEY).
+  providerKeys: {}
+
+# ── Policy config (modelgov.yaml) ────────────────────────────────────────────
+# Provide an existingConfigMap (key: modelgov.yaml), OR inline it here.
+config:
+  existingConfigMap: ""
+  aiGuardYaml: |
+    project:
+      name: production
+      environment: production
+    budgets:
+      global:
+        monthly_usd: 500
+        alert_at_percent: 80
+        hard_stop_at_percent: 100
+      by_user_type:
+        logged_in:
+          daily_usd: 1
+          daily_requests: 100
+          models: ["cheap"]
+    features:
+      support_chat:
+        safety: balanced
+        model_class: cheap
+        max_tokens: 500
+    routing:
+      degrade_at_percent: 80
+    model_classes:
+      cheap:
+        primary: openai/gpt-4o-mini
+    safety:
+      preset: balanced
+      injection_model: openai/gpt-4o-mini
+    observability:
+      provider: none
+
+# ── LiteLLM (in-cluster by default) ──────────────────────────────────────────
+litellm:
+  enabled: true
+  image: ghcr.io/berriai/litellm:main-stable
+  # If disabled, point the API at an external LiteLLM here.
+  baseUrl: ""
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 1Gi
+  # litellm_config.yaml — model_name must match modelgov.yaml model_classes.
+  config: |
+    model_list:
+      - model_name: openai/gpt-4o-mini
+        litellm_params:
+          model: openai/gpt-4o-mini
+          api_key: os.environ/OPENAI_API_KEY
+    general_settings:
+      master_key: os.environ/LITELLM_MASTER_KEY
+    litellm_settings:
+      drop_params: true
+
+# ── Redis (shared rate limits across replicas) ───────────────────────────────
+redis:
+  enabled: true
+  image: redis:7-alpine
+  # External Redis URL when enabled=false (optional).
+  url: ""
+
+# ── Presidio (required for the default balanced safety policy) ────────────────
+presidio:
+  enabled: true
+  analyzerImage: mcr.microsoft.com/presidio-analyzer:latest
+  anonymizerImage: mcr.microsoft.com/presidio-anonymizer:latest
+
+# ── In-cluster Postgres (DEV ONLY — use managed Postgres in production) ───────
+postgres:
+  enabled: false
+  image: postgres:16-alpine
+  password: postgres
+  database: modelgov
+  storage: 5Gi

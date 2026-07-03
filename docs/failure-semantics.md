@@ -1,6 +1,6 @@
 # Dependency failure semantics
 
-How Ai-Guard behaves when infrastructure dependencies are unavailable.
+How Modelgov behaves when infrastructure dependencies are unavailable.
 Designed to **fail closed** on policy and safety, **degrade gracefully** on
 observability, and **never leak budget** on partial failures.
 
@@ -117,4 +117,4 @@ Policy and budget blocks return structured fields in `error.details`:
 
 Automated coverage: `packages/api/test/failure-semantics.test.ts`
 
-Policy regression: `ai-guard.policy-tests.yaml` + `pnpm ai-guard test-policy`
+Policy regression: `modelgov.policy-tests.yaml` + `pnpm modelgov test-policy`

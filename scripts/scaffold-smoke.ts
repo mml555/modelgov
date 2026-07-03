@@ -1,16 +1,16 @@
 #!/usr/bin/env tsx
 /**
  * End-to-end smoke: scaffold a project in a temp dir and validate generated config.
- * Used in CI to catch regressions in create-ai-guard output.
+ * Used in CI to catch regressions in create-modelgov output.
  */
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { parseConfig } from "../packages/policy-engine/src/index.ts";
-import { buildScaffold } from "../packages/create-ai-guard/src/scaffold.ts";
-import { TEMPLATES } from "../packages/create-ai-guard/src/templates.ts";
+import { buildScaffold } from "../packages/create-modelgov/src/scaffold.ts";
+import { TEMPLATES } from "../packages/create-modelgov/src/templates.ts";
 
-const dir = mkdtempSync(join(tmpdir(), "ai-guard-scaffold-"));
+const dir = mkdtempSync(join(tmpdir(), "modelgov-scaffold-"));
 try {
   const files = buildScaffold({
     projectName: "ci-smoke",
@@ -21,8 +21,8 @@ try {
     template: TEMPLATES.support_chat,
   });
 
-  const yaml = files.get("ai-guard.yaml");
-  if (!yaml) throw new Error("missing ai-guard.yaml");
+  const yaml = files.get("modelgov.yaml");
+  if (!yaml) throw new Error("missing modelgov.yaml");
   parseConfig(yaml);
 
   const litellm = files.get("litellm_config.yaml");

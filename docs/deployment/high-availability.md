@@ -17,14 +17,14 @@ This document describes an HA reference topology that removes those SPOFs. The
 shared Redis rate limiting, atomic Postgres budget reservations, the migration
 init-job pattern). Running **multiple LiteLLM / Presidio replicas behind a load
 balancer** and **Postgres with a managed primary + replica** is an operational
-deployment choice — the components support it, but Ai-Guard does not ship a
+deployment choice — the components support it, but Modelgov does not ship a
 turnkey HA chart. Treat the manifests here as a pattern to adapt.
 
 ---
 
 ## Design principles
 
-| Principle | How Ai-Guard supports it |
+| Principle | How Modelgov supports it |
 | --- | --- |
 | **Stateless API tier** | The API holds no durable state; all spend/audit state lives in Postgres. Scale horizontally by adding replicas. |
 | **Shared rate-limit state** | Set `REDIS_URL` so the limiter counter is shared across replicas rather than per-instance in-memory. |
@@ -69,7 +69,7 @@ turnkey HA chart. Treat the manifests here as a pattern to adapt.
                                             ▼
                               OpenAI / Anthropic / Gemini / Bedrock
 
-        [init job, runs once per deploy]  ai-guard-migrate → Postgres primary
+        [init job, runs once per deploy]  modelgov-migrate → Postgres primary
 ```
 
 - **Load balancer** terminates TLS (there is no built-in TLS) and routes to API
@@ -89,7 +89,7 @@ turnkey HA chart. Treat the manifests here as a pattern to adapt.
   `DATABASE_SSL=verify-full` with `DATABASE_SSL_CA` for managed Postgres.
 - **LiteLLM** runs as K stateless replicas behind an internal load balancer.
   This removes the documented LiteLLM SPOF. Point `LITELLM_BASE_URL` at the LB
-  address. LiteLLM itself holds no Ai-Guard state.
+  address. LiteLLM itself holds no Modelgov state.
 - **Presidio** analyzer and anonymizer each run as M replicas behind an internal
   Service. Point `PRESIDIO_ANALYZER_URL` / `PRESIDIO_ANONYMIZER_URL` at the
   Service names.
@@ -100,7 +100,7 @@ turnkey HA chart. Treat the manifests here as a pattern to adapt.
 > **Read-replica scope:** the API today issues its budget/audit reads and writes
 > against a single `DATABASE_URL` (the primary). A read replica in this topology
 > is for **failover and out-of-band analytics/reporting**, not automatic
-> read-write splitting inside the API — Ai-Guard does not split reads to a
+> read-write splitting inside the API — Modelgov does not split reads to a
 > replica in v1. Do not point `DATABASE_URL` at a read-only endpoint.
 
 ---
@@ -141,7 +141,7 @@ Multiple API replicas must not race `migrate.js`. Two safe patterns:
 
    ```bash
    kubectl apply -f deploy/k8s/migration-job.yaml
-   kubectl wait --for=condition=complete job/ai-guard-migrate -n ai-guard --timeout=120s
+   kubectl wait --for=condition=complete job/modelgov-migrate -n modelgov --timeout=120s
    kubectl apply -f deploy/k8s/deployment.yaml
    ```
 
@@ -149,7 +149,7 @@ Multiple API replicas must not race `migrate.js`. Two safe patterns:
 
    ```bash
    docker run --rm --env-file .env.production \
-     your-registry/ai-guard-api:<tag> node dist/migrate.js
+     your-registry/modelgov-api:<tag> node dist/migrate.js
    ```
 
 2. **Advisory-lock entrypoint (default image):** the default `migrate && start`
@@ -166,9 +166,9 @@ when you use the init-job pattern.
 ## Target SLOs and assumptions
 
 These are **reference targets** for a correctly provisioned HA deployment on your
-own infrastructure. Ai-Guard ships no hosted SLA (self-host only); the
+own infrastructure. Modelgov ships no hosted SLA (self-host only); the
 [commercial SLA template](../commercial/sla.md) is a starting point for teams
-offering Ai-Guard as an internal platform.
+offering Modelgov as an internal platform.
 
 | Objective | Target | Measured as |
 | --- | --- | --- |
@@ -186,7 +186,7 @@ offering Ai-Guard as an internal platform.
 - Redis is managed HA; you have decided your `RATE_LIMIT_FAIL_OPEN` posture.
 - Upstream provider availability is **excluded** from the gateway SLO — a
   provider outage that exhausts your fallback model class is counted against
-  the provider, not Ai-Guard. Configure a `fallback` in a different provider to
+  the provider, not Modelgov. Configure a `fallback` in a different provider to
   survive single-provider outages.
 - The single **global monthly budget counter row** is a throughput ceiling at
   very high RPS (documented limitation). A per-transaction `lock_timeout` makes
@@ -195,7 +195,7 @@ offering Ai-Guard as an internal platform.
 
 **Not yet built / caveats:**
 
-- The [Helm chart](../../deploy/helm/ai-guard/) ships HA-oriented defaults —
+- The [Helm chart](../../deploy/helm/modelgov/) ships HA-oriented defaults —
   ≥2 replicas, a PodDisruptionBudget, node+zone topology spread, hardened
   security contexts, and opt-in HPA / NetworkPolicy / ServiceMonitor. Provision
   the managed data tier (RDS Postgres + ElastiCache Redis, HA defaults) with the

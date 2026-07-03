@@ -1,5 +1,5 @@
 import type {
-  AiGuardConfig,
+  ModelgovConfig,
   FeatureConfig,
   InjectionMode,
   PiiMode,
@@ -35,7 +35,7 @@ export const PRESET_DEFAULTS: Record<
  * even if the global config explicitly set a looser value.
  */
 export function resolveSafetyPlan(
-  config: AiGuardConfig,
+  config: ModelgovConfig,
   feature: FeatureConfig,
 ): SafetyPlan {
   const override = feature.safety;

@@ -66,7 +66,7 @@ export async function runRequestsCommand(args: string[]): Promise<void> {
   if (sub === "show") {
     const id = args[1];
     if (!id || id.startsWith("--")) {
-      throw new Error("usage: ai-guard requests show <req_id>");
+      throw new Error("usage: modelgov requests show <req_id>");
     }
     const record = await client.getJson<RequestRecord>(`/v1/requests/${id}`);
     if (json) {
@@ -166,11 +166,11 @@ function formatUsageSummary(report: UsageSummaryReport): string {
   return lines.join("\n");
 }
 
-const REQUESTS_USAGE = `ai-guard requests — inspect audit logs (metadata only)
+const REQUESTS_USAGE = `modelgov requests — inspect audit logs (metadata only)
 
 Usage:
-  ai-guard requests list [filters]
-  ai-guard requests show <req_id>
+  modelgov requests list [filters]
+  modelgov requests show <req_id>
 
 List filters:
   --userId <id>
@@ -183,7 +183,7 @@ List filters:
   --json
 `;
 
-const USAGE_SUMMARY_HELP = `ai-guard usage summary [options]
+const USAGE_SUMMARY_HELP = `modelgov usage summary [options]
 
 Options:
   --feature <name>

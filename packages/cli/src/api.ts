@@ -60,12 +60,12 @@ export class ApiClient {
 }
 
 export function clientFromEnv(): ApiClient {
-  const apiKey = process.env.AI_GUARD_API_KEY;
+  const apiKey = process.env.MODELGOV_API_KEY;
   if (!apiKey) {
-    throw new Error("AI_GUARD_API_KEY is required");
+    throw new Error("MODELGOV_API_KEY is required");
   }
   return new ApiClient({
-    baseUrl: process.env.AI_GUARD_URL ?? "http://localhost:3000",
+    baseUrl: process.env.MODELGOV_URL ?? "http://localhost:3000",
     apiKey,
   });
 }

@@ -1,4 +1,4 @@
-# Ai-Guard one-command ops. Make targets are aliases for the CLI.
+# Modelgov one-command ops. Make targets are aliases for the CLI.
 #   make setup      first-run setup, stack start, readiness wait, smoke test
 #   make up         API + LiteLLM + Postgres + Presidio
 #   make up-full    plus Langfuse observability
@@ -8,7 +8,7 @@
 
 .PHONY: setup status status-full status-local doctor doctor-full doctor-local smoke reset up up-full up-local up-prod down down-full down-local down-prod logs logs-full logs-local test test-db smoke-ci build install build-image
 
-CLI := pnpm --filter @ai-guard/cli dev --
+CLI := pnpm --filter @modelgov/cli dev --
 
 setup:
 	$(CLI) setup simple

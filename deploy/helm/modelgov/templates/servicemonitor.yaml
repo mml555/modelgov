@@ -1,0 +1,32 @@
+{{- if .Values.serviceMonitor.enabled }}
+{{- $bearerSecretName := .Values.serviceMonitor.bearerTokenSecret.name -}}
+{{- if and (not $bearerSecretName) (not .Values.secret.existingSecret) .Values.secret.metricsAuthToken -}}
+{{- $bearerSecretName = include "modelgov.secretName" . -}}
+{{- end -}}
+{{- $bearerSecretKey := default "METRICS_AUTH_TOKEN" .Values.serviceMonitor.bearerTokenSecret.key -}}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "modelgov.fullname" . }}
+  labels:
+    {{- include "modelgov.labels" . | nindent 4 }}
+    app.kubernetes.io/component: api
+    {{- with .Values.serviceMonitor.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "modelgov.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: api
+  endpoints:
+    - port: http
+      path: {{ .Values.serviceMonitor.path | quote }}
+      interval: {{ .Values.serviceMonitor.interval }}
+      scrapeTimeout: {{ .Values.serviceMonitor.scrapeTimeout }}
+      {{- if $bearerSecretName }}
+      bearerTokenSecret:
+        name: {{ $bearerSecretName | quote }}
+        key: {{ $bearerSecretKey | quote }}
+      {{- end }}
+{{- end }}

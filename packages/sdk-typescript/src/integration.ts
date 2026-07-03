@@ -1,5 +1,5 @@
 /**
- * Integration guardrails for SDK callers. Ai-Guard budgets and policies key off
+ * Integration guardrails for SDK callers. Modelgov budgets and policies key off
  * `userId` — it must be your app's stable internal id, not a raw session/JWT.
  */
 
@@ -13,14 +13,14 @@ export function looksLikeSessionToken(userId: string): boolean {
 
 /**
  * Warn when userId may be mis-integrated (session/JWT passed through). No-op when
- * `AI_GUARD_SDK_WARN_INTEGRATION=false` is set in the environment.
+ * `MODELGOV_SDK_WARN_INTEGRATION=false` is set in the environment.
  */
 export function warnUntrustedUserId(userId: string, field = "userId"): void {
-  if (typeof process !== "undefined" && process.env?.AI_GUARD_SDK_WARN_INTEGRATION === "false") {
+  if (typeof process !== "undefined" && process.env?.MODELGOV_SDK_WARN_INTEGRATION === "false") {
     return;
   }
   if (!looksLikeSessionToken(userId)) return;
   console.warn(
-    `[ai-guard] ${field} looks like a session or OAuth token — pass your app's stable internal user id after authenticating the user. Ai-Guard does not verify app-level auth. See https://github.com/mml555/Ai-Guard/blob/main/docs/mental-model.md`,
+    `[modelgov] ${field} looks like a session or OAuth token — pass your app's stable internal user id after authenticating the user. Modelgov does not verify app-level auth. See https://github.com/mml555/modelgov/blob/main/docs/mental-model.md`,
   );
 }

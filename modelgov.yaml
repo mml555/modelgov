@@ -1,0 +1,66 @@
+# Modelgov policy config. Authored in snake_case; parsed + validated by
+# @modelgov/policy-engine. Provider api_key env/VAR refs are resolved by the API
+# layer at load time (never inside the pure engine).
+
+project:
+  name: modelgov-demo
+  environment: development
+
+providers:
+  openai:
+    api_key: env/OPENAI_API_KEY
+  anthropic:
+    api_key: env/ANTHROPIC_API_KEY
+
+budgets:
+  global:
+    monthly_usd: 500
+    alert_at_percent: 80
+    hard_stop_at_percent: 100
+  by_user_type:
+    anonymous:
+      daily_usd: 0.02
+      daily_requests: 5
+      models: ["cheap"]
+    logged_in:
+      daily_usd: 0.25
+      daily_requests: 50
+      models: ["cheap", "standard"]
+    admin:
+      daily_usd: 5.00
+      daily_requests: 500
+      models: ["cheap", "standard", "premium"]
+
+features:
+  support_chat:
+    safety: strict # pii: block, prompt_injection: block — blocks PII in/out
+    model_class: cheap
+    max_tokens: 500
+  notes_helper:
+    safety: balanced # pii: mask — masks PII in input and output instead of blocking
+    model_class: cheap
+    max_tokens: 500
+
+routing:
+  degrade_at_percent: 80 # downgrade one model class once global spend crosses this
+
+model_classes:
+  cheap:
+    primary: openai/gpt-4o-mini
+    fallback: anthropic/claude-haiku
+  standard:
+    primary: anthropic/claude-sonnet
+    fallback: openai/gpt-4o
+  premium:
+    primary: openai/gpt-5
+    fallback: anthropic/claude-opus
+
+safety:
+  preset: balanced
+  protect:
+    pii: mask
+    prompt_injection: block
+  injection_model: openai/gpt-4o-mini
+
+observability:
+  provider: none # "none" | "langfuse"

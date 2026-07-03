@@ -18,13 +18,13 @@ locals {
 }
 
 output "database_url" {
-  description = "DATABASE_URL for Ai-Guard (set as the secret's DATABASE_URL)."
+  description = "DATABASE_URL for Modelgov (set as the secret's DATABASE_URL)."
   value       = local.database_url
   sensitive   = true
 }
 
 output "redis_url" {
-  description = "REDIS_URL for Ai-Guard (rediss:// with AUTH). Empty when redis is disabled."
+  description = "REDIS_URL for Modelgov (rediss:// with AUTH). Empty when redis is disabled."
   value       = local.redis_url
   sensitive   = true
 }

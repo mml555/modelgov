@@ -1,10 +1,10 @@
 import {
   evaluateAiRequest,
-  type AiGuardConfig,
+  type ModelgovConfig,
   type AiRequest,
   type PolicyDecision,
   type UsageSnapshot,
-} from "@ai-guard/policy-engine";
+} from "@modelgov/policy-engine";
 import type { Pool } from "pg";
 import {
   LiteLLMClientError,
@@ -331,7 +331,7 @@ export async function rejectProviderFailure(
 export async function executeProviderWithFallback(
   deps: {
     litellm: LiteLLMClient;
-    config: AiGuardConfig;
+    config: ModelgovConfig;
     usage: UsageSnapshot;
     log?: { warn(obj: unknown, msg: string): void };
   },

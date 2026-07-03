@@ -1,10 +1,10 @@
 # Data flow & DLP
 
-What data flows through Ai-Guard, what is **stored** versus **transient**, how PII
+What data flows through Modelgov, what is **stored** versus **transient**, how PII
 is handled, and where sensitive data could leak — with the controls that address
 each. This is the reference for data-classification and privacy reviews.
 
-Core stance: **prompt and completion content is transient by default.** Ai-Guard
+Core stance: **prompt and completion content is transient by default.** Modelgov
 persists **request metadata** (who, what feature, decision, cost) — not the text
 of prompts or model responses — unless an operator explicitly enables a
 content-capture option.
@@ -14,7 +14,7 @@ content-capture option.
 ## End-to-end data flow
 
 ```text
- App                Ai-Guard API                 Backends
+ App                Modelgov API                 Backends
  ───                ────────────                 ────────
  request  ──HTTPS──► auth (API key / OIDC)
  { userId,          │
@@ -62,7 +62,7 @@ depends entirely on capture settings (below).
 | Budget counters | **Stored** | `budget_counters` | Live spend/reservation state |
 | Idempotency records | **Stored (short-lived)** | `idempotency_keys` | Swept when stale (`IDEMPOTENCY_STALE_MS`, default 15m) |
 | Rate-limit counters | **Transient** | Redis (or in-memory) | Not durable business data |
-| Provider API keys | **Not in Ai-Guard DB** | LiteLLM env / secrets mgr | Held by LiteLLM |
+| Provider API keys | **Not in Modelgov DB** | LiteLLM env / secrets mgr | Held by LiteLLM |
 
 ### Content-capture defaults (both OFF)
 
@@ -80,7 +80,7 @@ explicit content replay and is not enabled today.
 ## PII handling (DLP via Presidio)
 
 PII controls are enforced by **Presidio** according to the safety preset (global
-or per-`feature` in `ai-guard.yaml`):
+or per-`feature` in `modelgov.yaml`):
 
 | `protect.pii` | Behavior |
 | --- | --- |
@@ -118,7 +118,7 @@ non-`dev` preset.
 | `request_logs` | Maintenance sweep to `REQUEST_LOG_RETENTION_MS` (single replica per tick via advisory lock) | **30 days** |
 | `idempotency_keys` | Auto-swept when stale (`IDEMPOTENCY_STALE_MS`) | 15 min |
 | Budget reservation leases | Released after `RESERVATION_STALE_MS` | 15 min |
-| Langfuse content (if capture on) | **Governed by Langfuse**, not Ai-Guard | Operator sets |
+| Langfuse content (if capture on) | **Governed by Langfuse**, not Modelgov | Operator sets |
 | Idempotency content (if capture on) | Lives on `idempotency_keys` until swept | 15 min |
 
 Set `REQUEST_LOG_RETENTION_MS` to match your data-retention policy. Content stores
@@ -128,7 +128,7 @@ Set `REQUEST_LOG_RETENTION_MS` to match your data-retention policy. Content stor
 
 ## Data residency
 
-Ai-Guard runs entirely on **your infrastructure** — Postgres, Redis, LiteLLM,
+Modelgov runs entirely on **your infrastructure** — Postgres, Redis, LiteLLM,
 Presidio, and the API are all self-hosted, so their data resides wherever you
 deploy them. The one boundary that leaves your environment is the **upstream model
 provider**: prompt (post-masking) and completion content transit LiteLLM to

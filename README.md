@@ -1,28 +1,28 @@
-# Ai-Guard
+# Modelgov
 
 **Self-hosted AI policy gateway** — one config file for AI budgets, model access,
 safety rules, routing, and usage logs.
 
 AI features can silently burn money, leak sensitive data, and call the wrong
-model. Ai-Guard sits between your app and your model provider. Every request must
+model. Modelgov sits between your app and your model provider. Every request must
 declare a **user**, **user type**, and **feature**. Policy is checked **before**
 the model call happens.
 
 > Your app decides: *is this user allowed to ask?*
-> Ai-Guard decides: *is this AI request allowed to run?*
+> Modelgov decides: *is this AI request allowed to run?*
 
 ## Quick start
 
-**Add Ai-Guard to your app** (scaffolds config + compose + an example route for
+**Add Modelgov to your app** (scaffolds config + compose + an example route for
 your framework, then a one-command smoke test):
 
 ```bash
-npx create-ai-guard my-app        # asks: framework, feature template, provider, key
+npx create-modelgov my-app        # asks: framework, feature template, provider, key
 cd my-app && docker compose up -d
 node scripts/smoke.mjs            # first guarded request → prints a requestId
 ```
 
-> Note: the packages (`create-ai-guard`, `@ai-guard/sdk`, `ai-guard-sdk`) are not
+> Note: the packages (`create-modelgov`, `@modelgov/sdk`, `modelgov`) are not
 > yet published to npm/PyPI. Until then, run from source — see
 > [docs/self-host.md](docs/self-host.md).
 
@@ -36,14 +36,14 @@ Fastify, FastAPI.
 make setup       # creates .env if needed, starts the stack, waits, smoke-tests
 ```
 
-Call Ai-Guard from your app:
+Call Modelgov from your app:
 
 ```ts
-import { createAiGuardClient } from "@ai-guard/sdk";
+import { createModelgovClient } from "@modelgov/sdk";
 
-const ai = createAiGuardClient({
-  baseUrl: process.env.AI_GUARD_URL!,
-  apiKey: process.env.AI_GUARD_API_KEY!,
+const ai = createModelgovClient({
+  baseUrl: process.env.MODELGOV_URL!,
+  apiKey: process.env.MODELGOV_API_KEY!,
 });
 
 const res = await ai.chat({
@@ -55,7 +55,7 @@ const res = await ai.chat({
 });
 ```
 
-Policy lives in `ai-guard.yaml`:
+Policy lives in `modelgov.yaml`:
 
 ```yaml
 features:
@@ -75,14 +75,14 @@ budgets:
 Debug a decision without spending:
 
 ```bash
-pnpm ai-guard explain --local \
+pnpm modelgov explain --local \
   --userType logged_in --feature support_chat --modelClass premium
 
 # Validate production config
-pnpm ai-guard validate --config ai-guard.yaml --production
+pnpm modelgov validate --config modelgov.yaml --production
 
 # Run policy regression tests
-pnpm ai-guard test-policy --file ai-guard.policy-tests.yaml
+pnpm modelgov test-policy --file modelgov.policy-tests.yaml
 ```
 
 ## What you get
@@ -105,11 +105,11 @@ or any LiteLLM-supported provider.
 | [`support_chat`](./examples/support_chat) | Chat, PII masking, injection block, daily budget |
 | [`saas_tiers`](./examples/saas_tiers) | Free vs paid model access |
 | [`event_intake_app`](./examples/event_intake_app) | Jewgo-style flyer extraction — real integration pattern |
-| [`nextjs_support_chat`](./examples/nextjs_support_chat) | Next.js API route — app auth → Ai-Guard SDK |
+| [`nextjs_support_chat`](./examples/nextjs_support_chat) | Next.js API route — app auth → Modelgov SDK |
 
 ```bash
 make setup
-AI_GUARD_API_KEY=sk-ai-guard-api-local \
+MODELGOV_API_KEY=sk-modelgov-api-local \
   pnpm --filter support-chat-example start "How do I reset my password?"
 ```
 
@@ -117,11 +117,11 @@ AI_GUARD_API_KEY=sk-ai-guard-api-local \
 
 | Package | Role |
 | --- | --- |
-| `@ai-guard/policy-engine` | Pure `evaluateAiRequest()` — no I/O |
-| `@ai-guard/api` | Fastify API: budgets, LiteLLM, safety |
-| `@ai-guard/sdk` | Typed HTTP client |
-| `@ai-guard/cli` | Setup, ops, config validation, and policy dry-runs |
-| `create-ai-guard` | Scaffold wizard |
+| `@modelgov/policy-engine` | Pure `evaluateAiRequest()` — no I/O |
+| `@modelgov/api` | Fastify API: budgets, LiteLLM, safety |
+| `@modelgov/sdk` | Typed HTTP client |
+| `@modelgov/cli` | Setup, ops, config validation, and policy dry-runs |
+| `create-modelgov` | Scaffold wizard |
 
 ## Deploy modes
 
@@ -133,14 +133,14 @@ AI_GUARD_API_KEY=sk-ai-guard-api-local \
 | `make up-prod` | Small self-hosted production (**not HA**) |
 | **Helm** | [Enterprise production](./docs/production-deploy.md) — recommended |
 
-**Current release:** `v1.0.0` — pin `ghcr.io/<org>/ai-guard-api:v1.0.0` in production.
+**Current release:** `v1.0.0` — pin `ghcr.io/<org>/modelgov-api:v1.0.0` in production.
 
 | Command | Stack |
 | --- | --- |
 | `make setup` | First-run setup + readiness wait + smoke test |
 | `make status` | Containers plus `/health` and `/ready` |
 | `make doctor` | Local prerequisites and runtime health |
-| `pnpm ai-guard doctor production` | Production env posture check |
+| `pnpm modelgov doctor production` | Production env posture check |
 
 ## Documentation
 
@@ -151,7 +151,7 @@ AI_GUARD_API_KEY=sk-ai-guard-api-local \
 | [Integration checklist](./docs/integration-checklist.md) | Add to an existing app in ~20 min |
 | [Real app pattern](./docs/integrations/real-app-pattern.md) | Embed in a product workflow (event intake) |
 | [Getting started](./docs/getting-started.md) | First deploy + first API call |
-| [Configuration](./docs/configuration.md) | `ai-guard.yaml` reference |
+| [Configuration](./docs/configuration.md) | `modelgov.yaml` reference |
 | [HTTP API](./docs/api.md) | REST, auth, explain, idempotency |
 | [Operations](./docs/operations.md) | Production, health, backups |
 | [Production deploy](./docs/production-deploy.md) | Official Helm path |

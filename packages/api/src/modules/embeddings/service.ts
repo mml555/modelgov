@@ -2,11 +2,11 @@ import {
   evaluateAiRequest,
   PolicyConfigError,
   providerOf,
-  type AiGuardConfig,
+  type ModelgovConfig,
   type AiRequest,
   type BudgetRemaining,
   type PolicyDecision,
-} from "@ai-guard/policy-engine";
+} from "@modelgov/policy-engine";
 import type { FastifyBaseLogger } from "fastify";
 import type { Pool } from "pg";
 import {
@@ -26,7 +26,7 @@ import {
 import type { EmbeddingsInput } from "./schemas";
 
 export interface EmbeddingsDeps {
-  config: AiGuardConfig;
+  config: ModelgovConfig;
   pool: Pool;
   litellm: LiteLLMClient;
   /** Optional tracing/metrics sink. When set, every embeddings outcome is

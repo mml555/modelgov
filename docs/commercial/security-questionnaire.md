@@ -1,17 +1,17 @@
 # Vendor security questionnaire (pre-filled)
 
 Pre-filled answers to a standard SIG/CAIQ-style vendor security review, grounded in
-Ai-Guard's real architecture. Use this to accelerate procurement/security reviews.
+Modelgov's real architecture. Use this to accelerate procurement/security reviews.
 
 > **Two kinds of answer.** Answers about the **software** (encryption support,
 > access control, key management, logging, data handling) are factual and cite the
 > source docs. Answers about the **operating environment** (where it's hosted, who
-> is on-call, HR controls) depend on *your* deployment because Ai-Guard is
+> is on-call, HR controls) depend on *your* deployment because Modelgov is
 > **self-hosted** — those are marked **`[OPERATOR]`** and must be completed by the
 > entity running it. Do not claim organizational certifications the operating
 > entity does not hold.
 
-**Product:** Ai-Guard — self-hosted AI policy gateway  ·  **Deployment model:**
+**Product:** Modelgov — self-hosted AI policy gateway  ·  **Deployment model:**
 customer-hosted (on your infrastructure/cloud)  ·  **License:** MIT
 
 ---
@@ -20,8 +20,8 @@ customer-hosted (on your infrastructure/cloud)  ·  **License:** MIT
 
 | # | Question | Answer |
 | --- | --- | --- |
-| A1 | Data in transit encrypted? | **Yes, operator-terminated.** Ai-Guard has **no built-in TLS**; TLS is terminated at a reverse proxy/LB in front of the API (documented requirement). DB connections support TLS via `DATABASE_SSL=verify-full` + `DATABASE_SSL_CA`. See [operations networking](../operations.md#networking--tls). `[OPERATOR must enforce.]` |
-| A2 | Data at rest encrypted? | Relies on the underlying store: enable Postgres/volume encryption and encrypted backups. Ai-Guard stores only **SHA-256 hashes** of API-key secrets, never plaintext. `[OPERATOR enables storage encryption.]` |
+| A1 | Data in transit encrypted? | **Yes, operator-terminated.** Modelgov has **no built-in TLS**; TLS is terminated at a reverse proxy/LB in front of the API (documented requirement). DB connections support TLS via `DATABASE_SSL=verify-full` + `DATABASE_SSL_CA`. See [operations networking](../operations.md#networking--tls). `[OPERATOR must enforce.]` |
+| A2 | Data at rest encrypted? | Relies on the underlying store: enable Postgres/volume encryption and encrypted backups. Modelgov stores only **SHA-256 hashes** of API-key secrets, never plaintext. `[OPERATOR enables storage encryption.]` |
 | A3 | Key material / secrets encryption | Provider keys and `LITELLM_MASTER_KEY` held outside the codebase in the operator's secrets manager; never committed to git (hardening guidance in [SECURITY.md](../../SECURITY.md)). |
 | A4 | Cryptographic standards | SHA-256 for API-key hashing. TLS cipher suite is the operator's LB configuration. |
 
@@ -52,7 +52,7 @@ customer-hosted (on your infrastructure/cloud)  ·  **License:** MIT
 | # | Question | Answer |
 | --- | --- | --- |
 | D1 | Is activity logged? | **Yes.** Every request is written to `request_logs` with `userId`, `userType`, `feature`, decision, `reasonCode`, and cost. **Metadata only — prompts/completions are not stored.** See [API `/v1/requests`](../api.md#get-v1requests). |
-| D2 | Audit trail access | `GET /v1/requests` / `/v1/requests/:id` (`requests:read`); correlation via `requestId` / `x-ai-guard-request-id`. |
+| D2 | Audit trail access | `GET /v1/requests` / `/v1/requests/:id` (`requests:read`); correlation via `requestId` / `x-modelgov-request-id`. |
 | D3 | Metrics / monitoring | Prometheus `/metrics` (request rate/errors/latency, pg pool saturation, Node defaults). `/metrics` is internal-only by default; `METRICS_AUTH_TOKEN` adds bearer auth. See [operations metrics](../operations.md#metrics). |
 | D4 | Log integrity / tamper-evidence | Admin mutations (key/policy/erasure) are written to a **hash-chained** `admin_audit_log`; `GET /v1/admin/audit/verify` re-walks the chain and detects any altered/deleted/inserted row. This is tamper-*detection*; export to a WORM/SIEM sink and use immutable backups for prevention/retention. |
 | D5 | Alerting | Budget-alert webhook (optional HMAC-signed) on spend thresholds; operator sets metric-based alerts. See [budget alerts](../operations.md#budget-alerts). |
@@ -73,7 +73,7 @@ customer-hosted (on your infrastructure/cloud)  ·  **License:** MIT
 
 | # | Question | Answer |
 | --- | --- | --- |
-| F1 | Vulnerability disclosure process | Private reporting via GitHub Security Advisory or `security@ai-guard.dev`; acknowledgment target 72 h. See [SECURITY.md](../../SECURITY.md). |
+| F1 | Vulnerability disclosure process | Private reporting via GitHub Security Advisory or `security@modelgov.dev`; acknowledgment target 72 h. See [SECURITY.md](../../SECURITY.md). |
 | F2 | Vulnerability scanning | CI runs **Trivy** image scanning and publishes an **SBOM** + build **provenance attestations**; no floating `:latest` tag (pin by digest). |
 | F3 | Incident response plan | [Incident-response runbook](../runbooks/incident-response.md): SEV1–4 classification, escalation, comms templates, post-mortems. `[OPERATOR operationalizes with on-call.]` |
 | F4 | Patch management | Security patches on supported version lines; monitor CVEs in composed components (LiteLLM, Presidio, Postgres, Langfuse) and rebuild. See [versioning](../versioning.md). |
@@ -92,7 +92,7 @@ customer-hosted (on your infrastructure/cloud)  ·  **License:** MIT
 
 | # | Question | Answer |
 | --- | --- | --- |
-| H1 | SOC 2 / ISO 27001? | Ai-Guard is **software, not a certified service** — SOC 2 certifies the operating **organization**, which is *you* (self-hosted). [SOC 2 control mapping](../compliance/soc2-controls.md) shows which technical criteria the gateway supports and the gaps. `[OPERATOR states its own certifications.]` |
+| H1 | SOC 2 / ISO 27001? | Modelgov is **software, not a certified service** — SOC 2 certifies the operating **organization**, which is *you* (self-hosted). [SOC 2 control mapping](../compliance/soc2-controls.md) shows which technical criteria the gateway supports and the gaps. `[OPERATOR states its own certifications.]` |
 | H2 | Threat model available? | **Yes** — [STRIDE threat model](../compliance/threat-model.md) with trust boundaries, mitigations, and a residual-risk register. |
 | H3 | Secure SDLC | Versioned/pinned images, provenance attestations, SBOM, Trivy scans, advisory-locked migrations. `[OPERATOR: PR review/approvals/change management.]` |
 | H4 | Subprocessors | See below — the primary subprocessor is *your* chosen model provider. |
@@ -101,8 +101,8 @@ customer-hosted (on your infrastructure/cloud)  ·  **License:** MIT
 
 ## Subprocessors & data processing
 
-Because Ai-Guard is self-hosted, the **operating entity is the data controller/
-processor**; Ai-Guard the software introduces **no mandatory third-party
+Because Modelgov is self-hosted, the **operating entity is the data controller/
+processor**; Modelgov the software introduces **no mandatory third-party
 subprocessor**. Data leaves the operator's boundary only to the model provider the
 operator configures.
 
@@ -112,7 +112,7 @@ operator configures.
 | Cloud/infra provider `[OPERATOR]` | All hosted data (encrypted per infra) | Hosting Postgres/Redis/LiteLLM/Presidio/API | Operator |
 | Langfuse (optional) | Trace metadata; content only if capture enabled | Observability | Operator (self-hosted or SaaS choice) |
 
-Ai-Guard does **not** phone home, does not transmit telemetry to the project, and
+Modelgov does **not** phone home, does not transmit telemetry to the project, and
 adds no analytics subprocessor.
 
 ## DPA & subprocessor outline
@@ -120,7 +120,7 @@ adds no analytics subprocessor.
 For a Data Processing Agreement between `[OPERATOR]` and its customer:
 
 1. **Roles** — Customer is Controller; `[OPERATOR]` is Processor for data processed
-   via its Ai-Guard deployment. Model providers are **sub-processors** engaged by
+   via its Modelgov deployment. Model providers are **sub-processors** engaged by
    the operator.
 2. **Scope & purpose** — process prompt/response content solely to perform guarded
    inference and enforce the customer's AI policy; process metadata for audit,

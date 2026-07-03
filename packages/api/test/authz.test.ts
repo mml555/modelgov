@@ -1,4 +1,4 @@
-import { parseConfigObject } from "@ai-guard/policy-engine";
+import { parseConfigObject } from "@modelgov/policy-engine";
 import { createLocalJWKSet, exportJWK, generateKeyPair, SignJWT, type KeyLike } from "jose";
 import { beforeAll, describe, expect, it } from "vitest";
 import { createOidcVerifier } from "../src/modules/authz/oidc";
@@ -13,7 +13,7 @@ import { buildServer } from "../src/server";
 import { mockPool } from "./mockPool";
 
 const ISSUER = "https://idp.example.com/";
-const AUDIENCE = "ai-guard";
+const AUDIENCE = "modelgov";
 
 let privateKey: KeyLike;
 let jwks: ReturnType<typeof createLocalJWKSet>;
@@ -116,7 +116,7 @@ describe("OIDC verifier", () => {
     expect(await verifier().verify("a.b.c")).toBeNull();
   });
 
-  it("applies a role map from IdP groups to Ai-Guard roles", async () => {
+  it("applies a role map from IdP groups to Modelgov roles", async () => {
     const token = await mint({ roles: ["ldap-ai-admins"] });
     const principal = await verifier({ roleMap: { "ldap-ai-admins": "owner" } }).verify(token);
     expect(principal?.permissions).toContain("keys:admin");

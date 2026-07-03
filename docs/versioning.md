@@ -1,9 +1,9 @@
 # Versioning, compatibility & release policy
 
-How Ai-Guard versions its **HTTP API**, **SDKs**, and **config schema**; the
+How Modelgov versions its **HTTP API**, **SDKs**, and **config schema**; the
 supported-version window; and the compatibility guarantees you can build on.
 
-> **Status:** Ai-Guard **1.0.0** is released, so the compatibility guarantees
+> **Status:** Modelgov **1.0.0** is released, so the compatibility guarantees
 > below are now in effect: breaking changes to the HTTP API, SDKs, or config
 > schema require a new major version. [SECURITY.md](../SECURITY.md) lists the
 > currently supported version line.
@@ -12,7 +12,7 @@ supported-version window; and the compatibility guarantees you can build on.
 
 ## SemVer, applied to three surfaces
 
-Ai-Guard follows [Semantic Versioning](https://semver.org/) (`MAJOR.MINOR.PATCH`).
+Modelgov follows [Semantic Versioning](https://semver.org/) (`MAJOR.MINOR.PATCH`).
 It has three independently meaningful compatibility surfaces:
 
 ### 1. HTTP API
@@ -36,12 +36,12 @@ prefix, not just the package version, is the API's compatibility promise.
 **Explicitly stable (won't break within a major):** the `error` envelope shape
 (`code`, `message`, `details`, `requestId`), the block-error `details` fields
 (`decision`, `reasonCode`, `budgetRemaining`, `auditRequestId`), request-ID header
-`x-ai-guard-request-id`, and existing `reasonCode` string values.
+`x-modelgov-request-id`, and existing `reasonCode` string values.
 
-### 2. SDKs (`@ai-guard/sdk` and generated types)
+### 2. SDKs (`@modelgov/sdk` and generated types)
 
 npm packages follow SemVer against their **public TypeScript API**
-(`createAiGuardClient`, method signatures, exported types/errors).
+(`createModelgovClient`, method signatures, exported types/errors).
 
 | Change | Bump |
 | --- | --- |
@@ -49,7 +49,7 @@ npm packages follow SemVer against their **public TypeScript API**
 | Change/remove a signature or exported type; drop a runtime/Node version | **MAJOR** |
 
 The SDK generates `FeatureName` / `UserTypeName` / `ModelClassName` unions from
-**your** `ai-guard.yaml` (`pnpm generate-sdk-types`). Those types reflect your
+**your** `modelgov.yaml` (`pnpm generate-sdk-types`). Those types reflect your
 config, not the library version — regenerating after a config change is expected
 and is not an SDK breaking change.
 
@@ -58,7 +58,7 @@ works against any API server of the same major at ≥ the API minor it was built
 for (forward-compatible: servers add optional fields). Pin the SDK major to your
 API major.
 
-### 3. Config schema (`ai-guard.yaml`)
+### 3. Config schema (`modelgov.yaml`)
 
 The policy file is a compatibility surface for operators.
 
@@ -67,8 +67,8 @@ The policy file is a compatibility surface for operators.
 | Add an optional key with a safe default | **MINOR** |
 | Remove/rename a key, change a default that alters enforcement, tighten validation so a previously valid file is rejected | **MAJOR** |
 
-Validate before deploy with `pnpm ai-guard validate --config ai-guard.yaml
---production`. `litellm_config.yaml` is **generated** from `ai-guard.yaml` and is
+Validate before deploy with `pnpm modelgov validate --config modelgov.yaml
+--production`. `litellm_config.yaml` is **generated** from `modelgov.yaml` and is
 not a hand-editable compatibility surface.
 
 ---
@@ -132,14 +132,14 @@ checked, breaking changes remain possible under 0.x semantics.
 
 **SDK**
 
-- [ ] Freeze the public `@ai-guard/sdk` surface (methods, options, exported types,
+- [ ] Freeze the public `@modelgov/sdk` surface (methods, options, exported types,
       error classes).
 - [ ] Document the SDK-major ↔ API-major support matrix.
 - [ ] Pin and document the supported Node/runtime range.
 
 **Config schema**
 
-- [ ] Freeze `ai-guard.yaml` key names and enforcement-affecting defaults.
+- [ ] Freeze `modelgov.yaml` key names and enforcement-affecting defaults.
 - [ ] Ship a schema version or validation that rejects unknown keys predictably.
 - [ ] Document every field's default and its bump class (MINOR-add vs MAJOR-change).
 

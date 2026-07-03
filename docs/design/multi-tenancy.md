@@ -35,7 +35,7 @@ proves.
    - Enable `HIERARCHICAL_BUDGETS=true` and route spend through sharded top-level
      `budget_nodes` (see Rollout §5) so contention spreads across node rows.
    - For flat-only deploys at high RPS, split traffic by `project_id` (separate
-     Ai-Guard instances) or accept the global row as the serializing cap until
+     Modelgov instances) or accept the global row as the serializing cap until
      hierarchical mode is enabled.
    - Benchmark before/after with [`docs/deployment/benchmarks.md`](../deployment/benchmarks.md).
 2. **Soft tenant isolation (default path).** Isolation is by `project_id` and
@@ -188,13 +188,13 @@ Use this when enabling multi-tenant or hierarchical features in a shared environ
 
 | Step | Setting / action | Why |
 | --- | --- | --- |
-| 0 | **`deployProfile: multitenant`** (Helm `values-multitenant.yaml`) or `AI_GUARD_DEPLOY_PROFILE=multitenant` | Wires policy store + per-tenant policy + RLS; flat budgets stay default |
+| 0 | **`deployProfile: multitenant`** (Helm `values-multitenant.yaml`) or `MODELGOV_DEPLOY_PROFILE=multitenant` | Wires policy store + per-tenant policy + RLS; flat budgets stay default |
 | 1 | Issue **tenant-scoped API keys** (`tenantId` on each key) | Scopes usage, requests, and erasure to the tenant |
 | 2 | Enable **`POLICY_STORE_ENABLED=true`** | Per-tenant policy versions instead of a single file |
 | 3 | Enable **`MULTI_TENANT_POLICY=true`** | Each request evaluates its tenant's active policy |
 | 4 | Set **`POLICY_CACHE_TTL_MS`** (e.g. 30000) | Bounds cross-replica activation delay |
 | 5 | Enable **`DB_RLS_ENABLED=true`** + non-owner DB role | Defense-in-depth on `config_versions` |
-| 6 | Run **`ai-guard doctor`** | Surfaces dev keys, missing OIDC audience, `RATE_LIMIT_FAIL_OPEN`, RLS gaps |
+| 6 | Run **`modelgov doctor`** | Surfaces dev keys, missing OIDC audience, `RATE_LIMIT_FAIL_OPEN`, RLS gaps |
 | 7 | Set **`OIDC_AUDIENCE`** when operator SSO is on | Never use `OIDC_AUDIENCE_OPTIONAL=true` outside local dev |
 | 8 | Pin image digests + rotate bootstrap `keys:admin` key | See `.env.production.example` |
 

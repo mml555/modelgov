@@ -1,14 +1,14 @@
 # SOC 2 Trust Services Criteria — control mapping
 
-This maps Ai-Guard's shipped features to relevant SOC 2 Trust Services Criteria
+This maps Modelgov's shipped features to relevant SOC 2 Trust Services Criteria
 (TSC) across **Security (Common Criteria)**, **Availability**, and
 **Confidentiality**. It is a **product control mapping to support your audit** —
-it is **not** a SOC 2 report and does **not** assert that Ai-Guard (the software
+it is **not** a SOC 2 report and does **not** assert that Modelgov (the software
 project) holds a SOC 2 certification.
 
 > **Critical framing:** SOC 2 certifies an **organization's controls over a
-> system**, not a piece of software. Because Ai-Guard is **self-hosted**, *your
-> organization* is the entity that would be audited. Ai-Guard provides technical
+> system**, not a piece of software. Because Modelgov is **self-hosted**, *your
+> organization* is the entity that would be audited. Modelgov provides technical
 > controls (below); the surrounding organizational controls — HR, change
 > management, vendor management, physical security of your infra, monitoring —
 > are **yours to implement and evidence**. Use this document to show auditors
@@ -24,7 +24,7 @@ exists but requires operator configuration or has gaps) · **Roadmap** (not buil
 
 ### CC6 — Logical & physical access controls
 
-| Criterion | Ai-Guard control | Status | Gap / operator action |
+| Criterion | Modelgov control | Status | Gap / operator action |
 | --- | --- | --- | --- |
 | CC6.1 Logical access — identification & auth | Bearer API keys per caller; OIDC JWT for operators verified against IdP JWKS (sig/iss/aud/exp) | **Implemented** | End-user auth is the app's; operator IdP config is yours |
 | CC6.1 Credentials protected at rest | API-key secrets stored as **SHA-256 hashes only**; plaintext returned once, never retrievable | **Implemented** | — |
@@ -36,7 +36,7 @@ exists but requires operator configuration or has gaps) · **Roadmap** (not buil
 
 ### CC7 — System operations (monitoring, incident, change detection)
 
-| Criterion | Ai-Guard control | Status | Gap / operator action |
+| Criterion | Modelgov control | Status | Gap / operator action |
 | --- | --- | --- | --- |
 | CC7.1 Detect vulnerabilities | CI runs **Trivy** image scanning; publishes **SBOM**; dependency monitoring guidance in SECURITY.md | **Implemented** (in CI) | Operator monitors CVEs on their pinned images |
 | CC7.2 Monitor for anomalies | Prometheus `/metrics` (request rate/errors/latency, pg pool saturation); OpenTelemetry OTLP span export; budget-alert webhook; structured logs | **Implemented** | Operator wires alerting + SIEM |
@@ -47,15 +47,15 @@ exists but requires operator configuration or has gaps) · **Roadmap** (not buil
 
 ### CC8 — Change management
 
-| Criterion | Ai-Guard control | Status | Gap / operator action |
+| Criterion | Modelgov control | Status | Gap / operator action |
 | --- | --- | --- | --- |
 | CC8.1 Authorize & track changes | Versioned images (no floating `:latest`, pin by digest); **provenance attestations**; advisory-locked migrations; **versioned policy store** (validate → activate → rollback, audited) gated by `policy:write` | **Partial** | Operator's SDLC (PR review, approvals, ticketing) is the org control |
 
 ### CC1–CC5, CC9 — governance, risk, communication, vendor mgmt
 
-| Criterion | Ai-Guard control | Status | Gap / operator action |
+| Criterion | Modelgov control | Status | Gap / operator action |
 | --- | --- | --- | --- |
-| CC1 Control environment (governance, HR) | — | **Roadmap** (org) | Entirely organizational — Ai-Guard has no bearing |
+| CC1 Control environment (governance, HR) | — | **Roadmap** (org) | Entirely organizational — Modelgov has no bearing |
 | CC2 Communication & information | Docs, error contract, correlation IDs | **Partial** | Internal policy comms are yours |
 | CC3 Risk assessment | [Threat model](./threat-model.md) provided | **Partial** | Adopt into your risk program |
 | CC4 Monitoring of controls | Metrics + logs | **Partial** | Control-effectiveness reviews are yours |
@@ -66,7 +66,7 @@ exists but requires operator configuration or has gaps) · **Roadmap** (not buil
 
 ## Availability (A)
 
-| Criterion | Ai-Guard control | Status | Gap / operator action |
+| Criterion | Modelgov control | Status | Gap / operator action |
 | --- | --- | --- | --- |
 | A1.1 Capacity | `/metrics` for saturation; [benchmarks harness](../deployment/benchmarks.md) for sizing | **Partial** | Published benchmark numbers not shipped — measure your own |
 | A1.2 Recovery / backups | Stateless API/LiteLLM/Presidio; Postgres restore; [DR runbook](../runbooks/disaster-recovery.md) | **Partial** | Operator wires + tests backups; no built-in scheduler |
@@ -78,7 +78,7 @@ exists but requires operator configuration or has gaps) · **Roadmap** (not buil
 
 ## Confidentiality (C)
 
-| Criterion | Ai-Guard control | Status | Gap / operator action |
+| Criterion | Modelgov control | Status | Gap / operator action |
 | --- | --- | --- | --- |
 | C1.1 Identify confidential data | [Data-flow doc](./data-flow.md): content transient by default; only metadata persisted | **Implemented** | Classify your own prompt data |
 | C1.1 Minimize confidential data | Prompts/completions **not stored** in `request_logs`; `OBSERVABILITY_CAPTURE_CONTENT` and `IDEMPOTENCY_CAPTURE_CONTENT` default **off** | **Implemented** | Keep capture off unless required |
@@ -91,12 +91,12 @@ exists but requires operator configuration or has gaps) · **Roadmap** (not buil
 
 ## Processing Integrity & Privacy
 
-- **Processing Integrity (PI):** Not a primary Ai-Guard claim, but relevant
+- **Processing Integrity (PI):** Not a primary Modelgov claim, but relevant
   mechanisms exist — atomic, cap-safe budget accounting (proven under concurrency
   in integration tests), idempotency keys for safe retries, and a stable error
   contract with stable `reasonCode`s. Status: **Partial** (accounting integrity
   implemented; broader PI is org-scoped).
-- **Privacy (P):** Ai-Guard is a gateway, not a full data subject-rights
+- **Privacy (P):** Modelgov is a gateway, not a full data subject-rights
   platform, but it provides concrete primitives: DLP (Presidio),
   content-minimization defaults, per-feature retention, and a **right-to-erasure
   endpoint** (`POST /v1/admin/erasure`, `data:erase`) that deletes a user's
@@ -113,7 +113,7 @@ A Type II audit tests that controls **operated effectively over a period**
 
 1. **Define the audit scope & system description** — which environment, which TSC
    categories (Security is mandatory; add Availability/Confidentiality as scoped).
-2. **Organizational controls Ai-Guard cannot provide** — HR onboarding/offboarding,
+2. **Organizational controls Modelgov cannot provide** — HR onboarding/offboarding,
    security-awareness training, background checks, vendor management, physical/
    cloud-provider security (inherit via your cloud's SOC 2), risk assessments,
    board/management oversight (CC1–CC5, CC9).
@@ -124,7 +124,7 @@ A Type II audit tests that controls **operated effectively over a period**
    a SIEM with defined alerts; keep alert/response records.
 5. **Change-management records** — PR reviews, approvals, deploy logs; leverage
    image provenance/SBOM as artifacts.
-6. **Encryption everywhere** — enforce TLS (Ai-Guard has none built in) and
+6. **Encryption everywhere** — enforce TLS (Modelgov has none built in) and
    at-rest encryption for Postgres, backups, and any content stores.
 7. **Formal policies** — access control, data classification/retention, incident
    response, BCP/DR, secure SDLC — written, approved, and followed.
@@ -132,13 +132,13 @@ A Type II audit tests that controls **operated effectively over a period**
    logging (key/policy/erasure mutations) and chain verification are now
    **implemented** (`admin_audit_log`, `/v1/admin/audit/verify`). Ship them to a
    WORM/SIEM sink and schedule chain verification with the **`audit:export`
-   helper** (`pnpm --filter @ai-guard/api audit:export`); the
+   helper** (`pnpm --filter @modelgov/api audit:export`); the
    [evidence-collection runbook](./evidence-collection.md) gives the cadence,
    commands, and retention for this and the other operator-side evidence.
 9. **Engage a licensed CPA firm** to perform the examination — only they can issue
    the SOC 2 report.
 
-**Honest bottom line:** Ai-Guard gives you a strong technical foundation for the
+**Honest bottom line:** Modelgov gives you a strong technical foundation for the
 Security, Availability, and Confidentiality criteria — access control (DB-backed
 keys + rotation, OIDC/RBAC), DLP, hash-chained admin audit, GDPR/CCPA erasure,
 OpenTelemetry export, and fail-closed safety. It does **not** by itself make you

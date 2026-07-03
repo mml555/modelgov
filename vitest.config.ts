@@ -8,8 +8,8 @@ export default defineConfig({
     alias: {
       // Resolve workspace packages to their TS source so unit tests run
       // without a prior build step.
-      "@ai-guard/policy-engine": fromHere("./packages/policy-engine/src/index.ts"),
-      "@ai-guard/sdk": fromHere("./packages/sdk-typescript/src/index.ts"),
+      "@modelgov/policy-engine": fromHere("./packages/policy-engine/src/index.ts"),
+      "@modelgov/sdk": fromHere("./packages/sdk-typescript/src/index.ts"),
     },
   },
   test: {

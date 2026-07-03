@@ -1,0 +1,30 @@
+# SaaS multi-tenant control plane overlay.
+#
+# Enables per-tenant policy (POLICY_STORE + MULTI_TENANT_POLICY) and Postgres RLS
+# on config_versions. Issue tenant-scoped API keys (tenantId on each key).
+#
+# Prerequisites (not automated by the chart):
+#   - DATABASE_URL as a NON-OWNER DB role (table owner bypasses RLS)
+#   - Migrations run as owner; API connects as the restricted role
+#
+# Flat budgets remain default. Enable HIERARCHICAL_BUDGETS + budget_nodes per
+# tenant when they need nested caps or shard_count on a hot top node.
+#
+# Install:
+#   helm upgrade --install modelgov ./deploy/helm/modelgov \
+#     -f deploy/helm/modelgov/values-multitenant.yaml \
+#     --set secret.databaseUrl='postgres://modelgov_app:...@db/modelgov' \
+#     --set secret.aiGuardApiKey='...' \
+#     --set-string secret.providerKeys.OPENAI_API_KEY='...'
+
+production: true
+deployProfile: multitenant
+
+api:
+  replicas: 2
+
+redis:
+  enabled: true
+
+postgres:
+  enabled: false

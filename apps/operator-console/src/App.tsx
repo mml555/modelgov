@@ -22,7 +22,7 @@ function Shell({ children }: { children: React.ReactNode }) {
   return (
     <div className="layout">
       <aside className="sidebar">
-        <div className="brand">Ai-Guard Console</div>
+        <div className="brand">Modelgov Console</div>
         <nav>
           {nav.map(([path, label]) => (
             <Link key={path} to={path} className={loc.pathname === path ? "active" : ""}>

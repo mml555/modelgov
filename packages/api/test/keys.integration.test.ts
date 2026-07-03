@@ -1,4 +1,4 @@
-import { parseConfigObject } from "@ai-guard/policy-engine";
+import { parseConfigObject } from "@modelgov/policy-engine";
 import type { FastifyInstance } from "fastify";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { applySchema } from "../src/db/init";
@@ -55,7 +55,7 @@ describe.skipIf(!DATABASE_URL)("api key lifecycle (integration)", () => {
         permissions: ["chat:create", "usage:read"],
         projectId: "proj-1",
       });
-      expect(issued.secret).toMatch(/^sk-ai-guard-/);
+      expect(issued.secret).toMatch(/^sk-modelgov-/);
       expect(issued.keyPrefix).toBe(issued.secret.slice(0, issued.keyPrefix.length));
 
       // The raw secret must never be stored.
@@ -134,7 +134,7 @@ describe.skipIf(!DATABASE_URL)("api key lifecycle (integration)", () => {
       });
       expect(created.statusCode).toBe(201);
       const secret = created.json().secret as string;
-      expect(secret).toMatch(/^sk-ai-guard-/);
+      expect(secret).toMatch(/^sk-modelgov-/);
 
       // The freshly issued key can now act (it has keys:admin).
       const listed = await server.inject({
@@ -252,7 +252,7 @@ describe.skipIf(!DATABASE_URL)("api key lifecycle (integration)", () => {
       const res = await app().inject({
         method: "GET",
         url: "/v1/admin/keys",
-        headers: { authorization: "Bearer sk-ai-guard-nope" },
+        headers: { authorization: "Bearer sk-modelgov-nope" },
       });
       expect(res.statusCode).toBe(401);
     });

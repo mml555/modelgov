@@ -1,0 +1,123 @@
+{{- define "modelgov.name" -}}
+{{- default .Chart.Name .Values.nameOverride | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+
+{{- define "modelgov.fullname" -}}
+{{- if .Values.fullnameOverride -}}
+{{- .Values.fullnameOverride | trunc 63 | trimSuffix "-" -}}
+{{- else -}}
+{{- printf "%s-%s" .Release.Name (include "modelgov.name" .) | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "modelgov.labels" -}}
+helm.sh/chart: {{ printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" }}
+app.kubernetes.io/name: {{ include "modelgov.name" . }}
+app.kubernetes.io/instance: {{ .Release.Name }}
+app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
+app.kubernetes.io/managed-by: {{ .Release.Service }}
+{{- end -}}
+
+{{- define "modelgov.selectorLabels" -}}
+app.kubernetes.io/name: {{ include "modelgov.name" . }}
+app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end -}}
+
+{{- /* Secret holding API key, DB URL, LiteLLM key, provider keys. */ -}}
+{{- define "modelgov.secretName" -}}
+{{- if .Values.secret.existingSecret -}}
+{{- .Values.secret.existingSecret -}}
+{{- else -}}
+{{- printf "%s-secrets" (include "modelgov.fullname" .) -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "modelgov.configMapName" -}}
+{{- if .Values.config.existingConfigMap -}}
+{{- .Values.config.existingConfigMap -}}
+{{- else -}}
+{{- printf "%s-config" (include "modelgov.fullname" .) -}}
+{{- end -}}
+{{- end -}}
+
+{{- /* Effective LiteLLM base URL (in-cluster service or external override). */ -}}
+{{- define "modelgov.litellmUrl" -}}
+{{- if .Values.litellm.enabled -}}
+{{- printf "http://%s-litellm:4000" (include "modelgov.fullname" .) -}}
+{{- else -}}
+{{- .Values.litellm.baseUrl -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "modelgov.redisUrl" -}}
+{{- if .Values.redis.enabled -}}
+{{- printf "redis://%s-redis:6379" (include "modelgov.fullname" .) -}}
+{{- else -}}
+{{- .Values.redis.url -}}
+{{- end -}}
+{{- end -}}
+
+{{- /*
+  Fail the render if `production` is true and an image uses a floating tag
+  (latest / main / main-stable / stable / master / edge / nightly, or no tag).
+  Digest-pinned (`@sha256:`) and version-tagged images pass. Call with:
+    {{ include "modelgov.assertPinnedImage" (dict "ctx" . "image" <image> "field" "<name>") }}
+*/ -}}
+{{- define "modelgov.assertPinnedImage" -}}
+{{- if .ctx.Values.production -}}
+{{- $image := .image -}}
+{{- $tag := "" -}}
+{{- if contains "@sha256:" $image -}}
+{{- $tag = "sha256-digest" -}}
+{{- else if contains ":" $image -}}
+{{- $tag = last (splitList ":" $image) -}}
+{{- else -}}
+{{- $tag = "latest" -}}
+{{- end -}}
+{{- $floating := list "latest" "main" "main-stable" "stable" "master" "edge" "nightly" -}}
+{{- if has $tag $floating -}}
+{{- fail (printf "production=true but %s image %q uses a floating tag %q. Pin a version or @sha256 digest (see the chart README)." .field $image $tag) -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+
+{{- /* ServiceAccount name for the API (created by the chart or supplied). */ -}}
+{{- define "modelgov.serviceAccountName" -}}
+{{- if .Values.serviceAccount.create -}}
+{{- default (include "modelgov.fullname" .) .Values.serviceAccount.name -}}
+{{- else -}}
+{{- default "default" .Values.serviceAccount.name -}}
+{{- end -}}
+{{- end -}}
+
+{{- /*
+  Env vars for deployProfile (selfhost | multitenant). Merged into API + migrate
+  jobs. Flat budgets remain default; hierarchical + shard_count are per-tenant.
+*/ -}}
+{{- define "modelgov.deployProfileEnv" -}}
+{{- if eq .Values.deployProfile "selfhost" }}
+- name: MODELGOV_DEPLOY_PROFILE
+  value: "selfhost"
+- name: HIERARCHICAL_BUDGETS
+  value: "false"
+- name: MULTI_TENANT_POLICY
+  value: "false"
+- name: POLICY_STORE_ENABLED
+  value: "false"
+- name: DB_RLS_ENABLED
+  value: "false"
+{{- else if eq .Values.deployProfile "multitenant" }}
+- name: MODELGOV_DEPLOY_PROFILE
+  value: "multitenant"
+- name: HIERARCHICAL_BUDGETS
+  value: "false"
+- name: MULTI_TENANT_POLICY
+  value: "true"
+- name: POLICY_STORE_ENABLED
+  value: "true"
+- name: DB_RLS_ENABLED
+  value: "true"
+- name: POLICY_CACHE_TTL_MS
+  value: "30000"
+{{- end }}
+{{- end -}}

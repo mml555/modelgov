@@ -1,6 +1,6 @@
 # Hybrid OCR pipeline (PDF/image → structured data)
 
-Turn PDFs and images into structured JSON — governed by Ai-Guard end to end.
+Turn PDFs and images into structured JSON — governed by Modelgov end to end.
 It's **hybrid**: local **Tesseract** OCR text *and* the page image are sent
 together to a **vision model**, so the model gets both the exact characters and
 the layout. Every extraction call runs through the gateway:
@@ -8,7 +8,7 @@ the layout. Every extraction call runs through the gateway:
 - **Governed vision** — the `document_extraction` feature routes to the `vision`
   model class (data-sensitivity–gated to approved models); each call is
   budgeted and audited.
-- **Multimodal** — uses Ai-Guard's content-parts support: `[ text (instruction +
+- **Multimodal** — uses Modelgov's content-parts support: `[ text (instruction +
   OCR), image ]` in one message.
 - **PII protection (optional)** — set the feature's safety to `balanced` (with
   Presidio) and the gateway masks names, emails, and card numbers in the
@@ -33,11 +33,11 @@ Plus a vision model — pick one:
 
 ## Run it
 
-**1. Start an Ai-Guard gateway that loads THIS folder's `ai-guard.yaml`** and
+**1. Start an Modelgov gateway that loads THIS folder's `modelgov.yaml`** and
 maps the vision model via `litellm.ollama.yaml`. From the repo root:
 
 ```bash
-export AI_GUARD_CONFIG=examples/ocr_pipeline/ai-guard.yaml
+export MODELGOV_CONFIG=examples/ocr_pipeline/modelgov.yaml
 # Cloud (verified):   export LITELLM_CONFIG=examples/ocr_pipeline/litellm.gemini.yaml
 # Local (offline):    export LITELLM_CONFIG=examples/ocr_pipeline/litellm.ollama.yaml
 export LITELLM_CONFIG=examples/ocr_pipeline/litellm.gemini.yaml
@@ -77,7 +77,7 @@ pnpm extract /path/to/scan.jpg
   ocr: 312 chars · openai/gpt-4o (ollama, allow) · $0.00000 · req req_42
 ```
 
-Every page is one audited row: `pnpm ai-guard requests list`.
+Every page is one audited row: `pnpm modelgov requests list`.
 
 ## How it fits together
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseConfigObject } from "@ai-guard/policy-engine";
+import { parseConfigObject } from "@modelgov/policy-engine";
 import { NoopObservability } from "../src/services/observability";
 import { NoopGuard } from "../src/services/safety";
 import { buildServer } from "../src/server";

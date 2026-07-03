@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { createAiGuardClient } from "@ai-guard/sdk";
+import { createModelgovClient } from "@modelgov/sdk";
 
 describe("support-chat example client", () => {
   it("builds a client with baseUrl and apiKey", () => {
-    const client = createAiGuardClient({
+    const client = createModelgovClient({
       baseUrl: "http://localhost:3000",
       apiKey: "test-key",
     });
@@ -12,7 +12,7 @@ describe("support-chat example client", () => {
   });
 
   it("maps API errors to typed exceptions", async () => {
-    const client = createAiGuardClient({
+    const client = createModelgovClient({
       baseUrl: "http://localhost:3000",
       apiKey: "test-key",
       fetchImpl: async () =>

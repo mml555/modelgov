@@ -9,7 +9,7 @@ import type {
 } from "./types";
 import { warnUntrustedUserId } from "./integration";
 
-export interface AiGuardClientOptions {
+export interface ModelgovClientOptions {
   baseUrl: string;
   /** Sent as `Authorization: Bearer <apiKey>` when provided. */
   apiKey?: string;
@@ -20,7 +20,7 @@ export interface AiGuardClientOptions {
 }
 
 /** Base error carrying the HTTP status and the API's structured error body. */
-export class AiGuardError extends Error {
+export class ModelgovError extends Error {
   readonly status: number;
   readonly code: string;
   readonly body: unknown;
@@ -35,8 +35,8 @@ export class AiGuardError extends Error {
   readonly resolvedModelClass?: string;
 
   constructor(status: number, code: string, body: unknown) {
-    super(`ai-guard request failed (${status}): ${code}`);
-    this.name = "AiGuardError";
+    super(`modelgov request failed (${status}): ${code}`);
+    this.name = "ModelgovError";
     this.status = status;
     this.code = code;
     this.body = body;
@@ -74,7 +74,7 @@ function errorDetails(err: Record<string, unknown>): Record<string, unknown> {
 }
 
 /** Thrown on 403 policy_blocked / budget_exceeded. */
-export class PolicyBlockedError extends AiGuardError {
+export class PolicyBlockedError extends ModelgovError {
   constructor(status: number, code: string, body: unknown) {
     super(status, code, body);
     this.name = "PolicyBlockedError";
@@ -82,7 +82,7 @@ export class PolicyBlockedError extends AiGuardError {
 }
 
 /** Thrown on 403 safety_blocked (PII or prompt injection). */
-export class SafetyBlockedError extends AiGuardError {
+export class SafetyBlockedError extends ModelgovError {
   constructor(status: number, code: string, body: unknown) {
     super(status, code, body);
     this.name = "SafetyBlockedError";
@@ -116,7 +116,7 @@ export interface ChatStreamDone {
   requestId: string;
 }
 
-export interface AiGuardClient {
+export interface ModelgovClient {
   chat(request: ChatRequest, options?: ChatOptions): Promise<ChatResponse>;
   /**
    * Stream a completion as it is generated. Yields text deltas, then a final
@@ -139,9 +139,9 @@ export interface AiGuardClient {
 
 const DEFAULT_TIMEOUT_MS = 60_000;
 
-export function createAiGuardClient(
-  options: AiGuardClientOptions,
-): AiGuardClient {
+export function createModelgovClient(
+  options: ModelgovClientOptions,
+): ModelgovClient {
   const doFetch = options.fetchImpl ?? fetch;
   const baseUrl = options.baseUrl.replace(/\/$/, "");
   const defaultTimeoutMs = options.timeoutMs === undefined ? DEFAULT_TIMEOUT_MS : options.timeoutMs;
@@ -178,7 +178,7 @@ export function createAiGuardClient(
         if (code === "policy_blocked" || code === "budget_exceeded") {
           throw new PolicyBlockedError(res.status, code, body);
         }
-        throw new AiGuardError(res.status, code, body);
+        throw new ModelgovError(res.status, code, body);
       }
 
       return body as unknown as ChatResponse;
@@ -206,7 +206,7 @@ export function createAiGuardClient(
           if (code === "policy_blocked" || code === "budget_exceeded") {
             throw new PolicyBlockedError(res.status, code, body);
           }
-          throw new AiGuardError(res.status, code, body);
+          throw new ModelgovError(res.status, code, body);
         }
 
         const reader = res.body.getReader();
@@ -259,7 +259,7 @@ export function createAiGuardClient(
 
       const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
       if (!res.ok) {
-        throw new AiGuardError(res.status, errorCode(body), body);
+        throw new ModelgovError(res.status, errorCode(body), body);
       }
 
       return body as unknown as ExplainResponse;
@@ -289,7 +289,7 @@ export function createAiGuardClient(
         if (code === "policy_blocked" || code === "budget_exceeded") {
           throw new PolicyBlockedError(res.status, code, body);
         }
-        throw new AiGuardError(res.status, code, body);
+        throw new ModelgovError(res.status, code, body);
       }
 
       return body as unknown as EmbeddingsResponse;
@@ -308,7 +308,7 @@ function scopedSignal(
   let timer: ReturnType<typeof setTimeout> | undefined;
 
   const abortFromCaller = () => {
-    controller.abort(opts?.signal?.reason ?? new Error("ai-guard request aborted"));
+    controller.abort(opts?.signal?.reason ?? new Error("modelgov request aborted"));
   };
   if (opts?.signal?.aborted) {
     abortFromCaller();
@@ -318,7 +318,7 @@ function scopedSignal(
 
   if (timeoutMs != null) {
     timer = setTimeout(() => {
-      controller.abort(new Error(`ai-guard request timed out after ${timeoutMs}ms`));
+      controller.abort(new Error(`modelgov request timed out after ${timeoutMs}ms`));
     }, timeoutMs);
   }
 

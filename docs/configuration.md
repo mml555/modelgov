@@ -1,8 +1,8 @@
 # Configuration reference
 
-Ai-Guard is controlled by **`ai-guard.yaml`** — the single source of truth for
+Modelgov is controlled by **`modelgov.yaml`** — the single source of truth for
 budgets, features, models, safety, and routing. The API loads this file at
-startup (`AI_GUARD_CONFIG` env var). LiteLLM config is **generated** from it for
+startup (`MODELGOV_CONFIG` env var). LiteLLM config is **generated** from it for
 provider execution; do not treat `litellm_config.yaml` as the policy source.
 
 ## File structure
@@ -179,7 +179,7 @@ model_classes:
 
 ## `pricing` (optional — custom token prices)
 
-Ai-Guard ships a built-in price table for common OpenAI/Anthropic/Gemini models.
+Modelgov ships a built-in price table for common OpenAI/Anthropic/Gemini models.
 For anything it doesn't know — **OpenRouter**, **Azure** deployments, self-hosted
 models you bill internally, or a negotiated rate — declare the price so budget
 estimates (and the settled-cost fallback) are accurate:
@@ -285,9 +285,9 @@ See [`.env.example`](../.env.example) and [Operations](./operations.md). Key var
 
 | Variable | Purpose |
 | --- | --- |
-| `AI_GUARD_CONFIG` | Path to `ai-guard.yaml` |
+| `MODELGOV_CONFIG` | Path to `modelgov.yaml` |
 | `DATABASE_URL` | Postgres connection string |
-| `AI_GUARD_API_KEY` | Bearer token for apps (or use `AI_GUARD_API_KEYS` JSON) |
+| `MODELGOV_API_KEY` | Bearer token for apps (or use `MODELGOV_API_KEYS` JSON) |
 | `LITELLM_BASE_URL` | LiteLLM proxy URL |
 | `LITELLM_MASTER_KEY` | LiteLLM auth |
 | `PRESIDIO_ANALYZER_URL` / `PRESIDIO_ANONYMIZER_URL` | PII services |
@@ -295,7 +295,7 @@ See [`.env.example`](../.env.example) and [Operations](./operations.md). Key var
 | `IDEMPOTENCY_STALE_MS` | Stale in-flight idempotency claim TTL (default **900000** = 15m) |
 | `RESERVATION_STALE_MS` | Orphaned budget reservation release TTL (default **900000** = 15m) |
 | `BUDGET_ALERT_WEBHOOK_URL` | POST budget alert once per month when threshold crossed |
-| `BUDGET_ALERT_WEBHOOK_SECRET` | Optional HMAC secret for `X-Ai-Guard-Signature` |
+| `BUDGET_ALERT_WEBHOOK_SECRET` | Optional HMAC secret for `X-Modelgov-Signature` |
 | `POLICY_STORE_ENABLED` | Load the active policy from the DB version store instead of the file (default off) |
 | `MULTI_TENANT_POLICY` | Evaluate each request against its tenant's active policy version (needs `POLICY_STORE_ENABLED`; default off) — see [multi-tenancy](./design/multi-tenancy.md) |
 | `POLICY_CACHE_TTL_MS` | Per-tenant policy cache TTL; bounds restart-free activation lag (default **30000**) |
@@ -303,7 +303,7 @@ See [`.env.example`](../.env.example) and [Operations](./operations.md). Key var
 
 ### Scoped API keys (multi-tenant operators)
 
-Use `AI_GUARD_API_KEYS` when one deployment serves multiple teams or projects.
+Use `MODELGOV_API_KEYS` when one deployment serves multiple teams or projects.
 Each key is a **principal** with optional scope fields:
 
 | Field | Purpose |
@@ -345,9 +345,9 @@ Each key is a **principal** with optional scope fields:
 
 - **Ops keys** (no `projectId`): full deployment visibility on usage when `usage:read` is granted; optional `?projectId=` targets a tenant partition.
 - **Tenant keys** (`projectId` set): must pass `userId` or `feature` on `GET /v1/usage`; global monthly counters are hidden; budget data is read from that project's partition only.
-- Default single `AI_GUARD_API_KEY` grants `chat:create` only — add `usage:read` explicitly for monitoring.
+- Default single `MODELGOV_API_KEY` grants `chat:create` only — add `usage:read` explicitly for monitoring.
 
-Set as one-line JSON in `AI_GUARD_API_KEYS`.
+Set as one-line JSON in `MODELGOV_API_KEYS`.
 
 ---
 

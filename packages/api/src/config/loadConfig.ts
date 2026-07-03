@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { findUnpricedModels, parseConfig, type AiGuardConfig } from "@ai-guard/policy-engine";
+import { findUnpricedModels, parseConfig, type ModelgovConfig } from "@modelgov/policy-engine";
 
 const ENV_PREFIX = "env/";
 
@@ -10,9 +10,9 @@ const ENV_PREFIX = "env/";
  * informational / for direct-SDK setups.)
  */
 export function resolveEnvRefs(
-  config: AiGuardConfig,
+  config: ModelgovConfig,
   envRefs: Record<string, string | undefined>,
-): AiGuardConfig {
+): ModelgovConfig {
   for (const provider of Object.values(config.providers)) {
     if (provider.apiKey?.startsWith(ENV_PREFIX)) {
       const varName = provider.apiKey.slice(ENV_PREFIX.length);
@@ -26,13 +26,13 @@ export function loadConfigFromFile(
   path: string,
   envRefs: Record<string, string | undefined>,
   options?: { strictPricing?: boolean },
-): AiGuardConfig {
+): ModelgovConfig {
   const text = readFileSync(path, "utf8");
   return resolveEnvRefs(parseConfig(text, options), envRefs);
 }
 
 /** Log a startup warning when configured models lack static price entries. */
-export function warnUnpricedModels(config: AiGuardConfig, log?: {
+export function warnUnpricedModels(config: ModelgovConfig, log?: {
   warn(obj: unknown, msg: string): void;
 }): void {
   const unpriced = findUnpricedModels(config);

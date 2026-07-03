@@ -1,4 +1,4 @@
-import { estimateCostUsd, getModelPrice, roundUsd } from "@ai-guard/policy-engine";
+import { estimateCostUsd, getModelPrice, roundUsd } from "@modelgov/policy-engine";
 import type { LiteLLMStreamFinal } from "../../services/litellm";
 import { logRequest } from "../usage/auditLogRepo";
 import { recordActualCost, recordIncurredCost, releaseBudget } from "../usage/repo";

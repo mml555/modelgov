@@ -1,15 +1,15 @@
 # Disaster recovery runbook
 
-How to back up Ai-Guard state and restore it after data loss, corruption, or a
-regional outage. Ai-Guard's only durable state lives in **Postgres** — the API,
+How to back up Modelgov state and restore it after data loss, corruption, or a
+regional outage. Modelgov's only durable state lives in **Postgres** — the API,
 LiteLLM, and Presidio tiers are stateless and are recovered by redeploying
 images. Recovery therefore reduces to **Postgres backup + restore** plus config
-(`ai-guard.yaml`, secrets) redeploy.
+(`modelgov.yaml`, secrets) redeploy.
 
 > **Status:** The backup/restore mechanics below are standard Postgres
 > operations and are real. The specific **RTO/RPO targets, multi-region posture,
-> and drill cadence are recommendations** — Ai-Guard ships no managed DR service
-> (self-host only). Adopt and test them on your infrastructure. Ai-Guard has no
+> and drill cadence are recommendations** — Modelgov ships no managed DR service
+> (self-host only). Adopt and test them on your infrastructure. Modelgov has no
 > built-in automated backup scheduler; you wire that up with managed snapshots or
 > cron `pg_dump`.
 
@@ -35,15 +35,15 @@ RPO/RTO are business decisions. The single most important control is that
 | --- | --- | --- | --- |
 | `budget_counters` | Live spend/reservation state (used + reserved per dimension) | **High** | Budget windows reset; risk of over-spend until counters rebuild from the current window |
 | `request_logs` | Audit trail (metadata only — no prompts/completions) | **High** (compliance) | Loss of audit/usage history; cost attribution gaps |
-| `api_keys` | DB-issued key hashes + scoping | **High** | All DB-issued keys stop working (only bootstrap `AI_GUARD_API_KEYS` static keys survive); every consumer must be re-keyed |
+| `api_keys` | DB-issued key hashes + scoping | **High** | All DB-issued keys stop working (only bootstrap `MODELGOV_API_KEYS` static keys survive); every consumer must be re-keyed |
 | `idempotency_keys` | Short-lived in-flight/replay records | **Low** | Recent retries may re-execute; auto-swept anyway (`IDEMPOTENCY_STALE_MS`, default 15m) |
 
 Back up the **whole database** (all four tables plus schema/migration state), not
 individual tables — partial restores risk schema/migration drift. Also protect,
 outside the DB:
 
-- **`ai-guard.yaml`** — policy source of truth (version-control it).
-- **Secrets** — `DATABASE_URL`, `AI_GUARD_API_KEYS` bootstrap key,
+- **`modelgov.yaml`** — policy source of truth (version-control it).
+- **Secrets** — `DATABASE_URL`, `MODELGOV_API_KEYS` bootstrap key,
   `LITELLM_MASTER_KEY`, provider keys, `BUDGET_ALERT_WEBHOOK_SECRET`,
   `DATABASE_SSL_CA`. Store in a secrets manager; back that up per its own policy.
 
@@ -74,10 +74,10 @@ Use the provider's automated backups + point-in-time recovery:
 # Nightly logical backup (cron). Uses custom format for parallel restore.
 pg_dump "$DATABASE_URL" \
   --format=custom \
-  --file="/backups/ai-guard-$(date -u +%Y%m%dT%H%M%SZ).dump"
+  --file="/backups/modelgov-$(date -u +%Y%m%dT%H%M%SZ).dump"
 
 # Retain 30 days, prune older
-find /backups -name 'ai-guard-*.dump' -mtime +30 -delete
+find /backups -name 'modelgov-*.dump' -mtime +30 -delete
 ```
 
 - Ship dumps to off-host, versioned object storage (S3/GCS) with a lifecycle
@@ -103,34 +103,34 @@ Run this end to end on a schedule (see cadence). Time each phase to validate RTO
 #    (LB stops routing when /ready fails; you can also scale API replicas to 0.)
 
 # 1. Provision a fresh, empty Postgres (throwaway for drills; the DR target for real).
-export RESTORE_DB_URL="postgres://user:pass@restore-host:5432/aiguard"
+export RESTORE_DB_URL="postgres://user:pass@restore-host:5432/modelgov"
 
 # 2a. Restore from pg_dump (Option B):
 pg_restore --clean --if-exists --no-owner \
   --dbname="$RESTORE_DB_URL" \
-  /backups/ai-guard-<timestamp>.dump
+  /backups/modelgov-<timestamp>.dump
 
 # 2b. OR restore a managed snapshot / PITR to a new instance (Option A) via the
 #     cloud console/CLI, choosing the target timestamp (closest before the incident).
 
 # 3. Apply any migrations newer than the backup (idempotent; advisory-locked):
 docker run --rm -e DATABASE_URL="$RESTORE_DB_URL" --env-file .env.production \
-  your-registry/ai-guard-api:<pinned-tag> node dist/migrate.js
+  your-registry/modelgov-api:<pinned-tag> node dist/migrate.js
 
 # 4. Point the API at the restored DB and start it.
 #    DATABASE_URL="$RESTORE_DB_URL" ... (compose/k8s secret cutover)
 
 # 5. Verify readiness and correctness:
-curl -sf "$AI_GUARD_URL/ready" | jq .          # expect ready:true, db ok
+curl -sf "$MODELGOV_URL/ready" | jq .          # expect ready:true, db ok
 
 # 6. Spot-check restored state (needs a usage:read / requests:read key):
-curl -s "$AI_GUARD_URL/v1/usage?userId=<known_user>" \
+curl -s "$MODELGOV_URL/v1/usage?userId=<known_user>" \
   -H "Authorization: Bearer $OPS_KEY" | jq .    # budget_counters intact
-curl -s "$AI_GUARD_URL/v1/requests?since=7d&limit=5" \
+curl -s "$MODELGOV_URL/v1/requests?since=7d&limit=5" \
   -H "Authorization: Bearer $OPS_KEY" | jq .    # request_logs intact
 
 # 7. Verify a DB-issued API key still authenticates (api_keys restored):
-curl -s "$AI_GUARD_URL/v1/explain" \
+curl -s "$MODELGOV_URL/v1/explain" \
   -H "Authorization: Bearer $A_DB_ISSUED_KEY" -H 'content-type: application/json' \
   -d '{"userId":"drill","userType":"logged_in","feature":"support_chat","modelClass":"cheap"}' \
   | jq .decision
@@ -156,14 +156,14 @@ curl -s "$AI_GUARD_URL/v1/explain" \
 
 ## Multi-region strategy
 
-Ai-Guard has **no built-in cross-region replication**; achieve it at the data and
+Modelgov has **no built-in cross-region replication**; achieve it at the data and
 deploy layers:
 
 | Layer | Multi-region approach |
 | --- | --- |
 | **Postgres** | Cross-region read replica or managed global DB (Aurora Global, Cloud SQL cross-region replica). Promote the standby on regional loss; repoint `DATABASE_URL`. Alternatively, cross-region snapshot copies for warm-standby restore. |
 | **API / LiteLLM / Presidio** | Stateless — pre-deploy (or IaC-templated) in the secondary region, scaled to zero or minimal until failover. |
-| **Config & secrets** | Replicate `ai-guard.yaml` (Git) and secrets (multi-region secrets manager) to both regions. |
+| **Config & secrets** | Replicate `modelgov.yaml` (Git) and secrets (multi-region secrets manager) to both regions. |
 | **Traffic** | DNS/global LB failover to the secondary region's LB. |
 | **Redis** | Regional; the secondary region has its own. Rate-limit state is not business-critical to preserve across regions (spend guard is Postgres). |
 

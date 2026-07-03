@@ -1,4 +1,4 @@
-import { parseConfigObject, type SafetyPlan } from "@ai-guard/policy-engine";
+import { parseConfigObject, type SafetyPlan } from "@modelgov/policy-engine";
 import type { FastifyInstance } from "fastify";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { applySchema } from "../src/db/init";

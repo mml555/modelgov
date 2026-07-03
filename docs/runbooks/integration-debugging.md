@@ -1,7 +1,7 @@
 # Integration debugging runbook
 
 Use this when a user reports **"the AI part failed"** in an app integrated with
-Ai-Guard.
+Modelgov.
 
 ## Symptoms
 
@@ -12,19 +12,19 @@ Ai-Guard.
 
 ## Prerequisites
 
-- Ai-Guard API reachable from your workstation or bastion
+- Modelgov API reachable from your workstation or bastion
 - API key with `requests:read` and `usage:read` (or use CLI with same key)
-- Host app logs that include **both** domain ids and Ai-Guard ids
+- Host app logs that include **both** domain ids and Modelgov ids
 
 ## Flow
 
 ```text
 User report
   → find host app request / entity id
-  → find ai_guard_request_id in app logs
-  → ai-guard requests show <id>
+  → find modelgov_request_id in app logs
+  → modelgov requests show <id>
   → check decision, reason, model, cost
-  → ai-guard usage summary if pattern-wide
+  → modelgov usage summary if pattern-wide
   → resolve (policy, budget, safety, or app bug)
 ```
 
@@ -42,20 +42,20 @@ From the user or your app logs, collect:
 Search application logs for the correlation line your integration should emit:
 
 ```text
-jewgo_event_draft=draft_evt_456 ai_guard_request_id=req_123 decision=allow
+jewgo_event_draft=draft_evt_456 modelgov_request_id=req_123 decision=allow
 ```
 
-If `ai_guard_request_id` is missing, the app may have failed before calling
-Ai-Guard (auth, validation) or is not logging correlation ids yet — fix the
+If `modelgov_request_id` is missing, the app may have failed before calling
+Modelgov (auth, validation) or is not logging correlation ids yet — fix the
 integration per [real app pattern](../integrations/real-app-pattern.md).
 
-## Step 2 — Inspect the Ai-Guard request
+## Step 2 — Inspect the Modelgov request
 
 ```bash
-export AI_GUARD_URL=https://ai-guard.internal
-export AI_GUARD_API_KEY=...
+export MODELGOV_URL=https://modelgov.internal
+export MODELGOV_API_KEY=...
 
-ai-guard requests show req_123
+modelgov requests show req_123
 ```
 
 Check:
@@ -74,14 +74,14 @@ Check:
 List recent requests when you only have user + time:
 
 ```bash
-ai-guard requests list --userId admin_42 --since 1h
+modelgov requests list --userId admin_42 --since 1h
 ```
 
 Or via HTTP:
 
 ```bash
-curl -s "$AI_GUARD_URL/v1/requests?userId=admin_42&limit=20" \
-  -H "authorization: Bearer $AI_GUARD_API_KEY" | jq .
+curl -s "$MODELGOV_URL/v1/requests?userId=admin_42&limit=20" \
+  -H "authorization: Bearer $MODELGOV_API_KEY" | jq .
 ```
 
 ## Step 3 — Classify the failure
@@ -101,7 +101,7 @@ Common `reasonCode` values:
 Dry-run the same inputs without spend:
 
 ```bash
-ai-guard explain --local \
+modelgov explain --local \
   --userType admin --feature event_flyer_extraction --modelClass standard
 ```
 
@@ -118,9 +118,9 @@ app (never disable safety globally without review).
 
 See [Failure semantics](../failure-semantics.md).
 
-### App bug (Ai-Guard shows `ok`)
+### App bug (Modelgov shows `ok`)
 
-If `ai-guard requests show` reports success but the product failed:
+If `modelgov requests show` reports success but the product failed:
 
 - App failed parsing model output
 - App did not persist the draft after extraction
@@ -133,7 +133,7 @@ Compare host `metadata.eventDraftId` with your database.
 When multiple users hit the same wall:
 
 ```bash
-ai-guard usage summary --since 24h
+modelgov usage summary --since 24h
 ```
 
 Look for:
@@ -151,7 +151,7 @@ Runbooks:
 
 | Resolution | Action |
 | --- | --- |
-| Budget too low | Update `ai-guard.yaml`, deploy, `validate --production` |
+| Budget too low | Update `modelgov.yaml`, deploy, `validate --production` |
 | Wrong model class in app | Fix app code; add policy test case |
 | Safety false positive | Tune feature safety or sanitize input |
 | Provider outage | Wait or enable fallback model in `model_classes` |
@@ -160,14 +160,14 @@ Runbooks:
 After policy changes:
 
 ```bash
-ai-guard test-policy --file ai-guard.policy-tests.yaml
+modelgov test-policy --file modelgov.policy-tests.yaml
 ```
 
 ## HTTP headers reference
 
 | Header | When |
 | --- | --- |
-| `x-ai-guard-request-id` | Success (`req_<n>`) and many error responses |
+| `x-modelgov-request-id` | Success (`req_<n>`) and many error responses |
 | `x-request-id` | HTTP trace id (UUID) on all API responses |
 
 Success body: `requestId`. Error body: `details.auditRequestId` (audit) + `requestId` (HTTP trace).

@@ -1,15 +1,15 @@
-# Runs the Ai-Guard gateway backed by local Ollama (no cloud key needed).
+# Runs the Modelgov gateway backed by local Ollama (no cloud key needed).
 # Prereqs: Ollama running on the host with llama3.2:1b + llama3.2:3b pulled.
 #   docker compose up --build      # builds the API image from this repo
 # Then run the chatbot UI separately:  npm install && npm run dev  (→ :3002)
-name: ai-guard-chatbot
+name: modelgov-chatbot
 
 services:
   postgres:
     image: postgres:16-alpine
     environment:
       POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: aiguard
+      POSTGRES_DB: modelgov
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 5s
@@ -21,7 +21,7 @@ services:
     image: ghcr.io/berriai/litellm:main-stable
     command: ["--config", "/app/config.yaml", "--port", "4000"]
     environment:
-      LITELLM_MASTER_KEY: sk-ai-guard-litellm
+      LITELLM_MASTER_KEY: sk-modelgov-litellm
     # Swap the backend by setting LITELLM_CONFIG in .env, e.g.
     #   LITELLM_CONFIG=./litellm.openrouter.yaml   (then set OPENROUTER_API_KEY)
     #   LITELLM_CONFIG=./litellm.azure.yaml        (then set AZURE_API_* )
@@ -40,12 +40,12 @@ services:
         condition: service_started
     environment:
       PORT: 3000
-      AI_GUARD_API_KEY: sk-ai-guard-api-local
-      DATABASE_URL: postgres://postgres:postgres@postgres:5432/aiguard
+      MODELGOV_API_KEY: sk-modelgov-api-local
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/modelgov
       LITELLM_BASE_URL: http://litellm:4000
-      LITELLM_MASTER_KEY: sk-ai-guard-litellm
-      AI_GUARD_CONFIG: /app/ai-guard.yaml
-    volumes: ["./ai-guard.yaml:/app/ai-guard.yaml:ro"]
+      LITELLM_MASTER_KEY: sk-modelgov-litellm
+      MODELGOV_CONFIG: /app/modelgov.yaml
+    volumes: ["./modelgov.yaml:/app/modelgov.yaml:ro"]
     ports: ["127.0.0.1:3000:3000"]
 
 volumes:

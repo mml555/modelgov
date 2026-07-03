@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import type { TraceTags } from "@ai-guard/policy-engine";
+import type { TraceTags } from "@modelgov/policy-engine";
 import { Langfuse } from "langfuse";
 import type { ChatMessage } from "../types";
 
@@ -166,17 +166,17 @@ export class OtelObservability implements Observability {
     try {
       const nowNanos = `${this.now()}000000`;
       const attrs: Array<{ key: string; value: Record<string, unknown> }> = [
-        kv("ai_guard.feature", o.feature),
-        kv("ai_guard.user_id", o.userId),
-        kv("ai_guard.decision", o.decision),
-        kv("ai_guard.status", o.status),
-        kv("ai_guard.model_class", o.traceTags.modelClass),
+        kv("modelgov.feature", o.feature),
+        kv("modelgov.user_id", o.userId),
+        kv("modelgov.decision", o.decision),
+        kv("modelgov.status", o.status),
+        kv("modelgov.model_class", o.traceTags.modelClass),
       ];
-      if (o.model) attrs.push(kv("ai_guard.model", o.model));
-      if (typeof o.actualCostUsd === "number") attrs.push(kvNum("ai_guard.cost_usd", o.actualCostUsd));
-      if (typeof o.inputTokens === "number") attrs.push(kvInt("ai_guard.input_tokens", o.inputTokens));
-      if (typeof o.outputTokens === "number") attrs.push(kvInt("ai_guard.output_tokens", o.outputTokens));
-      if (o.projectId) attrs.push(kv("ai_guard.project_id", o.projectId));
+      if (o.model) attrs.push(kv("modelgov.model", o.model));
+      if (typeof o.actualCostUsd === "number") attrs.push(kvNum("modelgov.cost_usd", o.actualCostUsd));
+      if (typeof o.inputTokens === "number") attrs.push(kvInt("modelgov.input_tokens", o.inputTokens));
+      if (typeof o.outputTokens === "number") attrs.push(kvInt("modelgov.output_tokens", o.outputTokens));
+      if (o.projectId) attrs.push(kv("modelgov.project_id", o.projectId));
 
       const payload = {
         resourceSpans: [
@@ -184,7 +184,7 @@ export class OtelObservability implements Observability {
             resource: { attributes: [kv("service.name", this.serviceName)] },
             scopeSpans: [
               {
-                scope: { name: "ai-guard" },
+                scope: { name: "modelgov" },
                 spans: [
                   {
                     traceId: this.randomHex(16),
@@ -260,7 +260,7 @@ export function createObservability(opts: {
   if (opts.provider === "otel" && opts.otelEndpoint) {
     return new OtelObservability({
       endpoint: opts.otelEndpoint,
-      serviceName: opts.otelServiceName ?? "ai-guard",
+      serviceName: opts.otelServiceName ?? "modelgov",
     });
   }
   return new NoopObservability();

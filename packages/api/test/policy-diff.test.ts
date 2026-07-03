@@ -21,7 +21,7 @@ describe("deepDiff", () => {
     ]);
   });
 
-  it("diffs two ai-guard.yaml docs on snake_case paths", () => {
+  it("diffs two modelgov.yaml docs on snake_case paths", () => {
     const a = "budgets:\n  global:\n    monthly_usd: 100\n";
     const b = "budgets:\n  global:\n    monthly_usd: 250\n";
     expect(diffConfigYaml(a, b)).toEqual([

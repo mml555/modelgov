@@ -8,10 +8,10 @@ import { loadEnv } from "../src/config/env";
 function prodEnv(overrides: Record<string, string | undefined>): ReturnType<typeof loadEnv> {
   return loadEnv({
     DATABASE_URL: "postgres://u:p@localhost/db",
-    AI_GUARD_CONFIG: "./ai-guard.yaml",
+    MODELGOV_CONFIG: "./modelgov.yaml",
     LITELLM_BASE_URL: "http://localhost:4000",
-    AI_GUARD_API_KEY: "sk-production-secret-key-12345",
-    AI_GUARD_PRODUCTION: "true",
+    MODELGOV_API_KEY: "sk-production-secret-key-12345",
+    MODELGOV_PRODUCTION: "true",
     METRICS_ENABLED: "true",
     METRICS_AUTH_TOKEN: "metrics-token-abcdefghijklmnopqrst",
     DATABASE_SSL: "require",
@@ -37,7 +37,7 @@ describe("assertProductionEnv", () => {
 
   it("refuses known dev API keys", () => {
     expect(() =>
-      assertProductionEnv(prodEnv({ AI_GUARD_API_KEY: "sk-ai-guard-api-local", ALLOW_BOOTSTRAP_ADMIN_KEY: "true" })),
+      assertProductionEnv(prodEnv({ MODELGOV_API_KEY: "sk-modelgov-api-local", ALLOW_BOOTSTRAP_ADMIN_KEY: "true" })),
     ).toThrow(/known dev API key/);
   });
 
@@ -46,10 +46,10 @@ describe("assertProductionEnv", () => {
       assertProductionEnv(
         loadEnv({
           DATABASE_URL: "postgres://u:p@localhost/db",
-          AI_GUARD_CONFIG: "./ai-guard.yaml",
+          MODELGOV_CONFIG: "./modelgov.yaml",
           LITELLM_BASE_URL: "http://localhost:4000",
-          AI_GUARD_API_KEY: "sk-production-secret-key-12345",
-          AI_GUARD_PRODUCTION: "true",
+          MODELGOV_API_KEY: "sk-production-secret-key-12345",
+          MODELGOV_PRODUCTION: "true",
           METRICS_ENABLED: "true",
           DATABASE_SSL: "require",
         }),
@@ -101,13 +101,13 @@ describe("assertProductionEnv", () => {
       assertProductionEnv(
         loadEnv({
           DATABASE_URL: "postgres://u:p@localhost/db",
-          AI_GUARD_CONFIG: "./ai-guard.yaml",
+          MODELGOV_CONFIG: "./modelgov.yaml",
           LITELLM_BASE_URL: "http://localhost:4000",
-          AI_GUARD_PRODUCTION: "true",
+          MODELGOV_PRODUCTION: "true",
           METRICS_ENABLED: "true",
           METRICS_AUTH_TOKEN: "metrics-token-abcdefghijklmnopqrst",
           DATABASE_SSL: "require",
-          AI_GUARD_API_KEYS: JSON.stringify([
+          MODELGOV_API_KEYS: JSON.stringify([
             { name: "admin", key: "sk-bootstrap-admin-key-1234567890", permissions: ["keys:admin"] },
           ]),
         }),
@@ -128,7 +128,7 @@ describe("assertProductionEnv", () => {
 
   it("requires TRUST_PROXY when behind proxy", () => {
     expect(() =>
-      assertProductionEnv(prodEnv({ AI_GUARD_BEHIND_PROXY: "true" })),
+      assertProductionEnv(prodEnv({ MODELGOV_BEHIND_PROXY: "true" })),
     ).toThrow(/TRUST_PROXY/);
   });
 
@@ -136,7 +136,7 @@ describe("assertProductionEnv", () => {
     expect(() =>
       assertProductionEnv(
         prodEnv({
-          AI_GUARD_DEPLOY_PROFILE: "multitenant",
+          MODELGOV_DEPLOY_PROFILE: "multitenant",
           POLICY_STORE_ENABLED: "true",
           MULTI_TENANT_POLICY: "true",
           DB_RLS_ENABLED: "false",
@@ -149,7 +149,7 @@ describe("assertProductionEnv", () => {
     expect(() =>
       assertProductionEnv(
         prodEnv({
-          AI_GUARD_DEPLOY_PROFILE: "multitenant",
+          MODELGOV_DEPLOY_PROFILE: "multitenant",
           POLICY_STORE_ENABLED: "true",
           MULTI_TENANT_POLICY: "true",
           DB_RLS_ENABLED: "true",
@@ -158,15 +158,15 @@ describe("assertProductionEnv", () => {
     ).not.toThrow();
   });
 
-  it("is a no-op when AI_GUARD_PRODUCTION is false", () => {
+  it("is a no-op when MODELGOV_PRODUCTION is false", () => {
     expect(() =>
       assertProductionEnv(
         loadEnv({
           DATABASE_URL: "postgres://u:p@localhost/db",
-          AI_GUARD_CONFIG: "./ai-guard.yaml",
+          MODELGOV_CONFIG: "./modelgov.yaml",
           LITELLM_BASE_URL: "http://localhost:4000",
-          AI_GUARD_API_KEY: "sk-ai-guard-api-local",
-          AI_GUARD_PRODUCTION: "false",
+          MODELGOV_API_KEY: "sk-modelgov-api-local",
+          MODELGOV_PRODUCTION: "false",
           DATABASE_SSL: "disable",
         }),
       ),

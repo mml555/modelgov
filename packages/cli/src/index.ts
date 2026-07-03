@@ -7,7 +7,7 @@ import { runRequestsCommand, runUsageSummaryCommand } from "./operator.js";
 import { runPolicyTestFile } from "./testPolicy.js";
 import { formatValidateResult, validateConfig } from "./validate.js";
 
-const ROOT_USAGE = `ai-guard — Ai-Guard policy and ops tools
+const ROOT_USAGE = `modelgov — Modelgov policy and ops tools
 
 Commands:
   setup         First-run setup, stack start, readiness wait, and smoke test
@@ -20,13 +20,13 @@ Commands:
   smoke         Run an authenticated chat smoke test
   reset         Stop and remove local compose volumes
   explain       Dry-run a policy decision
-  validate      Validate ai-guard.yaml
+  validate      Validate modelgov.yaml
   test-policy   Run policy regression tests from a YAML file
   requests      List or show request audit records
   usage         Usage summaries from audit logs
   keys          Manage DB-backed API keys (create, list, rotate, revoke)
 
-Run 'ai-guard <command> --help' for command options.
+Run 'modelgov <command> --help' for command options.
 `;
 
 function main(): void {
@@ -117,7 +117,7 @@ function runExplainCommand(args: string[]): void {
 }
 
 function runValidateCommand(args: string[]): void {
-  const configPath = flagValue(args, "--config") ?? "./ai-guard.yaml";
+  const configPath = flagValue(args, "--config") ?? "./modelgov.yaml";
   const production = args.includes("--production");
   const result = validateConfig({ configPath, production });
   console.log(formatValidateResult(result));
@@ -125,7 +125,7 @@ function runValidateCommand(args: string[]): void {
 }
 
 function runTestPolicyCommand(args: string[]): void {
-  const file = flagValue(args, "--file") ?? "./ai-guard.policy-tests.yaml";
+  const file = flagValue(args, "--file") ?? "./modelgov.policy-tests.yaml";
   const config = flagValue(args, "--config");
   const { results, ok } = runPolicyTestFile(file, config);
   for (const r of results) {
@@ -142,7 +142,7 @@ async function runUsageCommand(args: string[]): Promise<void> {
     return;
   }
   if (!sub || sub === "-h" || sub === "--help") {
-    console.log(`ai-guard usage\n\n  usage summary [options]\n\nRun 'ai-guard usage summary --help' for filters.`);
+    console.log(`modelgov usage\n\n  usage summary [options]\n\nRun 'modelgov usage summary --help' for filters.`);
     return;
   }
   throw new Error(`Unknown usage subcommand: ${sub}`);
@@ -154,40 +154,40 @@ function flagValue(args: string[], flag: string): string | undefined {
   return args[idx + 1];
 }
 
-const EXPLAIN_USAGE = `ai-guard explain [options]
+const EXPLAIN_USAGE = `modelgov explain [options]
 
 Options:
   --userId <id>           User id (default: explain-user)
   --userType <type>       User type (required)
   --feature <name>        Feature (required)
   --modelClass <class>    Model class (optional)
-  --config <path>         ai-guard.yaml (default: ./ai-guard.yaml)
+  --config <path>         modelgov.yaml (default: ./modelgov.yaml)
   --local                 Offline evaluation (no API)
   --baseUrl <url>         API URL (default: http://localhost:3000)
-  --apiKey <key>          API key (default: $AI_GUARD_API_KEY)
+  --apiKey <key>          API key (default: $MODELGOV_API_KEY)
   --json                  JSON output
 `;
 
-const OPS_USAGE = `ai-guard ops commands
+const OPS_USAGE = `modelgov ops commands
 
 Usage:
-  ai-guard setup [simple|full|local]
-  ai-guard up [simple|full|local|prod]
-  ai-guard down [simple|full|local|prod]
-  ai-guard status [simple|full|local|prod]
-  ai-guard logs [simple|full|local|prod] [--no-follow]
-  ai-guard doctor [simple|full|local|prod]
-  ai-guard smoke [simple|full|local|prod]
-  ai-guard reset [simple|full|local|prod] --yes
+  modelgov setup [simple|full|local]
+  modelgov up [simple|full|local|prod]
+  modelgov down [simple|full|local|prod]
+  modelgov status [simple|full|local|prod]
+  modelgov logs [simple|full|local|prod] [--no-follow]
+  modelgov doctor [simple|full|local|prod]
+  modelgov smoke [simple|full|local|prod]
+  modelgov reset [simple|full|local|prod] --yes
 `;
 
 function parseExplainFlags(args: string[]): ExplainFlags {
   const flags: ExplainFlags = {
     userId: "explain-user",
-    configPath: "./ai-guard.yaml",
+    configPath: "./modelgov.yaml",
     local: false,
-    baseUrl: process.env.AI_GUARD_URL ?? "http://localhost:3000",
-    apiKey: process.env.AI_GUARD_API_KEY,
+    baseUrl: process.env.MODELGOV_URL ?? "http://localhost:3000",
+    apiKey: process.env.MODELGOV_API_KEY,
     json: false,
   };
 

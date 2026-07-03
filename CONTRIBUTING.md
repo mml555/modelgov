@@ -1,6 +1,6 @@
-# Contributing to Ai-Guard
+# Contributing to Modelgov
 
-Thanks for your interest in improving Ai-Guard. This guide covers how to file
+Thanks for your interest in improving Modelgov. This guide covers how to file
 issues, set up the project, and open a pull request.
 
 ## Reporting issues
@@ -9,7 +9,7 @@ issues, set up the project, and open a pull request.
   it prompts for the details we need to act quickly.
 - **Security vulnerabilities**: do **not** open a public issue. Follow the
   [security policy](SECURITY.md) to disclose privately.
-- Search [existing issues](https://github.com/mml555/Ai-Guard/issues) first to
+- Search [existing issues](https://github.com/mml555/modelgov/issues) first to
   avoid duplicates.
 
 ## Development setup

@@ -1,6 +1,6 @@
 fastapi>=0.110
 uvicorn>=0.29
-# The Ai-Guard Python SDK (packages/sdk-python). It is not yet published to
+# The Modelgov Python SDK (packages/sdk-python). It is not yet published to
 # PyPI, so install it from source (editable) from this repo:
 -e ../../packages/sdk-python
-# Once published, this becomes: ai-guard-sdk
+# Once published, this becomes: modelgov

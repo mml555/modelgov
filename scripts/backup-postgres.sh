@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Create a logical backup of the Ai-Guard Postgres database.
+# Create a logical backup of the Modelgov Postgres database.
 # Usage: DATABASE_URL=... scripts/backup-postgres.sh [output_dir]
 set -euo pipefail
 
@@ -7,11 +7,11 @@ set -euo pipefail
 
 OUT_DIR="${1:-./backups}"
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
-FILE="${OUT_DIR}/ai-guard-${STAMP}.sql.gz"
+FILE="${OUT_DIR}/modelgov-${STAMP}.sql.gz"
 
 mkdir -p "$OUT_DIR"
 
-echo "Backing up Ai-Guard Postgres to $FILE"
+echo "Backing up Modelgov Postgres to $FILE"
 pg_dump "$DATABASE_URL" --no-owner --no-acl | gzip > "$FILE"
 
 if command -v shasum >/dev/null 2>&1; then

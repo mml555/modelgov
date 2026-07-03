@@ -1,4 +1,4 @@
-import { getModelPrice, roundUsd } from "@ai-guard/policy-engine";
+import { getModelPrice, roundUsd } from "@modelgov/policy-engine";
 import type { ChatMessage } from "../types";
 
 interface ModelPrice {
@@ -111,7 +111,7 @@ export interface LiteLLMClientOptions {
   timeoutMs?: number;
   /** Injectable for tests. Defaults to global fetch. */
   fetchImpl?: typeof fetch;
-  /** Custom per-model prices (from ai-guard.yaml `pricing:`) for the cost fallback. */
+  /** Custom per-model prices (from modelgov.yaml `pricing:`) for the cost fallback. */
   priceOverrides?: Record<string, ModelPrice>;
 }
 

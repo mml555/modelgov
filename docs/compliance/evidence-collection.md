@@ -1,15 +1,15 @@
 # SOC 2 evidence collection — operator runbook
 
-[`soc2-controls.md`](./soc2-controls.md) maps Ai-Guard's **technical** controls to
+[`soc2-controls.md`](./soc2-controls.md) maps Modelgov's **technical** controls to
 the Trust Services Criteria. A Type II audit additionally requires **evidence that
 the controls operated over a period**. This runbook turns the "operator action"
 column of that mapping into a concrete cadence, with the commands and artifacts to
-retain. It covers the controls Ai-Guard can produce evidence for; the purely
+retain. It covers the controls Modelgov can produce evidence for; the purely
 organizational controls (HR, training, vendor management — CC1–CC5, CC9) are out of
 scope here and belong in your GRC tooling.
 
 > **Framing:** SOC 2 certifies *your organization's* controls over the system, not
-> the Ai-Guard software. This runbook produces the operator-side evidence; a
+> the Modelgov software. This runbook produces the operator-side evidence; a
 > licensed CPA firm performs the examination.
 
 ## Evidence cadence at a glance
@@ -39,12 +39,12 @@ deleting any historical row breaks every subsequent hash.
 # this doubles as the daily integrity check. Use --out (not shell redirection)
 # so the file is never mixed with the package-runner banner.
 DATABASE_URL=postgres://... \
-  pnpm -s --filter @ai-guard/api audit:export -- --out /var/log/ai-guard/audit-$(date +%F).jsonl
+  pnpm -s --filter @modelgov/api audit:export -- --out /var/log/modelgov/audit-$(date +%F).jsonl
 
 # Incremental nightly ship (only rows after the last exported id). Chain
 # verification always covers the whole chain regardless of --since-id.
 DATABASE_URL=postgres://... \
-  pnpm -s --filter @ai-guard/api audit:export -- --since-id "$LAST_ID" | your-siem-forwarder
+  pnpm -s --filter @modelgov/api audit:export -- --since-id "$LAST_ID" | your-siem-forwarder
 ```
 
 Point the output at your WORM sink (S3 Object Lock, GCS retention policy, or a
@@ -67,9 +67,9 @@ artifacts and the verification results for the full audit period.
 
 Quarterly, review and sign off on:
 
-- **API keys** — `GET /v1/admin/keys` (or `ai-guard keys list`). Confirm each
+- **API keys** — `GET /v1/admin/keys` (or `modelgov keys list`). Confirm each
   active key's `permissions`, `projectId`/`tenantId` scope, and `expiresAt` are
-  still appropriate; revoke unused keys (`ai-guard keys revoke`). Every
+  still appropriate; revoke unused keys (`modelgov keys revoke`). Every
   create/rotate/revoke is already in the audit trail above.
 - **Operator roles** — the OIDC `OIDC_ROLE_MAP` and who holds
   `owner`/`policy-admin`/`key-admin`. Confirm least privilege.
@@ -88,7 +88,7 @@ Retain the reviewed list + reviewer sign-off.
 ## Availability evidence (A1.x)
 
 - **Backups + restore** — run the [DR drill](../runbooks/disaster-recovery.md)
-  quarterly; retain the drill report (RTO/RPO achieved). Ai-Guard ships no backup
+  quarterly; retain the drill report (RTO/RPO achieved). Modelgov ships no backup
   scheduler — evidence comes from your managed Postgres snapshots/PITR.
 - **Health/redundancy** — `/health` + `/ready` probe configs and HPA/replica
   settings (Helm values) document the redundancy posture; the
@@ -107,7 +107,7 @@ Retain the reviewed list + reviewer sign-off.
 
 ## Encryption evidence (CC6.6 / CC6.7 / C1.1)
 
-Ai-Guard has **no built-in TLS** — TLS is terminated at your LB and enforced to
+Modelgov has **no built-in TLS** — TLS is terminated at your LB and enforced to
 Postgres via `DATABASE_SSL=verify-full`. Retain the LB/TLS config and the
 `DATABASE_SSL` setting as your in-transit-encryption evidence; at-rest encryption
 evidence comes from your Postgres/backup/secrets-manager configuration.

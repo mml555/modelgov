@@ -1,7 +1,7 @@
 # Management console — design & status
 
 A web UI over the control-plane APIs so FinOps, security, and platform teams can
-operate Ai-Guard without editing YAML or using the CLI.
+operate Modelgov without editing YAML or using the CLI.
 
 > **Status:** design. The **backend the console needs is already built and
 > tested** (see below) — this is a frontend that consumes existing endpoints. No

@@ -15,14 +15,14 @@ describe("integration guardrails", () => {
     warn.mockRestore();
   });
 
-  it("respects AI_GUARD_SDK_WARN_INTEGRATION=false", () => {
-    const prev = process.env.AI_GUARD_SDK_WARN_INTEGRATION;
-    process.env.AI_GUARD_SDK_WARN_INTEGRATION = "false";
+  it("respects MODELGOV_SDK_WARN_INTEGRATION=false", () => {
+    const prev = process.env.MODELGOV_SDK_WARN_INTEGRATION;
+    process.env.MODELGOV_SDK_WARN_INTEGRATION = "false";
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     warnUntrustedUserId("eyJhbGciOiJIUzI1NiJ9.abc.def");
     expect(warn).not.toHaveBeenCalled();
     warn.mockRestore();
-    if (prev === undefined) delete process.env.AI_GUARD_SDK_WARN_INTEGRATION;
-    else process.env.AI_GUARD_SDK_WARN_INTEGRATION = prev;
+    if (prev === undefined) delete process.env.MODELGOV_SDK_WARN_INTEGRATION;
+    else process.env.MODELGOV_SDK_WARN_INTEGRATION = prev;
   });
 });

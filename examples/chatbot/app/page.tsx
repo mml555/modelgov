@@ -100,10 +100,10 @@ export default function Page() {
 
   return (
     <div className="wrap">
-      <h1 style={{ marginBottom: 4 }}>Ai-Guard Chatbot</h1>
+      <h1 style={{ marginBottom: 4 }}>Modelgov Chatbot</h1>
       <p className="muted" style={{ marginTop: 0 }}>
-        Every message is checked by Ai-Guard <b>before</b> the model runs — budget, tokens, model access, and safety.
-        Each reply shows what Ai-Guard decided.
+        Every message is checked by Modelgov <b>before</b> the model runs — budget, tokens, model access, and safety.
+        Each reply shows what Modelgov decided.
       </p>
 
       <div className="card" style={{ padding: 12, display: "flex", gap: 12, alignItems: "center", marginBottom: 12, flexWrap: "wrap" }}>
@@ -192,7 +192,7 @@ function Receipt({ meta }: { meta: Meta }) {
       <span className="muted">· {meta.usage.inputTokens ?? "?"}→{meta.usage.outputTokens ?? "?"} tok</span>
       <span className="muted">· {usd(meta.cost.actualUsd)}</span>
       {meta.safety.piiMasked && <span className="badge">PII masked</span>}
-      <span className="muted" title="Ai-Guard audit id">· {meta.requestId}</span>
+      <span className="muted" title="Modelgov audit id">· {meta.requestId}</span>
     </div>
   );
 }

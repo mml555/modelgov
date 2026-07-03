@@ -28,11 +28,11 @@ interface ModeConfig {
 }
 
 const ROOT = resolve(import.meta.dirname, "../../..");
-const LOCAL_API_KEY = "sk-ai-guard-api-local";
+const LOCAL_API_KEY = "sk-modelgov-api-local";
 
-const KNOWN_DEV_API_KEYS = new Set(["sk-ai-guard-api-local", "smoke-test-key"]);
+const KNOWN_DEV_API_KEYS = new Set(["sk-modelgov-api-local", "smoke-test-key"]);
 
-import { deployProfileChecks } from "@ai-guard/policy-engine";
+import { deployProfileChecks } from "@modelgov/policy-engine";
 
 /**
  * Security posture checks for operator env files. Returns human-readable lines
@@ -41,7 +41,7 @@ import { deployProfileChecks } from "@ai-guard/policy-engine";
 export function securityConfigWarnings(env: Record<string, string>): string[] {
   const lines: string[] = [];
 
-  const apiKey = env.AI_GUARD_API_KEY;
+  const apiKey = env.MODELGOV_API_KEY;
   if (apiKey && KNOWN_DEV_API_KEYS.has(apiKey)) {
     lines.push("warn API key is a known dev default — rotate before shared or staging deploys");
   }
@@ -56,20 +56,20 @@ export function securityConfigWarnings(env: Record<string, string>): string[] {
     lines.push("warn RATE_LIMIT_FAIL_OPEN=true — rate limits are bypassed when Redis is unreachable");
   }
 
-  for (const c of deployProfileChecks(env, { production: env.AI_GUARD_PRODUCTION === "true" })) {
+  for (const c of deployProfileChecks(env, { production: env.MODELGOV_PRODUCTION === "true" })) {
     if (c.severity === "pass") continue;
     lines.push(`${c.severity} ${c.message}`);
   }
 
-  if (env.AI_GUARD_PRODUCTION === "true") {
+  if (env.MODELGOV_PRODUCTION === "true") {
     if (env.DATABASE_SSL === "disable" && env.DATABASE_SSL_DISABLE_ALLOWED !== "true") {
-      lines.push("fail DATABASE_SSL=disable is not permitted when AI_GUARD_PRODUCTION=true (set DATABASE_SSL_DISABLE_ALLOWED=true only for bundled Postgres)");
+      lines.push("fail DATABASE_SSL=disable is not permitted when MODELGOV_PRODUCTION=true (set DATABASE_SSL_DISABLE_ALLOWED=true only for bundled Postgres)");
     }
     if (env.METRICS_ENABLED === "true" && !env.METRICS_AUTH_TOKEN && env.METRICS_ALLOW_PUBLIC !== "true") {
       lines.push("fail METRICS_AUTH_TOKEN is required when METRICS_ENABLED=true in production (or METRICS_ALLOW_PUBLIC=true)");
     }
     if (apiKey && KNOWN_DEV_API_KEYS.has(apiKey)) {
-      lines.push("fail known dev API key cannot be used with AI_GUARD_PRODUCTION=true");
+      lines.push("fail known dev API key cannot be used with MODELGOV_PRODUCTION=true");
     }
     if (env.OBSERVABILITY_CAPTURE_CONTENT === "true" && env.OBSERVABILITY_CAPTURE_CONTENT_ALLOW !== "true") {
       lines.push("fail OBSERVABILITY_CAPTURE_CONTENT=true requires OBSERVABILITY_CAPTURE_CONTENT_ALLOW=true in production");
@@ -77,8 +77,8 @@ export function securityConfigWarnings(env: Record<string, string>): string[] {
     if (env.IDEMPOTENCY_CAPTURE_CONTENT === "true" && env.IDEMPOTENCY_CAPTURE_CONTENT_ALLOW !== "true") {
       lines.push("fail IDEMPOTENCY_CAPTURE_CONTENT=true requires IDEMPOTENCY_CAPTURE_CONTENT_ALLOW=true in production");
     }
-    if (env.AI_GUARD_BEHIND_PROXY === "true" && !env.TRUST_PROXY) {
-      lines.push("fail AI_GUARD_BEHIND_PROXY=true requires TRUST_PROXY");
+    if (env.MODELGOV_BEHIND_PROXY === "true" && !env.TRUST_PROXY) {
+      lines.push("fail MODELGOV_BEHIND_PROXY=true requires TRUST_PROXY");
     }
   }
 
@@ -161,7 +161,7 @@ async function up(flags: OpsFlags): Promise<void> {
     ensureProviderKeys();
   }
 
-  console.log(`Starting Ai-Guard (${flags.mode})...`);
+  console.log(`Starting Modelgov (${flags.mode})...`);
   await dockerCompose(flags.mode, ["up", "--build", "-d"]);
   await waitForReady(modeConfig(flags.mode).apiPort);
   await smoke(flags.mode, { strict: false });
@@ -215,7 +215,7 @@ async function status(mode: Mode): Promise<void> {
 }
 
 async function doctor(mode: Mode, strict: boolean): Promise<void> {
-  console.log("Ai-Guard doctor");
+  console.log("Modelgov doctor");
   await checkCommand("docker", ["--version"]);
   await checkCommand("docker", ["compose", "version"]);
   const envFile = mode === "prod" ? ".env.production" : ".env";
@@ -248,7 +248,7 @@ async function doctor(mode: Mode, strict: boolean): Promise<void> {
 
 async function smoke(mode: Mode, opts: { strict: boolean }): Promise<void> {
   const port = modeConfig(mode).apiPort;
-  const apiKey = readEnvFile(mode === "prod" ? ".env.production" : ".env").AI_GUARD_API_KEY ?? LOCAL_API_KEY;
+  const apiKey = readEnvFile(mode === "prod" ? ".env.production" : ".env").MODELGOV_API_KEY ?? LOCAL_API_KEY;
   const res = await fetch(`http://127.0.0.1:${port}/v1/chat`, {
     method: "POST",
     headers: {
@@ -271,7 +271,7 @@ async function smoke(mode: Mode, opts: { strict: boolean }): Promise<void> {
 
   const body = await res.text().catch(() => "");
   if (!opts.strict && (res.status === 403 || res.status === 502 || res.status === 503)) {
-    console.log(`warn smoke chat reached Ai-Guard but returned ${res.status}`);
+    console.log(`warn smoke chat reached Modelgov but returned ${res.status}`);
     if (body) console.log(body.slice(0, 500));
     return;
   }
@@ -307,7 +307,7 @@ export function modeConfig(mode: Mode): ModeConfig {
     case "local":
       return { apiPort: 3080, composeArgs: ["-f", "docker-compose.simple.yml", "-f", "docker-compose.local.yml"] };
     case "prod":
-      return { apiPort: Number(process.env.AI_GUARD_PUBLIC_PORT ?? 3000), envFile: ".env.production", composeArgs: ["-f", "docker-compose.production.yml"] };
+      return { apiPort: Number(process.env.MODELGOV_PUBLIC_PORT ?? 3000), envFile: ".env.production", composeArgs: ["-f", "docker-compose.production.yml"] };
     case "simple":
       return { apiPort: 3000, composeArgs: ["-f", "docker-compose.simple.yml"] };
   }
@@ -374,7 +374,7 @@ async function checkOllamaForDoctor(): Promise<void> {
 function printSuccess(mode: Mode): void {
   const port = modeConfig(mode).apiPort;
   console.log("");
-  console.log(`Ai-Guard API: http://localhost:${port}`);
+  console.log(`Modelgov API: http://localhost:${port}`);
   if (mode === "full") console.log("Langfuse UI: http://localhost:3001");
   console.log(`Status: ${rerunCommand("status")}`);
   console.log(`Logs:   ${rerunCommand("logs", mode)}`);

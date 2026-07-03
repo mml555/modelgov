@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { parseConfig, type AiGuardConfig } from "@ai-guard/policy-engine";
+import { parseConfig, type ModelgovConfig } from "@modelgov/policy-engine";
 import type { Pool } from "pg";
 import { withTenantContext, withTransaction } from "../../db/pool";
 import { appendAuditInTransaction, type AuditEvent } from "../audit/repo";
@@ -131,7 +131,7 @@ export async function getConfigVersionYaml(
 export async function getActiveConfigVersion(
   pool: Pool,
   tenantId: string = DEFAULT_TENANT,
-): Promise<{ record: ConfigVersionRecord; config: AiGuardConfig; yaml: string } | null> {
+): Promise<{ record: ConfigVersionRecord; config: ModelgovConfig; yaml: string } | null> {
   const { rows } = await scoped(pool, tenantId, (db) =>
     db.query<ConfigVersionDbRow>(
       `SELECT ${META_FIELDS}, yaml_text FROM config_versions WHERE active AND tenant_id = $1 LIMIT 1`,

@@ -4,7 +4,7 @@ import {
   type AiRequest,
   type BudgetRemaining,
   type PolicyDecision,
-} from "@ai-guard/policy-engine";
+} from "@modelgov/policy-engine";
 import type { ChatObservation } from "../../services/observability";
 import type { PolicyErrorContext } from "../../policyErrors";
 import type { ChatFailure, ChatSuccess } from "./types";

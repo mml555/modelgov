@@ -5,7 +5,7 @@
 > Docker Compose (`make up-prod`) is for small self-hosted / non-HA deployments.
 > Local compose modes are for development and evaluation only.
 
-This guide walks from empty infrastructure to a running production Ai-Guard deployment using the **recommended Helm path**.
+This guide walks from empty infrastructure to a running production Modelgov deployment using the **recommended Helm path**.
 
 ---
 
@@ -13,10 +13,10 @@ This guide walks from empty infrastructure to a running production Ai-Guard depl
 
 | Mode | Command | Intended use |
 | --- | --- | --- |
-| `make up` | `pnpm ai-guard up simple` | Local / dev |
-| `make up-full` | `pnpm ai-guard up full` | Local / dev with Langfuse |
-| `make up-local` | `pnpm ai-guard up local` | Local Ollama evaluation |
-| `make up-prod` | `pnpm ai-guard up prod` | Small self-hosted production (**not HA**) |
+| `make up` | `pnpm modelgov up simple` | Local / dev |
+| `make up-full` | `pnpm modelgov up full` | Local / dev with Langfuse |
+| `make up-local` | `pnpm modelgov up local` | Local Ollama evaluation |
+| `make up-prod` | `pnpm modelgov up prod` | Small self-hosted production (**not HA**) |
 | **Helm** | See below | **Recommended enterprise production** |
 
 ---
@@ -29,7 +29,7 @@ This guide walks from empty infrastructure to a running production Ai-Guard depl
 | **Postgres** | 16+, managed (RDS, Cloud SQL, Azure Database), TLS enabled |
 | **Redis** | 7+, managed, reachable from API pods |
 | **TLS** | Terminated at ingress / load balancer (cert-manager or cloud LB) |
-| **Container registry** | Pull `ghcr.io/<org>/ai-guard-api:v1.0.0` (pin digest in values) |
+| **Container registry** | Pull `ghcr.io/<org>/modelgov-api:v1.0.0` (pin digest in values) |
 | **Secrets store** | K8s Secrets, Vault, or cloud secret manager for API keys and DB URL |
 
 ### Network diagram
@@ -39,7 +39,7 @@ This guide walks from empty infrastructure to a running production Ai-Guard depl
   Internet / VPC    │  TLS ingress (443)                  │
         │           │         │                           │
         ▼           │    ┌────▼─────┐   ┌──────────────┐  │
-   Your apps ───────┼───▶│ Ai-Guard │──▶│ LiteLLM      │──┼──▶ OpenAI / Anthropic
+   Your apps ───────┼───▶│ Modelgov │──▶│ LiteLLM      │──┼──▶ OpenAI / Anthropic
    (SDK/HTTP)       │    │ API (×N) │   │ (in-cluster) │  │
                     │    └────┬─────┘   └──────────────┘  │
                     │         │                           │
@@ -57,26 +57,26 @@ This guide walks from empty infrastructure to a running production Ai-Guard depl
 **One command path** after prerequisites are met:
 
 ```bash
-helm upgrade --install ai-guard deploy/helm/ai-guard \
-  --namespace ai-guard --create-namespace \
+helm upgrade --install modelgov deploy/helm/modelgov \
+  --namespace modelgov --create-namespace \
   --set production=true \
-  --set image.repository=ghcr.io/your-org/ai-guard-api \
+  --set image.repository=ghcr.io/your-org/modelgov-api \
   --set image.tag=v1.0.0 \
   --set api.replicas=2 \
-  --set-string api.extraEnv[0].name=AI_GUARD_PRODUCTION \
+  --set-string api.extraEnv[0].name=MODELGOV_PRODUCTION \
   --set-string api.extraEnv[0].value=true \
   --set-string api.extraEnv[1].name=DATABASE_URL \
   --set-string api.extraEnv[1].value='postgres://...' \
-  --set-string api.extraEnv[2].name=AI_GUARD_API_KEY \
+  --set-string api.extraEnv[2].name=MODELGOV_API_KEY \
   --set-string api.extraEnv[2].value='from-secret' \
   --set redis.enabled=false \
   --set externalRedis.url='rediss://...' \
   --set postgres.enabled=false \
   --set ingress.enabled=true \
-  --set ingress.hosts[0].host=ai-guard.example.com
+  --set ingress.hosts[0].host=modelgov.example.com
 ```
 
-Copy [`deploy/helm/ai-guard/values.yaml`](../deploy/helm/ai-guard/values.yaml) into a private values file for your org; never commit secrets.
+Copy [`deploy/helm/modelgov/values.yaml`](../deploy/helm/modelgov/values.yaml) into a private values file for your org; never commit secrets.
 
 ---
 
@@ -86,20 +86,20 @@ See [`.env.production.example`](../.env.production.example) for the full list. M
 
 | Variable | Notes |
 | --- | --- |
-| `AI_GUARD_PRODUCTION` | Must be `true` — enables fail-closed boot checks |
+| `MODELGOV_PRODUCTION` | Must be `true` — enables fail-closed boot checks |
 | `DATABASE_URL` | Managed Postgres connection string |
 | `DATABASE_SSL` | `require` or `verify-full` (never `disable` for remote DB) |
-| `AI_GUARD_API_KEY` or `AI_GUARD_API_KEYS` | Strong random secret; bootstrap admin key only with `ALLOW_BOOTSTRAP_ADMIN_KEY=true` |
-| `AI_GUARD_CONFIG` | Path to production `ai-guard.yaml` (or enable policy store) |
+| `MODELGOV_API_KEY` or `MODELGOV_API_KEYS` | Strong random secret; bootstrap admin key only with `ALLOW_BOOTSTRAP_ADMIN_KEY=true` |
+| `MODELGOV_CONFIG` | Path to production `modelgov.yaml` (or enable policy store) |
 | `LITELLM_BASE_URL` | In-cluster or sidecar LiteLLM |
 | `REDIS_URL` | Required for multi-replica rate limits |
 | `METRICS_AUTH_TOKEN` | Required when `METRICS_ENABLED=true` |
-| `TRUST_PROXY` | Required when `AI_GUARD_BEHIND_PROXY=true` |
+| `TRUST_PROXY` | Required when `MODELGOV_BEHIND_PROXY=true` |
 
 Run offline checks before deploy:
 
 ```bash
-pnpm ai-guard doctor production --env-file .env.production
+pnpm modelgov doctor production --env-file .env.production
 ```
 
 See [production boot check failures](./security-production-boot-checks.md) for every error and fix.
@@ -111,13 +111,13 @@ See [production boot check failures](./security-production-boot-checks.md) for e
 - Mount secrets via `*_FILE` env vars (Docker/K8s/Vault CSI).
 - Seed **one** bootstrap key with `keys:admin`, then issue all other keys via `/v1/admin/keys`.
 - Never commit `.env.production` or real keys to git.
-- Rotate provider keys in LiteLLM independently of Ai-Guard API keys.
+- Rotate provider keys in LiteLLM independently of Modelgov API keys.
 
 ---
 
 ## Image pinning
 
-Production refuses floating tags when `production: true` (Helm) or `AI_GUARD_PRODUCTION=true` (compose).
+Production refuses floating tags when `production: true` (Helm) or `MODELGOV_PRODUCTION=true` (compose).
 
 Pin every image to a **version tag or `@sha256:` digest**:
 
@@ -129,7 +129,7 @@ image:
 Verify artifacts after release:
 
 ```bash
-scripts/verify-release-artifacts.sh v1.0.0 your-org/Ai-Guard
+scripts/verify-release-artifacts.sh v1.0.0 your-org/Modelgov
 ```
 
 ---
@@ -153,8 +153,8 @@ scripts/verify-release-artifacts.sh v1.0.0 your-org/Ai-Guard
 
 ## TLS and load balancer
 
-- Terminate TLS at ingress; Ai-Guard listens HTTP inside the cluster
-- Set `AI_GUARD_BEHIND_PROXY=true` and `TRUST_PROXY` to your LB CIDR
+- Terminate TLS at ingress; Modelgov listens HTTP inside the cluster
+- Set `MODELGOV_BEHIND_PROXY=true` and `TRUST_PROXY` to your LB CIDR
 - Configure liveness (`/health`) and readiness (`/ready`) probes — see [operations.md](./operations.md)
 
 ---
@@ -183,8 +183,8 @@ See [upgrades.md](./upgrades.md) for version-to-version paths.
 ## Smoke test
 
 ```bash
-export AI_GUARD_URL=https://ai-guard.example.com
-export AI_GUARD_API_KEY='your-key'
+export MODELGOV_URL=https://modelgov.example.com
+export MODELGOV_API_KEY='your-key'
 scripts/prod-readiness-check.sh
 ```
 
@@ -192,7 +192,7 @@ scripts/prod-readiness-check.sh
 
 ## Rollback
 
-1. `helm rollback ai-guard <revision>` (or redeploy previous image digest)
+1. `helm rollback modelgov <revision>` (or redeploy previous image digest)
 2. **Database:** downgrades are unsupported if migrations are not backward-compatible — restore from backup if needed ([backup-restore drill](./runbooks/backup-restore-drill.md))
 3. Re-run readiness script
 

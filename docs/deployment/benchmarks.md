@@ -3,9 +3,9 @@
 > **Status:** baseline measured on reference hardware (Jul 2026). These are **baseline
 > figures, not universal SLAs** — re-run on your infrastructure before capacity planning.
 
-The goal is to measure **gateway overhead** — the latency and throughput Ai-Guard
+The goal is to measure **gateway overhead** — the latency and throughput Modelgov
 itself adds — separately from provider (model) time, which dominates real
-`/v1/chat` latency and is outside Ai-Guard's control.
+`/v1/chat` latency and is outside Modelgov's control.
 
 ---
 
@@ -15,7 +15,7 @@ Reference run on a **single VM**, Docker Compose, Postgres 16, Redis enabled, No
 
 | Field | Value |
 | --- | --- |
-| Ai-Guard version | `v1.0.0` |
+| Modelgov version | `v1.0.0` |
 | API replicas | 1 |
 | API CPU / memory | 2 vCPU / 512 MiB limit |
 | Postgres | 16 (compose), `DB_POOL_MAX=10` |
@@ -28,7 +28,7 @@ Reference run on a **single VM**, Docker Compose, Postgres 16, Redis enabled, No
 
 ```bash
 make up
-AI_GUARD_URL=http://127.0.0.1:3000 AI_GUARD_API_KEY=sk-ai-guard-api-local \
+MODELGOV_URL=http://127.0.0.1:3000 MODELGOV_API_KEY=sk-modelgov-api-local \
   BENCH_OPS=500 BENCH_CONCURRENCY=16 npx tsx scripts/bench-api-latency.ts
 ```
 
@@ -111,7 +111,7 @@ latency does not swamp the signal — and label the run accordingly.
 
 ### Preconditions
 
-- A representative `ai-guard.yaml` (real feature/user-type/model-class counts).
+- A representative `modelgov.yaml` (real feature/user-type/model-class counts).
 - Postgres sized like production; note `DB_POOL_MAX` (default 10).
 - `REDIS_URL` set (production limiter path); note `RATE_LIMIT_MAX` — the default
   120/min/IP will throttle the load generator, so either raise it for the run or
@@ -148,9 +148,9 @@ export const options = {
   },
 };
 
-const URL = `${__ENV.AI_GUARD_URL}/v1/explain`;
+const URL = `${__ENV.MODELGOV_URL}/v1/explain`;
 const HEADERS = {
-  Authorization: `Bearer ${__ENV.AI_GUARD_API_KEY}`,
+  Authorization: `Bearer ${__ENV.MODELGOV_API_KEY}`,
   "Content-Type": "application/json",
 };
 const BODY = JSON.stringify({
@@ -172,12 +172,12 @@ export default function () {
 ```bash
 # targets.txt
 # POST http://localhost:3000/v1/explain
-# Authorization: Bearer $AI_GUARD_API_KEY
+# Authorization: Bearer $MODELGOV_API_KEY
 # Content-Type: application/json
 # @body.json
 
 echo 'POST http://localhost:3000/v1/explain
-Authorization: Bearer '"$AI_GUARD_API_KEY"'
+Authorization: Bearer '"$MODELGOV_API_KEY"'
 Content-Type: application/json
 @body.json' > targets.txt
 
@@ -208,7 +208,7 @@ Fill in on your hardware. **Do not ship these placeholders as real numbers.**
 
 | Field | Value |
 | --- | --- |
-| Ai-Guard image / commit | `TO BE MEASURED` |
+| Modelgov image / commit | `TO BE MEASURED` |
 | API replicas / CPU / mem | `TO BE MEASURED` |
 | Postgres (managed? version, size) | `TO BE MEASURED` |
 | `DB_POOL_MAX` | `TO BE MEASURED` |

@@ -1,6 +1,6 @@
 # Upgrades
 
-Guidance for upgrading Ai-Guard between release versions.
+Guidance for upgrading Modelgov between release versions.
 
 ## Supported upgrade paths
 
@@ -16,7 +16,7 @@ Always read [CHANGELOG.md](../CHANGELOG.md) and [RELEASE_NOTES/](../RELEASE_NOTE
 
 1. **Backup Postgres** — `scripts/backup-postgres.sh`
 2. **Verify version alignment** — `bash scripts/verify-versions.sh`
-3. **Run production doctor** — `pnpm ai-guard doctor production`
+3. **Run production doctor** — `pnpm modelgov doctor production`
 4. **Note current image digest** for rollback
 
 ## Upgrade procedure (Helm)
@@ -27,17 +27,17 @@ export DATABASE_URL='postgres://...'
 scripts/backup-postgres.sh ./backups
 
 # 2. Upgrade chart + image
-helm upgrade ai-guard deploy/helm/ai-guard \
-  --namespace ai-guard \
+helm upgrade modelgov deploy/helm/modelgov \
+  --namespace modelgov \
   --set image.tag=v1.0.0 \
   -f your-values.yaml
 
 # 3. Wait for rollout
-kubectl rollout status deployment/ai-guard-api -n ai-guard
+kubectl rollout status deployment/modelgov-api -n modelgov
 
 # 4. Readiness drill
-export AI_GUARD_URL=https://ai-guard.example.com
-export AI_GUARD_API_KEY='...'
+export MODELGOV_URL=https://modelgov.example.com
+export MODELGOV_API_KEY='...'
 scripts/prod-readiness-check.sh
 ```
 
@@ -53,9 +53,9 @@ node packages/api/dist/migrate.js
 
 | Scenario | Action |
 | --- | --- |
-| New pods fail readiness | `helm rollback ai-guard <revision>` |
+| New pods fail readiness | `helm rollback modelgov <revision>` |
 | Migration succeeded but app broken | Roll back image **and** restore DB if schema incompatible |
-| Config-only change | Revert `ai-guard.yaml` or activate prior policy version via `/v1/admin/policy` |
+| Config-only change | Revert `modelgov.yaml` or activate prior policy version via `/v1/admin/policy` |
 
 **Downgrades:** If a migration is not reversible, you must restore the pre-upgrade backup — do not run an older binary against a newer schema.
 
@@ -63,7 +63,7 @@ node packages/api/dist/migrate.js
 
 ## Config compatibility
 
-- `ai-guard.yaml` is validated strictly: an unknown or misspelled key (e.g. `montly_usd`) is a hard error, not silently ignored — a mistyped cap can never fail open. Validate before deploy with `pnpm ai-guard validate --production`
+- `modelgov.yaml` is validated strictly: an unknown or misspelled key (e.g. `montly_usd`) is a hard error, not silently ignored — a mistyped cap can never fail open. Validate before deploy with `pnpm modelgov validate --production`
 - New env vars are optional with safe defaults — see [configuration.md](./configuration.md)
 - Enable new features (`POLICY_STORE_ENABLED`, `MULTI_TENANT_POLICY`) only after reading design docs
 

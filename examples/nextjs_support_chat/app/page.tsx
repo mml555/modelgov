@@ -1,7 +1,7 @@
 export default function Home() {
   return (
     <main style={{ fontFamily: "system-ui", padding: "2rem", maxWidth: 640 }}>
-      <h1>Next.js + Ai-Guard</h1>
+      <h1>Next.js + Modelgov</h1>
       <p>
         This page is a shell. Use the API route:
       </p>
@@ -12,7 +12,7 @@ export default function Home() {
   -d '{"message":"How do I reset my password?"}'`}
       </pre>
       <p>
-        See <code>README.md</code> for the auth → Ai-Guard integration pattern.
+        See <code>README.md</code> for the auth → Modelgov integration pattern.
       </p>
     </main>
   );

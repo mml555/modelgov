@@ -1,6 +1,6 @@
-# Ai-Guard Operator Console
+# Modelgov Operator Console
 
-Thin self-hosted admin UI over existing Ai-Guard APIs. No separate database.
+Thin self-hosted admin UI over existing Modelgov APIs. No separate database.
 
 ## Disable entirely
 
@@ -10,32 +10,32 @@ Do not deploy this app — the API works without it. There is no required consol
 
 ```bash
 pnpm install
-pnpm --filter @ai-guard/operator-console dev
+pnpm --filter @modelgov/operator-console dev
 ```
 
 Set the API URL (defaults to `http://127.0.0.1:3000`):
 
 ```bash
-VITE_AI_GUARD_URL=http://127.0.0.1:3000 pnpm --filter @ai-guard/operator-console dev
+VITE_MODELGOV_URL=http://127.0.0.1:3000 pnpm --filter @modelgov/operator-console dev
 ```
 
 ## Production build
 
 ```bash
-pnpm --filter @ai-guard/operator-console build
+pnpm --filter @modelgov/operator-console build
 # Serve apps/operator-console/dist/ from nginx or a static CDN — internal network only
 ```
 
 Or build the turnkey container (non-root nginx, SPA fallback, listens on 8080):
 
 ```bash
-docker build -t ai-guard-operator-console apps/operator-console
-docker run -p 8080:8080 ai-guard-operator-console
+docker build -t modelgov-operator-console apps/operator-console
+docker run -p 8080:8080 modelgov-operator-console
 ```
 
 The API base URL is entered on the login screen and persisted for the session,
 so a single build/image serves any deployment — no rebuild per environment. The
-`VITE_AI_GUARD_URL` build-time value is only the pre-filled default.
+`VITE_MODELGOV_URL` build-time value is only the pre-filled default.
 
 ## Auth
 

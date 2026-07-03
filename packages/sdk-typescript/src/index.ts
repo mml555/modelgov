@@ -1,10 +1,10 @@
 export {
-  createAiGuardClient,
-  AiGuardError,
+  createModelgovClient,
+  ModelgovError,
   PolicyBlockedError,
   SafetyBlockedError,
-  type AiGuardClient,
-  type AiGuardClientOptions,
+  type ModelgovClient,
+  type ModelgovClientOptions,
   type ChatOptions,
 } from "./client";
 export type {

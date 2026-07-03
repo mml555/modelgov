@@ -1,9 +1,9 @@
 // Static price table for cost *estimation* only. The reservation uses this
 // estimate; the real cost returned by LiteLLM reconciles it after the call
 // (recordActualCost). Prices are USD per 1K tokens. Keep keys aligned with the
-// model strings used in `ai-guard.yaml` model_classes.
+// model strings used in `modelgov.yaml` model_classes.
 
-import type { AiGuardConfig } from "./types";
+import type { ModelgovConfig } from "./types";
 
 export interface ModelPrice {
   inputPer1k: number;
@@ -30,7 +30,7 @@ export const DEFAULT_INPUT_TOKENS = 500;
 
 /**
  * Resolve a model's price: config `pricing` override → built-in table →
- * conservative default. `overrides` come from `ai-guard.yaml`'s `pricing:`.
+ * conservative default. `overrides` come from `modelgov.yaml`'s `pricing:`.
  */
 export function getModelPrice(
   model: string,
@@ -84,7 +84,7 @@ export function isPricingExemptModel(model: string): boolean {
 }
 
 /** Collect every provider model string referenced in a parsed config. */
-export function collectConfiguredModels(config: AiGuardConfig): string[] {
+export function collectConfiguredModels(config: ModelgovConfig): string[] {
   const models = new Set<string>();
   for (const cls of Object.values(config.modelClasses)) {
     models.add(cls.primary);
@@ -100,7 +100,7 @@ export function collectConfiguredModels(config: AiGuardConfig): string[] {
  * Models missing from PRICE_TABLE (and not pricing-exempt). Used at API boot to
  * warn operators that budget reservations may be inaccurate.
  */
-export function findUnpricedModels(config: AiGuardConfig): string[] {
+export function findUnpricedModels(config: ModelgovConfig): string[] {
   const custom = config.pricing ?? {};
   return collectConfiguredModels(config).filter(
     (model) => !isPricingExemptModel(model) && !(model in PRICE_TABLE) && !(model in custom),

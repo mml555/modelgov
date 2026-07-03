@@ -1,6 +1,6 @@
-/** Offline production posture checks for `ai-guard doctor production`. */
+/** Offline production posture checks for `modelgov doctor production`. */
 
-import { deployProfileChecks } from "@ai-guard/policy-engine";
+import { deployProfileChecks } from "@modelgov/policy-engine";
 
 export interface ProductionCheck {
   severity: "pass" | "warn" | "fail";
@@ -9,8 +9,8 @@ export interface ProductionCheck {
   fix?: string;
 }
 
-const KNOWN_DEV_API_KEYS = new Set(["sk-ai-guard-api-local", "smoke-test-key"]);
-const KNOWN_DEV_LANGFUSE = new Set(["pk-lf-ai-guard-local", "sk-lf-ai-guard-local"]);
+const KNOWN_DEV_API_KEYS = new Set(["sk-modelgov-api-local", "smoke-test-key"]);
+const KNOWN_DEV_LANGFUSE = new Set(["pk-lf-modelgov-local", "sk-lf-modelgov-local"]);
 const MIN_SECRET = 24;
 
 function isWeakSecret(value: string | undefined): boolean {
@@ -36,11 +36,11 @@ export function productionDoctorChecksFromEnv(env: Record<string, string>): Prod
     checks.push({ severity, code, message, fix });
   };
 
-  if (env.AI_GUARD_PRODUCTION !== "true") {
-    push("warn", "production_mode", "AI_GUARD_PRODUCTION is not true", "Set AI_GUARD_PRODUCTION=true");
+  if (env.MODELGOV_PRODUCTION !== "true") {
+    push("warn", "production_mode", "MODELGOV_PRODUCTION is not true", "Set MODELGOV_PRODUCTION=true");
   }
 
-  const apiKey = env.AI_GUARD_API_KEY;
+  const apiKey = env.MODELGOV_API_KEY;
   if (apiKey && KNOWN_DEV_API_KEYS.has(apiKey)) {
     push("fail", "dev_api_key", "API key is a known dev default", "Generate a random secret");
   } else if (apiKey && isWeakSecret(apiKey)) {
@@ -75,7 +75,7 @@ export function productionDoctorChecksFromEnv(env: Record<string, string>): Prod
     push("fail", "idempotency_capture", "Idempotency content capture without override", "Set IDEMPOTENCY_CAPTURE_CONTENT=false or ALLOW=true");
   }
 
-  if (env.AI_GUARD_BEHIND_PROXY === "true" && !env.TRUST_PROXY) {
+  if (env.MODELGOV_BEHIND_PROXY === "true" && !env.TRUST_PROXY) {
     push("fail", "trust_proxy", "Behind proxy but TRUST_PROXY unset", "Set TRUST_PROXY to LB CIDR");
   }
 
@@ -94,11 +94,11 @@ export function productionDoctorChecksFromEnv(env: Record<string, string>): Prod
     push("warn", "rate_limit_fail_open", "Rate limits fail open when Redis unreachable");
   }
 
-  if (!env.REDIS_URL && env.AI_GUARD_PRODUCTION === "true") {
+  if (!env.REDIS_URL && env.MODELGOV_PRODUCTION === "true") {
     push("warn", "redis", "REDIS_URL not set — per-replica rate limits only", "Configure managed Redis for multi-replica");
   }
 
-  for (const c of deployProfileChecks(env, { production: env.AI_GUARD_PRODUCTION === "true" })) {
+  for (const c of deployProfileChecks(env, { production: env.MODELGOV_PRODUCTION === "true" })) {
     push(c.severity, c.code, c.message, c.fix);
   }
 

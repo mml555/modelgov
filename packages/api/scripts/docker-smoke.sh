@@ -30,9 +30,9 @@ echo "== smoke B: the real entrypoint loads its full module graph =="
 # NOT a missing module. (If a new REQUIRED env var is added to loadEnv, add it
 # here so this still reaches the DB probe.)
 OUT="$(docker run --rm \
-  -e AI_GUARD_CONFIG=/app/ai-guard.yaml \
+  -e MODELGOV_CONFIG=/app/modelgov.yaml \
   -e LITELLM_BASE_URL='http://127.0.0.1:1' \
-  -e AI_GUARD_API_KEY='smoke-test-key' \
+  -e MODELGOV_API_KEY='smoke-test-key' \
   -e DATABASE_URL='postgres://smoke:smoke@127.0.0.1:1/none' \
   -e DB_CONNECTION_TIMEOUT_MS=1500 \
   --entrypoint node "$IMAGE" dist/index.js 2>&1 || true)"

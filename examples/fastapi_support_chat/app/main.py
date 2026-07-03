@@ -1,9 +1,9 @@
-"""FastAPI support-chat example — app auth first, then Ai-Guard policy.
+"""FastAPI support-chat example — app auth first, then Modelgov policy.
 
 Run:
     pip install -r requirements.txt
-    export AI_GUARD_URL=http://localhost:3000
-    export AI_GUARD_API_KEY=sk-ai-guard-api-local
+    export MODELGOV_URL=http://localhost:3000
+    export MODELGOV_API_KEY=sk-modelgov-api-local
     uvicorn app.main:app --reload
 
 Then:
@@ -16,13 +16,13 @@ import os
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
-from ai_guard import AiGuardClient, PolicyBlockedError, SafetyBlockedError
+from modelgov import ModelgovClient, PolicyBlockedError, SafetyBlockedError
 
 app = FastAPI(title="support-chat")
 
-ai = AiGuardClient(
-    base_url=os.environ.get("AI_GUARD_URL", "http://localhost:3000"),
-    api_key=os.environ.get("AI_GUARD_API_KEY", ""),
+ai = ModelgovClient(
+    base_url=os.environ.get("MODELGOV_URL", "http://localhost:3000"),
+    api_key=os.environ.get("MODELGOV_API_KEY", ""),
 )
 
 
@@ -31,7 +31,7 @@ class ChatBody(BaseModel):
 
 
 def current_user() -> dict:
-    # Replace with YOUR auth/RBAC. Ai-Guard does not authenticate end users.
+    # Replace with YOUR auth/RBAC. Modelgov does not authenticate end users.
     return {"id": "demo-user", "type": "logged_in"}
 
 
@@ -40,7 +40,7 @@ def support_chat(body: ChatBody):
     user = current_user()  # 1. product authorization is the app's job
 
     try:
-        # 2. Ai-Guard enforces AI policy (budget / tokens / model access / safety).
+        # 2. Modelgov enforces AI policy (budget / tokens / model access / safety).
         result = ai.chat(
             user_id=user["id"],
             user_type=user["type"],

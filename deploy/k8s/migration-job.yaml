@@ -1,8 +1,8 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: ai-guard-migrate
-  namespace: ai-guard
+  name: modelgov-migrate
+  namespace: modelgov
 spec:
   ttlSecondsAfterFinished: 300
   template:
@@ -10,14 +10,14 @@ spec:
       restartPolicy: OnFailure
       containers:
         - name: migrate
-          image: ghcr.io/your-org/ai-guard-api:REPLACE_TAG
+          image: ghcr.io/your-org/modelgov-api:REPLACE_TAG
           command: ["node", "dist/migrate.js"]
           envFrom:
             - secretRef:
-                name: ai-guard-secrets
+                name: modelgov-secrets
           env:
-            - name: AI_GUARD_CONFIG
-              value: /config/ai-guard.yaml
+            - name: MODELGOV_CONFIG
+              value: /config/modelgov.yaml
           volumeMounts:
             - name: config
               mountPath: /config
@@ -25,4 +25,4 @@ spec:
       volumes:
         - name: config
           configMap:
-            name: ai-guard-config
+            name: modelgov-config

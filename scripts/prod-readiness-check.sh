@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Production readiness drill against a running Ai-Guard deployment.
+# Production readiness drill against a running Modelgov deployment.
 # Configure via env vars (see docs/runbooks/production-readiness-drill.md).
 set -euo pipefail
 
-BASE_URL="${AI_GUARD_URL:-http://127.0.0.1:3000}"
-API_KEY="${AI_GUARD_API_KEY:?AI_GUARD_API_KEY is required}"
-INVALID_KEY="${AI_GUARD_INVALID_KEY:-invalid-key-on-purpose}"
+BASE_URL="${MODELGOV_URL:-http://127.0.0.1:3000}"
+API_KEY="${MODELGOV_API_KEY:?MODELGOV_API_KEY is required}"
+INVALID_KEY="${MODELGOV_INVALID_KEY:-invalid-key-on-purpose}"
 METRICS_TOKEN="${METRICS_AUTH_TOKEN:-}"
 METRICS_ENABLED="${METRICS_ENABLED:-false}"
 LIGHT="${PROD_READINESS_LIGHT:-false}"
@@ -33,7 +33,7 @@ json_get() {
   curl -sf "$@" | node -e "let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>{try{const j=JSON.parse(d);console.log(j[$2]??'');}catch{process.exit(1)}})"
 }
 
-echo "Ai-Guard production readiness check"
+echo "Modelgov production readiness check"
 echo "  target: $BASE_URL"
 echo ""
 

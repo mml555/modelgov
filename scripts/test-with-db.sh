@@ -3,9 +3,9 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-CONTAINER_NAME="${AIGUARD_TEST_PG_CONTAINER:-aiguard-test-pg}"
+CONTAINER_NAME="${AIGUARD_TEST_PG_CONTAINER:-modelgov-test-pg}"
 PG_PORT="${AIGUARD_TEST_PG_PORT:-55433}"
-DATABASE_URL="postgres://postgres:postgres@localhost:${PG_PORT}/aiguard"
+DATABASE_URL="postgres://postgres:postgres@localhost:${PG_PORT}/modelgov"
 
 cleanup() {
   docker rm -f "$CONTAINER_NAME" >/dev/null 2>&1 || true
@@ -18,7 +18,7 @@ else
   echo "Starting Postgres test container on port $PG_PORT..."
   docker run -d --rm --name "$CONTAINER_NAME" \
     -e POSTGRES_PASSWORD=postgres \
-    -e POSTGRES_DB=aiguard \
+    -e POSTGRES_DB=modelgov \
     -p "${PG_PORT}:5432" \
     postgres:16-alpine >/dev/null
 fi

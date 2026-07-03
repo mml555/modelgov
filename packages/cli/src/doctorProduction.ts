@@ -26,9 +26,9 @@ export interface DoctorProductionOptions {
 export function runDoctorProduction(opts: DoctorProductionOptions = {}): number {
   const envFile = opts.envFile ?? ".env.production";
   const env = parseEnvFile(envFile);
-  env.AI_GUARD_PRODUCTION = env.AI_GUARD_PRODUCTION ?? "true";
+  env.MODELGOV_PRODUCTION = env.MODELGOV_PRODUCTION ?? "true";
 
-  console.log("Ai-Guard production doctor");
+  console.log("Modelgov production doctor");
   console.log(`  env file: ${envFile}`);
   console.log("");
 

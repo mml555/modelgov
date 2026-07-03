@@ -1,4 +1,4 @@
-import { PolicyConfigError } from "@ai-guard/policy-engine";
+import { PolicyConfigError } from "@modelgov/policy-engine";
 import type { FastifyInstance } from "fastify";
 import type { Pool } from "pg";
 import { z } from "zod";
@@ -118,7 +118,7 @@ export function registerPolicyRoutes(
     }
     try {
       // Reuse the store validator by parsing (no write).
-      const { parseConfig } = await import("@ai-guard/policy-engine");
+      const { parseConfig } = await import("@modelgov/policy-engine");
       parseConfig(parsed.data.yaml);
     } catch (err) {
       if (err instanceof PolicyConfigError) {

@@ -3,10 +3,10 @@
  * Run against a live deployment (see docs/deployment/benchmarks.md).
  *
  * Usage:
- *   AI_GUARD_URL=http://127.0.0.1:3000 AI_GUARD_API_KEY=... npx tsx scripts/bench-api-latency.ts
+ *   MODELGOV_URL=http://127.0.0.1:3000 MODELGOV_API_KEY=... npx tsx scripts/bench-api-latency.ts
  */
-const BASE = process.env.AI_GUARD_URL ?? "http://127.0.0.1:3000";
-const API_KEY = process.env.AI_GUARD_API_KEY ?? "sk-ai-guard-api-local";
+const BASE = process.env.MODELGOV_URL ?? "http://127.0.0.1:3000";
+const API_KEY = process.env.MODELGOV_API_KEY ?? "sk-modelgov-api-local";
 const OPS = Number(process.env.BENCH_OPS ?? 500);
 const CONCURRENCY = Number(process.env.BENCH_CONCURRENCY ?? 16);
 

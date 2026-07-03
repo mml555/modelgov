@@ -5,7 +5,7 @@ import { permissionsForRoles } from "./roles";
 /**
  * OIDC/JWT operator authentication. A corporate IdP issues an access/ID token;
  * we verify its signature against the IdP's JWKS, enforce issuer/audience/exp,
- * then map the token's roles/groups claim to Ai-Guard operator roles and expand
+ * then map the token's roles/groups claim to Modelgov operator roles and expand
  * those to permissions. Application traffic keeps using API keys — this path is
  * for humans/automation acting on the control plane.
  */
@@ -17,8 +17,8 @@ export interface OidcConfig {
   /** Claim holding roles/groups. Default "roles". */
   rolesClaim?: string;
   /**
-   * Map an IdP role/group value to one or more Ai-Guard roles. When omitted, the
-   * claim values are treated as Ai-Guard role names directly (unknown ones grant
+   * Map an IdP role/group value to one or more Modelgov roles. When omitted, the
+   * claim values are treated as Modelgov role names directly (unknown ones grant
    * nothing).
    */
   roleMap?: Record<string, string | string[]>;

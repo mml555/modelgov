@@ -20,7 +20,7 @@ export function registerOpenApi(app: FastifyInstance): void {
     openapi: {
       openapi: "3.0.3",
       info: {
-        title: "Ai-Guard API",
+        title: "Modelgov API",
         version: OPENAPI_VERSION,
         description:
           "Self-hosted AI policy gateway. Every completion is checked against " +

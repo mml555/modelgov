@@ -1,4 +1,4 @@
-# Maps the "cloud" model names in ai-guard.yaml → local Ollama, so the RAG demo
+# Maps the "cloud" model names in modelgov.yaml → local Ollama, so the RAG demo
 # runs with no cloud key. Pull the models first:
 #   ollama pull llama3.2:3b && ollama pull nomic-embed-text
 model_list:

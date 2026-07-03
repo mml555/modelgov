@@ -12,7 +12,7 @@ permissions:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}/ai-guard-api
+  IMAGE_NAME: ${{ github.repository }}/modelgov-api
 
 jobs:
   build:
@@ -53,7 +53,7 @@ jobs:
           context: .
           file: packages/api/Dockerfile
           load: true
-          tags: ai-guard-api:ci
+          tags: modelgov-api:ci
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -61,14 +61,14 @@ jobs:
       # the image and fails if a runtime dependency the bundle externalizes is
       # missing (the ERR_MODULE_NOT_FOUND-at-boot class of bug).
       - name: Runtime smoke test
-        run: bash packages/api/scripts/docker-smoke.sh ai-guard-api:ci
+        run: bash packages/api/scripts/docker-smoke.sh modelgov-api:ci
 
       - name: Scan image for vulnerabilities
         # Pinned to the release commit SHA (not the mutable tag) after the
         # trivy-action tag-integrity incident; bump by SHA only.
         uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # v0.35.0
         with:
-          image-ref: ai-guard-api:ci
+          image-ref: modelgov-api:ci
           format: table
           exit-code: "1"
           severity: HIGH,CRITICAL

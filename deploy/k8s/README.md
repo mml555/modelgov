@@ -1,12 +1,12 @@
 # Kubernetes deployment (sketch)
 
-> **Prefer the [Helm chart](../helm/ai-guard/README.md)** for a real install —
+> **Prefer the [Helm chart](../helm/modelgov/README.md)** for a real install —
 > it templates the API (with a pre-upgrade migration hook), LiteLLM, Redis, and
 > optional Presidio/Postgres/Ingress from values, and is validated with
 > `helm lint` + `kubectl` client checks. These raw manifests are a minimal
 > reference for adapting by hand.
 
-Minimal manifests to run Ai-Guard on Kubernetes. Adapt namespaces, secrets, and image references for your cluster.
+Minimal manifests to run Modelgov on Kubernetes. Adapt namespaces, secrets, and image references for your cluster.
 
 ## Prerequisites
 
@@ -21,7 +21,7 @@ Minimal manifests to run Ai-Guard on Kubernetes. Adapt namespaces, secrets, and 
 | --- | --- |
 | `namespace.yaml` | Isolated namespace |
 | `secret.example.yaml` | Template for API keys and `DATABASE_URL` |
-| `configmap.yaml` | Mount `ai-guard.yaml` policy |
+| `configmap.yaml` | Mount `modelgov.yaml` policy |
 | `migration-job.yaml` | One-shot schema apply (`node dist/migrate.js`) |
 | `deployment.yaml` | API Deployment with probes |
 | `service.yaml` | ClusterIP Service on port 3000 |
@@ -33,7 +33,7 @@ kubectl apply -f deploy/k8s/namespace.yaml
 kubectl apply -f deploy/k8s/secret.example.yaml   # edit first — never commit real secrets
 kubectl apply -f deploy/k8s/configmap.yaml
 kubectl apply -f deploy/k8s/migration-job.yaml
-kubectl wait --for=condition=complete job/ai-guard-migrate -n ai-guard --timeout=120s
+kubectl wait --for=condition=complete job/modelgov-migrate -n modelgov --timeout=120s
 kubectl apply -f deploy/k8s/deployment.yaml
 kubectl apply -f deploy/k8s/service.yaml
 ```

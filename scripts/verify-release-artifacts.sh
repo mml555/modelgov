@@ -5,8 +5,8 @@ set -euo pipefail
 
 TAG="${1:?usage: verify-release-artifacts.sh vX.Y.Z [owner/repo]}"
 VERSION="${TAG#v}"
-REPO="${2:-${GITHUB_REPOSITORY:-mml555/Ai-Guard}}"
-IMAGE="${AI_GUARD_IMAGE:-ghcr.io/${REPO}/ai-guard-api:${TAG}}"
+REPO="${2:-${GITHUB_REPOSITORY:-mml555/modelgov}}"
+IMAGE="${MODELGOV_IMAGE:-ghcr.io/${REPO}/modelgov-api:${TAG}}"
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
@@ -46,7 +46,7 @@ else
 fi
 
 # npm packages (best-effort; may 404 before publish completes)
-for pkg in @ai-guard/policy-engine @ai-guard/sdk @ai-guard/cli create-ai-guard; do
+for pkg in @modelgov/policy-engine @modelgov/sdk @modelgov/cli create-modelgov; do
   if npm view "${pkg}@${VERSION}" version 2>/dev/null | grep -qx "$VERSION"; then
     echo "ok   npm ${pkg}@${VERSION}"
   else
@@ -56,10 +56,10 @@ done
 
 # PyPI
 if command -v curl >/dev/null 2>&1; then
-  if curl -sf "https://pypi.org/pypi/ai-guard-sdk/${VERSION}/json" >/dev/null; then
-    echo "ok   PyPI ai-guard-sdk $VERSION"
+  if curl -sf "https://pypi.org/pypi/modelgov/${VERSION}/json" >/dev/null; then
+    echo "ok   PyPI modelgov $VERSION"
   else
-    echo "warn PyPI ai-guard-sdk $VERSION not found (may not be published yet)"
+    echo "warn PyPI modelgov $VERSION not found (may not be published yet)"
   fi
 fi
 

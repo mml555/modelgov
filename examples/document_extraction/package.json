@@ -7,7 +7,7 @@
     "start": "tsx index.ts"
   },
   "dependencies": {
-    "@ai-guard/sdk": "workspace:*"
+    "@modelgov/sdk": "workspace:*"
   },
   "devDependencies": {
     "tsx": "^4.19.2"

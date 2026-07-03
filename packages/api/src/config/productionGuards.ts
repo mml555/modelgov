@@ -2,17 +2,17 @@ import type { ApiEnv, ApiKeyEnvPrincipal } from "./env";
 import {
   assertDeployProfilePosture,
   deployProfileChecks,
-} from "@ai-guard/policy-engine";
+} from "@modelgov/policy-engine";
 
 /** Well-known keys shipped for local dev / CI smoke — must never run in production. */
 export const KNOWN_DEV_API_KEYS = new Set([
-  "sk-ai-guard-api-local",
+  "sk-modelgov-api-local",
   "smoke-test-key",
 ]);
 
 export const KNOWN_DEV_LANGFUSE_KEYS = new Set([
-  "pk-lf-ai-guard-local",
-  "sk-lf-ai-guard-local",
+  "pk-lf-modelgov-local",
+  "sk-lf-modelgov-local",
 ]);
 
 const ADMIN_PERMISSIONS = new Set([
@@ -70,19 +70,19 @@ function hasAdminPermissions(principal: ApiKeyEnvPrincipal): boolean {
  * after env validation, before any network listeners or dependency wiring.
  */
 export function assertProductionEnv(env: ApiEnv): void {
-  if (env.AI_GUARD_PRODUCTION !== "true") return;
+  if (env.MODELGOV_PRODUCTION !== "true") return;
 
   assertDeployProfilePosture(env as unknown as Record<string, string | undefined>);
 
   for (const principal of env.apiKeys) {
     if (principal.key && KNOWN_DEV_API_KEYS.has(principal.key)) {
       throw new Error(
-        `AI_GUARD production refuses known dev API key '${principal.name}' — set a strong random secret`,
+        `MODELGOV production refuses known dev API key '${principal.name}' — set a strong random secret`,
       );
     }
     if (principal.key && isWeakSecret(principal.key)) {
       throw new Error(
-        `AI_GUARD production refuses weak API key '${principal.name}' — use at least ${MIN_PRODUCTION_SECRET_LENGTH} random characters`,
+        `MODELGOV production refuses weak API key '${principal.name}' — use at least ${MIN_PRODUCTION_SECRET_LENGTH} random characters`,
       );
     }
     if (
@@ -123,7 +123,7 @@ export function assertProductionEnv(env: ApiEnv): void {
   if (env.DATABASE_SSL === "disable") {
     if (env.DATABASE_SSL_DISABLE_ALLOWED !== "true") {
       throw new Error(
-        "DATABASE_SSL=disable is not permitted when AI_GUARD_PRODUCTION=true — use require or verify-full, or set DATABASE_SSL_DISABLE_ALLOWED=true only for bundled Postgres on a private network",
+        "DATABASE_SSL=disable is not permitted when MODELGOV_PRODUCTION=true — use require or verify-full, or set DATABASE_SSL_DISABLE_ALLOWED=true only for bundled Postgres on a private network",
       );
     }
     if (isRemoteDatabaseUrl(env.DATABASE_URL)) {
@@ -133,9 +133,9 @@ export function assertProductionEnv(env: ApiEnv): void {
     }
   }
 
-  if (env.AI_GUARD_BEHIND_PROXY === "true" && !env.TRUST_PROXY) {
+  if (env.MODELGOV_BEHIND_PROXY === "true" && !env.TRUST_PROXY) {
     throw new Error(
-      "AI_GUARD_BEHIND_PROXY=true requires TRUST_PROXY to your load balancer IP/CIDR or hop count",
+      "MODELGOV_BEHIND_PROXY=true requires TRUST_PROXY to your load balancer IP/CIDR or hop count",
     );
   }
 
@@ -176,20 +176,20 @@ export interface ProductionCheck {
   fix?: string;
 }
 
-/** Offline production posture report for `ai-guard doctor production`. */
+/** Offline production posture report for `modelgov doctor production`. */
 export function productionDoctorChecks(env: Record<string, string>): ProductionCheck[] {
   const checks: ProductionCheck[] = [];
-  const production = env.AI_GUARD_PRODUCTION === "true";
+  const production = env.MODELGOV_PRODUCTION === "true";
 
   const push = (severity: ProductionCheck["severity"], code: string, message: string, fix?: string) => {
     checks.push({ severity, code, message, fix });
   };
 
   if (!production) {
-    push("warn", "production_mode", "AI_GUARD_PRODUCTION is not true", "Set AI_GUARD_PRODUCTION=true for production deploys");
+    push("warn", "production_mode", "MODELGOV_PRODUCTION is not true", "Set MODELGOV_PRODUCTION=true for production deploys");
   }
 
-  const apiKey = env.AI_GUARD_API_KEY;
+  const apiKey = env.MODELGOV_API_KEY;
   if (apiKey && KNOWN_DEV_API_KEYS.has(apiKey)) {
     push("fail", "dev_api_key", "API key is a known dev default", "Generate a random secret and rotate all clients");
   } else if (apiKey && isWeakSecret(apiKey)) {
@@ -224,9 +224,9 @@ export function productionDoctorChecks(env: Record<string, string>): ProductionC
     push("fail", "idempotency_capture", "Idempotency content capture enabled without override", "Set IDEMPOTENCY_CAPTURE_CONTENT=false or IDEMPOTENCY_CAPTURE_CONTENT_ALLOW=true");
   }
 
-  if (env.AI_GUARD_BEHIND_PROXY === "true" && !env.TRUST_PROXY) {
+  if (env.MODELGOV_BEHIND_PROXY === "true" && !env.TRUST_PROXY) {
     push("fail", "trust_proxy", "Behind proxy but TRUST_PROXY is unset", "Set TRUST_PROXY to your LB IP/CIDR or hop count");
-  } else if (env.AI_GUARD_BEHIND_PROXY === "true") {
+  } else if (env.MODELGOV_BEHIND_PROXY === "true") {
     push("pass", "trust_proxy", "TRUST_PROXY configured for proxy mode");
   }
 

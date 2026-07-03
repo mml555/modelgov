@@ -19,18 +19,18 @@ describe("expandFileSecrets", () => {
 
   it("does not clobber an explicitly-set base var", () => {
     const out = expandFileSecrets(
-      { AI_GUARD_API_KEY: "explicit", AI_GUARD_API_KEY_FILE: "/run/secrets/key" },
+      { MODELGOV_API_KEY: "explicit", MODELGOV_API_KEY_FILE: "/run/secrets/key" },
       fakeReader,
     );
-    expect(out.AI_GUARD_API_KEY).toBe("explicit");
+    expect(out.MODELGOV_API_KEY).toBe("explicit");
   });
 
   it("overrides an empty base var with the file value", () => {
     const out = expandFileSecrets(
-      { AI_GUARD_API_KEY: "", AI_GUARD_API_KEY_FILE: "/run/secrets/key" },
+      { MODELGOV_API_KEY: "", MODELGOV_API_KEY_FILE: "/run/secrets/key" },
       fakeReader,
     );
-    expect(out.AI_GUARD_API_KEY).toBe("sk-secret");
+    expect(out.MODELGOV_API_KEY).toBe("sk-secret");
   });
 
   it("throws a clear error when a declared secret file is unreadable", () => {

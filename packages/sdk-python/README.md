@@ -1,19 +1,19 @@
-# Ai-Guard Python SDK
+# Modelgov Python SDK
 
-Package: `ai-guard-sdk` (module `ai_guard`). The Python counterpart to
-[`@ai-guard/sdk`](../sdk-typescript).
+Package: `modelgov` (module `modelgov`). The Python counterpart to
+[`@modelgov/sdk`](../sdk-typescript).
 
-The SDK is a **thin HTTP client** to the Ai-Guard API. Policy enforcement is
+The SDK is a **thin HTTP client** to the Modelgov API. Policy enforcement is
 always server-side. Every request declares a **user**, **user type**, and
 **feature**; policy is checked **before** the model call.
 
 ## Install
 
 ```bash
-pip install ai-guard-sdk
+pip install modelgov
 ```
 
-> Note: `ai-guard-sdk` is not yet published to PyPI. Until then, install from
+> Note: `modelgov` is not yet published to PyPI. Until then, install from
 > source with the editable install below (see also [self-host.md](../../docs/self-host.md)).
 
 From the monorepo (editable, with test deps):
@@ -28,18 +28,18 @@ Requires Python >= 3.9. Depends on [`httpx`](https://www.python-httpx.org/).
 
 ```python
 import os
-from ai_guard import AiGuardClient
+from modelgov import ModelgovClient
 
-ai = AiGuardClient(
-    base_url=os.environ.get("AI_GUARD_URL", "http://localhost:3000"),
-    api_key=os.environ["AI_GUARD_API_KEY"],
+ai = ModelgovClient(
+    base_url=os.environ.get("MODELGOV_URL", "http://localhost:3000"),
+    api_key=os.environ["MODELGOV_API_KEY"],
 )
 ```
 
-`AiGuardClient` is a context manager and closes its connection pool on exit:
+`ModelgovClient` is a context manager and closes its connection pool on exit:
 
 ```python
-with AiGuardClient(base_url=..., api_key=...) as ai:
+with ModelgovClient(base_url=..., api_key=...) as ai:
     ...
 ```
 
@@ -48,7 +48,7 @@ with AiGuardClient(base_url=..., api_key=...) as ai:
 ```python
 res = ai.chat(
     user_id="user_123",        # your end-user id
-    user_type="logged_in",     # must match ai-guard.yaml budgets
+    user_type="logged_in",     # must match modelgov.yaml budgets
     feature="support_chat",    # required — registered feature
     model_class="cheap",
     messages=[{"role": "user", "content": "Help me reset my password"}],
@@ -209,13 +209,13 @@ summary = ai.get_usage_summary(feature="support_chat", since="7d")
 | --- | --- |
 | `PolicyBlockedError` | 403 `policy_blocked` or `budget_exceeded` |
 | `SafetyBlockedError` | 403 `safety_blocked` (PII or prompt injection) |
-| `AiGuardError` | Other 4xx / 5xx |
+| `ModelgovError` | Other 4xx / 5xx |
 
-`PolicyBlockedError` and `SafetyBlockedError` subclass `AiGuardError`. Each
+`PolicyBlockedError` and `SafetyBlockedError` subclass `ModelgovError`. Each
 error carries the API's structured envelope:
 
 ```python
-from ai_guard import AiGuardError, PolicyBlockedError, SafetyBlockedError
+from modelgov import ModelgovError, PolicyBlockedError, SafetyBlockedError
 
 try:
     ai.chat(
@@ -229,10 +229,10 @@ except PolicyBlockedError as err:
     print(err.code)              # "policy_blocked" | "budget_exceeded"
     print(err.message)           # human-readable
     print(err.details)           # error.details object
-    print(err.audit_request_id)  # "req_<n>" — ai-guard requests show
+    print(err.audit_request_id)  # "req_<n>" — modelgov requests show
     print(err.request_id)        # HTTP trace id (UUID)
     print(err.body)              # full parsed envelope
-except AiGuardError as err:
+except ModelgovError as err:
     ...
 ```
 
@@ -245,7 +245,7 @@ except AiGuardError as err:
 4. Return res["message"]["content"] to the user
 ```
 
-Never call Ai-Guard before your app has decided the user may use this feature.
+Never call Modelgov before your app has decided the user may use this feature.
 
 ## Development
 

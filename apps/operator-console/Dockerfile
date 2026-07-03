@@ -2,8 +2,8 @@
 # Build context is this directory (apps/operator-console) — the console has no
 # workspace dependencies, so it installs and builds standalone.
 #
-#   docker build -t ai-guard-operator-console apps/operator-console
-#   docker run -p 8080:8080 ai-guard-operator-console
+#   docker build -t modelgov-operator-console apps/operator-console
+#   docker run -p 8080:8080 modelgov-operator-console
 #
 # The API base URL is entered at login (persisted per-session), so ONE image
 # serves any deployment — no rebuild per environment.

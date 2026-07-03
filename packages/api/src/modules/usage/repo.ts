@@ -1,4 +1,4 @@
-import type { ReservationCaps, UsageSnapshot } from "@ai-guard/policy-engine";
+import type { ReservationCaps, UsageSnapshot } from "@modelgov/policy-engine";
 import type { Pool } from "pg";
 import { withTransaction } from "../../db/pool";
 import { dayWindowStart, monthWindowStart } from "../../services/windows";

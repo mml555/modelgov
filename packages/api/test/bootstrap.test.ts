@@ -18,7 +18,7 @@ import {
 } from "../src/bootstrap";
 import { assertProductionEnv } from "../src/config/productionGuards";
 import { loadEnv } from "../src/config/env";
-import { parseConfigObject } from "@ai-guard/policy-engine";
+import { parseConfigObject } from "@modelgov/policy-engine";
 import { mockPool } from "./mockPool";
 
 const config = parseConfigObject({
@@ -33,14 +33,14 @@ const config = parseConfigObject({
 });
 
 describe("createRuntimeServices production guard", () => {
-  it("refuses dev Langfuse credentials when AI_GUARD_PRODUCTION=true", () => {
+  it("refuses dev Langfuse credentials when MODELGOV_PRODUCTION=true", () => {
     expect(() =>
       createRuntimeServices(
         {
           LITELLM_BASE_URL: "http://localhost:4000",
-          LANGFUSE_PUBLIC_KEY: "pk-lf-ai-guard-local",
-          LANGFUSE_SECRET_KEY: "sk-lf-ai-guard-local",
-          AI_GUARD_PRODUCTION: "true",
+          LANGFUSE_PUBLIC_KEY: "pk-lf-modelgov-local",
+          LANGFUSE_SECRET_KEY: "sk-lf-modelgov-local",
+          MODELGOV_PRODUCTION: "true",
         } as never,
         config,
       ),
@@ -52,10 +52,10 @@ describe("assertProductionEnv integration", () => {
   it("refuses smoke-test-key in production", () => {
     const env = loadEnv({
       DATABASE_URL: "postgres://u:p@localhost/db",
-      AI_GUARD_CONFIG: "./ai-guard.yaml",
+      MODELGOV_CONFIG: "./modelgov.yaml",
       LITELLM_BASE_URL: "http://localhost:4000",
-      AI_GUARD_API_KEY: "smoke-test-key",
-      AI_GUARD_PRODUCTION: "true",
+      MODELGOV_API_KEY: "smoke-test-key",
+      MODELGOV_PRODUCTION: "true",
       METRICS_ENABLED: "false",
       DATABASE_SSL: "require",
     });
@@ -93,9 +93,9 @@ describe("bootstrap helpers", () => {
   it("resolveBudgetAlert validates public URLs by default", () => {
     const env = loadEnv({
       DATABASE_URL: "postgres://u:p@localhost/db",
-      AI_GUARD_CONFIG: "./ai-guard.yaml",
+      MODELGOV_CONFIG: "./modelgov.yaml",
       LITELLM_BASE_URL: "http://localhost:4000",
-      AI_GUARD_API_KEY: "sk-test-key-1234567890",
+      MODELGOV_API_KEY: "sk-test-key-1234567890",
       BUDGET_ALERT_WEBHOOK_URL: "https://hooks.example.com/budget",
       BUDGET_ALERT_WEBHOOK_SECRET: "s3cret",
     });
@@ -106,9 +106,9 @@ describe("bootstrap helpers", () => {
   it("connectRedisIfConfigured returns undefined when REDIS_URL is unset", async () => {
     const env = loadEnv({
       DATABASE_URL: "postgres://u:p@localhost/db",
-      AI_GUARD_CONFIG: "./ai-guard.yaml",
+      MODELGOV_CONFIG: "./modelgov.yaml",
       LITELLM_BASE_URL: "http://localhost:4000",
-      AI_GUARD_API_KEY: "sk-test-key-1234567890",
+      MODELGOV_API_KEY: "sk-test-key-1234567890",
     });
     await expect(connectRedisIfConfigured(env)).resolves.toBeUndefined();
   });
@@ -116,9 +116,9 @@ describe("bootstrap helpers", () => {
   it("connectRedisIfConfigured throws when Redis is unreachable", async () => {
     const env = loadEnv({
       DATABASE_URL: "postgres://u:p@localhost/db",
-      AI_GUARD_CONFIG: "./ai-guard.yaml",
+      MODELGOV_CONFIG: "./modelgov.yaml",
       LITELLM_BASE_URL: "http://localhost:4000",
-      AI_GUARD_API_KEY: "sk-test-key-1234567890",
+      MODELGOV_API_KEY: "sk-test-key-1234567890",
       REDIS_URL: "redis://127.0.0.1:6399",
     });
     await expect(connectRedisIfConfigured(env)).rejects.toThrow(/Redis unreachable/);
@@ -127,18 +127,18 @@ describe("bootstrap helpers", () => {
   it("resolveBudgetAlert rejects private URLs unless explicitly allowed", () => {
     const env = loadEnv({
       DATABASE_URL: "postgres://u:p@localhost/db",
-      AI_GUARD_CONFIG: "./ai-guard.yaml",
+      MODELGOV_CONFIG: "./modelgov.yaml",
       LITELLM_BASE_URL: "http://localhost:4000",
-      AI_GUARD_API_KEY: "sk-test-key-1234567890",
+      MODELGOV_API_KEY: "sk-test-key-1234567890",
       BUDGET_ALERT_WEBHOOK_URL: "http://10.0.0.1/hook",
     });
     expect(() => resolveBudgetAlert(env)).toThrow(/private/);
     const allowed = loadEnv({
       ...{
         DATABASE_URL: "postgres://u:p@localhost/db",
-        AI_GUARD_CONFIG: "./ai-guard.yaml",
+        MODELGOV_CONFIG: "./modelgov.yaml",
         LITELLM_BASE_URL: "http://localhost:4000",
-        AI_GUARD_API_KEY: "sk-test-key-1234567890",
+        MODELGOV_API_KEY: "sk-test-key-1234567890",
       },
       BUDGET_ALERT_WEBHOOK_URL: "http://10.0.0.1/hook",
       BUDGET_ALERT_WEBHOOK_ALLOW_PRIVATE: "true",
@@ -151,10 +151,10 @@ describe("createAuthProviders OIDC audience", () => {
   it("throws in production when OIDC is configured without audience", () => {
     const env = loadEnv({
       DATABASE_URL: "postgres://u:p@localhost/db",
-      AI_GUARD_CONFIG: "./ai-guard.yaml",
+      MODELGOV_CONFIG: "./modelgov.yaml",
       LITELLM_BASE_URL: "http://localhost:4000",
-      AI_GUARD_API_KEY: "sk-production-secret-key-12345",
-      AI_GUARD_PRODUCTION: "true",
+      MODELGOV_API_KEY: "sk-production-secret-key-12345",
+      MODELGOV_PRODUCTION: "true",
       OIDC_ISSUER: "https://login.example.com/",
       OIDC_JWKS_URI: "https://login.example.com/.well-known/jwks.json",
     });
@@ -164,9 +164,9 @@ describe("createAuthProviders OIDC audience", () => {
   it("throws in non-production when OIDC lacks audience and optional flag is off", () => {
     const env = loadEnv({
       DATABASE_URL: "postgres://u:p@localhost/db",
-      AI_GUARD_CONFIG: "./ai-guard.yaml",
+      MODELGOV_CONFIG: "./modelgov.yaml",
       LITELLM_BASE_URL: "http://localhost:4000",
-      AI_GUARD_API_KEY: "sk-production-secret-key-12345",
+      MODELGOV_API_KEY: "sk-production-secret-key-12345",
       OIDC_ISSUER: "https://login.example.com/",
       OIDC_JWKS_URI: "https://login.example.com/.well-known/jwks.json",
     });
@@ -177,9 +177,9 @@ describe("createAuthProviders OIDC audience", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const env = loadEnv({
       DATABASE_URL: "postgres://u:p@localhost/db",
-      AI_GUARD_CONFIG: "./ai-guard.yaml",
+      MODELGOV_CONFIG: "./modelgov.yaml",
       LITELLM_BASE_URL: "http://localhost:4000",
-      AI_GUARD_API_KEY: "sk-production-secret-key-12345",
+      MODELGOV_API_KEY: "sk-production-secret-key-12345",
       OIDC_ISSUER: "https://login.example.com/",
       OIDC_JWKS_URI: "https://login.example.com/.well-known/jwks.json",
       OIDC_AUDIENCE_OPTIONAL: "true",
@@ -193,12 +193,12 @@ describe("createAuthProviders OIDC audience", () => {
   it("throws when OIDC_ROLE_MAP is invalid JSON", () => {
     const env = loadEnv({
       DATABASE_URL: "postgres://u:p@localhost/db",
-      AI_GUARD_CONFIG: "./ai-guard.yaml",
+      MODELGOV_CONFIG: "./modelgov.yaml",
       LITELLM_BASE_URL: "http://localhost:4000",
-      AI_GUARD_API_KEY: "sk-production-secret-key-12345",
+      MODELGOV_API_KEY: "sk-production-secret-key-12345",
       OIDC_ISSUER: "https://login.example.com/",
       OIDC_JWKS_URI: "https://login.example.com/.well-known/jwks.json",
-      OIDC_AUDIENCE: "ai-guard",
+      OIDC_AUDIENCE: "modelgov",
       OIDC_ROLE_MAP: "not-json",
     });
     expect(() => createAuthProviders(env, mockPool() as never)).toThrow(/valid JSON/);
@@ -225,14 +225,14 @@ safety:
 
 describe("resolvePolicy", () => {
   it("loads file config when POLICY_STORE_ENABLED=false", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "aiguard-policy-"));
-    const configPath = join(dir, "ai-guard.yaml");
+    const dir = mkdtempSync(join(tmpdir(), "modelgov-policy-"));
+    const configPath = join(dir, "modelgov.yaml");
     writeFileSync(configPath, MINIMAL_YAML);
     const env = loadEnv({
       DATABASE_URL: "postgres://u:p@localhost/db",
-      AI_GUARD_CONFIG: configPath,
+      MODELGOV_CONFIG: configPath,
       LITELLM_BASE_URL: "http://localhost:4000",
-      AI_GUARD_API_KEY: "sk-test-key-1234567890",
+      MODELGOV_API_KEY: "sk-test-key-1234567890",
       POLICY_STORE_ENABLED: "false",
     });
     const { config, policyMeta } = await resolvePolicy(env, mockPool() as never);
@@ -246,9 +246,9 @@ describe("createPolicyResolver", () => {
   it("returns undefined when MULTI_TENANT_POLICY is off", () => {
     const env = loadEnv({
       DATABASE_URL: "postgres://u:p@localhost/db",
-      AI_GUARD_CONFIG: "./ai-guard.yaml",
+      MODELGOV_CONFIG: "./modelgov.yaml",
       LITELLM_BASE_URL: "http://localhost:4000",
-      AI_GUARD_API_KEY: "sk-test-key-1234567890",
+      MODELGOV_API_KEY: "sk-test-key-1234567890",
     });
     expect(createPolicyResolver(env, mockPool() as never, { config, policyMeta: {} })).toBeUndefined();
   });
@@ -257,9 +257,9 @@ describe("createPolicyResolver", () => {
     const warn = vi.fn();
     const env = loadEnv({
       DATABASE_URL: "postgres://u:p@localhost/db",
-      AI_GUARD_CONFIG: "./ai-guard.yaml",
+      MODELGOV_CONFIG: "./modelgov.yaml",
       LITELLM_BASE_URL: "http://localhost:4000",
-      AI_GUARD_API_KEY: "sk-test-key-1234567890",
+      MODELGOV_API_KEY: "sk-test-key-1234567890",
       MULTI_TENANT_POLICY: "true",
       POLICY_STORE_ENABLED: "false",
     });
@@ -277,9 +277,9 @@ describe("startBackgroundJobs", () => {
   it("returns undefined when maintenance is disabled", () => {
     const env = loadEnv({
       DATABASE_URL: "postgres://u:p@localhost/db",
-      AI_GUARD_CONFIG: "./ai-guard.yaml",
+      MODELGOV_CONFIG: "./modelgov.yaml",
       LITELLM_BASE_URL: "http://localhost:4000",
-      AI_GUARD_API_KEY: "sk-test-key-1234567890",
+      MODELGOV_API_KEY: "sk-test-key-1234567890",
       MAINTENANCE_ENABLED: "false",
     });
     expect(startBackgroundJobs(env, config, mockPool() as never, { warn: vi.fn() } as never)).toBeUndefined();
@@ -290,9 +290,9 @@ describe("startBackgroundJobs", () => {
     const warn = vi.fn();
     const env = loadEnv({
       DATABASE_URL: "postgres://u:p@localhost/db",
-      AI_GUARD_CONFIG: "./ai-guard.yaml",
+      MODELGOV_CONFIG: "./modelgov.yaml",
       LITELLM_BASE_URL: "http://localhost:4000",
-      AI_GUARD_API_KEY: "sk-test-key-1234567890",
+      MODELGOV_API_KEY: "sk-test-key-1234567890",
       RESERVATION_STALE_MS: "60000",
       LITELLM_TIMEOUT_MS: "60000",
     });

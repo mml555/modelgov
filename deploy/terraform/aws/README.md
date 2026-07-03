@@ -1,11 +1,11 @@
-# Ai-Guard data tier (AWS)
+# Modelgov data tier (AWS)
 
-Terraform module that provisions the **managed data tier** Ai-Guard needs in
+Terraform module that provisions the **managed data tier** Modelgov needs in
 production — RDS PostgreSQL and (optionally) ElastiCache Redis — with HA defaults,
 and can wire the connection strings straight into the Kubernetes Secret the Helm
 chart consumes.
 
-The API itself runs from the [Helm chart](../../helm/ai-guard/); this module is
+The API itself runs from the [Helm chart](../../helm/modelgov/); this module is
 the "you supply the data tier" half that the chart deliberately does not manage.
 
 ## What it creates
@@ -15,27 +15,27 @@ the "you supply the data tier" half that the chart deliberately does not manage.
 | `aws_db_instance` (PostgreSQL) | Multi-AZ standby, storage encrypted, gp3 autoscaling, 14-day backups, deletion protection, final snapshot |
 | `aws_elasticache_replication_group` (Redis) | 1 replica + automatic failover, Multi-AZ, TLS in transit (`rediss://`) + AUTH token, encryption at rest |
 | Security groups | Ingress on 5432/6379 only from your node-group SG (or CIDRs) |
-| `kubernetes_secret` *(optional)* | `DATABASE_URL` + `REDIS_URL` (+ `AI_GUARD_API_KEY`) for `secret.existingSecret` |
+| `kubernetes_secret` *(optional)* | `DATABASE_URL` + `REDIS_URL` (+ `MODELGOV_API_KEY`) for `secret.existingSecret` |
 
 ## Usage
 
 ```hcl
-module "ai_guard_data" {
-  source = "github.com/your-org/ai-guard//deploy/terraform/aws"
+module "modelgov_data" {
+  source = "github.com/your-org/modelgov//deploy/terraform/aws"
 
-  name                       = "ai-guard-prod"
+  name                       = "modelgov-prod"
   vpc_id                     = var.vpc_id
   subnet_ids                 = var.private_subnet_ids          # >= 2 AZs
   allowed_security_group_ids = [module.eks.node_security_group_id]
 
   # Optional: let Terraform create the k8s Secret the chart reads.
   create_k8s_secret = true
-  k8s_namespace     = "ai-guard"
-  k8s_secret_name   = "ai-guard-secrets"
+  k8s_namespace     = "modelgov"
+  k8s_secret_name   = "modelgov-secrets"
 }
 
 output "database_url" {
-  value     = module.ai_guard_data.database_url
+  value     = module.modelgov_data.database_url
   sensitive = true
 }
 ```
@@ -45,7 +45,7 @@ Then point the chart at the secret:
 ```yaml
 # values.yaml
 secret:
-  existingSecret: ai-guard-secrets
+  existingSecret: modelgov-secrets
 production: true            # refuses floating image tags (see chart README)
 postgres: { enabled: false }
 redis:    { enabled: false, url: "" }   # external Redis from this module

@@ -1,6 +1,6 @@
 # Routing & the allow / block / degrade / fallback decision
 
-How Ai-Guard picks a model and what each policy outcome means. Routing is
+How Modelgov picks a model and what each policy outcome means. Routing is
 intentionally boring in v0.5 — deterministic and easy to reason about.
 
 ## Model classes

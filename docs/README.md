@@ -1,6 +1,6 @@
-# Ai-Guard documentation
+# Modelgov documentation
 
-Ai-Guard is a **self-hosted AI control plane**. You run it in your infrastructure;
+Modelgov is a **self-hosted AI control plane**. You run it in your infrastructure;
 your applications call it to enforce cost, safety, and routing policy before any
 model request reaches a provider.
 
@@ -21,12 +21,12 @@ model request reaches a provider.
 
 | Doc | Who | What |
 | --- | --- | --- |
-| [Integration checklist](./integration-checklist.md) | App developers | Add Ai-Guard in ~20 minutes |
+| [Integration checklist](./integration-checklist.md) | App developers | Add Modelgov in ~20 minutes |
 | [Real app pattern](./integrations/real-app-pattern.md) | App developers | Production integration (event intake) |
-| [TypeScript SDK](./sdk-typescript.md) | App developers | `createAiGuardClient`, types, errors |
+| [TypeScript SDK](./sdk-typescript.md) | App developers | `createModelgovClient`, types, errors |
 | [HTTP API](./api.md) | Any stack | REST, auth, idempotency, OpenAPI |
 | [OpenAPI client generation](./openapi-client.md) | Any stack | Generate a typed client from the spec |
-| [Configuration](./configuration.md) | Operators | `ai-guard.yaml` reference |
+| [Configuration](./configuration.md) | Operators | `modelgov.yaml` reference |
 | [Providers](./providers.md) | Operators | OpenAI, Anthropic, Gemini, OpenRouter, Azure, Bedrock |
 | [Routing & block-vs-degrade](./routing.md) | Operators / engineers | Model selection, outcomes, decision table |
 
@@ -49,7 +49,7 @@ model request reaches a provider.
 | [Backup / restore drill](./runbooks/backup-restore-drill.md) | SRE | Tested restore procedure |
 | [Budget alerts runbook](./runbooks/budget-alerts.md) | On-call | Alert thresholds, raise caps |
 | [Incident response](./runbooks/incident-response.md) | On-call | SEV classification, escalation |
-| [Integration debugging](./runbooks/integration-debugging.md) | On-call | Host app ↔ Ai-Guard correlation |
+| [Integration debugging](./runbooks/integration-debugging.md) | On-call | Host app ↔ Modelgov correlation |
 | [Failure semantics](./failure-semantics.md) | SRE / engineers | Dependency failures, error contract |
 
 ## Security and compliance
@@ -67,7 +67,7 @@ model request reaches a provider.
 | Doc | Who | What |
 | --- | --- | --- |
 | [Architecture](./ARCHITECTURE.md) | Engineers | Policy engine, budgets, auth boundary |
-| [How Ai-Guard compares](./comparison.md) | Evaluators | vs LiteLLM / observability / gateways |
+| [How Modelgov compares](./comparison.md) | Evaluators | vs LiteLLM / observability / gateways |
 | [Commercial pack](./commercial/README.md) | Procurement | SLA, support tiers, questionnaire |
 
 ## Design notes (roadmap)
@@ -81,6 +81,6 @@ model request reaches a provider.
 ## Quick links
 
 - Example apps: [`event_intake_app`](../examples/event_intake_app), [`support_chat`](../examples/support_chat)
-- Production policy: [`ai-guard.production.example.yaml`](../ai-guard.production.example.yaml)
+- Production policy: [`modelgov.production.example.yaml`](../modelgov.production.example.yaml)
 - Production env: [`.env.production.example`](../.env.production.example)
 - OpenAPI: `GET /openapi.json` or release asset `openapi-v1.0.0.json`

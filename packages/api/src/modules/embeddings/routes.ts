@@ -1,4 +1,4 @@
-import type { AiGuardConfig } from "@ai-guard/policy-engine";
+import type { ModelgovConfig } from "@modelgov/policy-engine";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { Pool } from "pg";
 import { sendError } from "../../errors";
@@ -25,7 +25,7 @@ import { errorJsonSchema } from "../chat/schemas";
 import { handleEmbeddings, type EmbeddingsDeps } from "./service";
 
 export interface EmbeddingsRouteDeps {
-  config: AiGuardConfig;
+  config: ModelgovConfig;
   pool: Pool;
   litellm: LiteLLMClient;
   observability?: Observability;
@@ -136,13 +136,13 @@ export function registerEmbeddingsRoute(
 
     const result = await handleEmbeddings(svc, auth.value);
     if (!result.ok) {
-      if (result.auditRequestId) reply.header("x-ai-guard-request-id", result.auditRequestId);
+      if (result.auditRequestId) reply.header("x-modelgov-request-id", result.auditRequestId);
       return sendError(reply, result.status, result.code, result.details, result.message, {
         ...(result.auditRequestId ? { auditRequestId: result.auditRequestId } : {}),
       });
     }
 
-    if (result.body.requestId) reply.header("x-ai-guard-request-id", result.body.requestId);
+    if (result.body.requestId) reply.header("x-modelgov-request-id", result.body.requestId);
     return reply.code(200).send(result.body);
   });
 }

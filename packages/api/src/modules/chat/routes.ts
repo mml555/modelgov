@@ -1,4 +1,4 @@
-import type { AiGuardConfig } from "@ai-guard/policy-engine";
+import type { ModelgovConfig } from "@modelgov/policy-engine";
 import type { FastifyInstance } from "fastify";
 import type { Pool } from "pg";
 import { sendError } from "../../errors";
@@ -38,7 +38,7 @@ function chatDepsForRequest(
 }
 
 export interface ChatRouteDeps {
-  config: AiGuardConfig;
+  config: ModelgovConfig;
   pool: Pool;
   litellm: LiteLLMClient;
   safety: SafetyGuard;
@@ -158,7 +158,7 @@ export function registerChatRoute(
 
     if (!result.ok) {
       if (result.auditRequestId) {
-        reply.header("x-ai-guard-request-id", result.auditRequestId);
+        reply.header("x-modelgov-request-id", result.auditRequestId);
       }
       return sendError(
         reply,
@@ -174,7 +174,7 @@ export function registerChatRoute(
     }
 
     if (result.body.requestId) {
-      reply.header("x-ai-guard-request-id", result.body.requestId);
+      reply.header("x-modelgov-request-id", result.body.requestId);
     }
     return reply.code(200).send(result.body);
   });

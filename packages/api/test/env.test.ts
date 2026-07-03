@@ -3,8 +3,8 @@ import { describe, expect, it } from "vitest";
 import { loadEnv } from "../src/config/env";
 
 const requiredEnv = {
-  DATABASE_URL: "postgres://postgres:postgres@localhost:5432/aiguard",
-  AI_GUARD_CONFIG: "ai-guard.yaml",
+  DATABASE_URL: "postgres://postgres:postgres@localhost:5432/modelgov",
+  MODELGOV_CONFIG: "modelgov.yaml",
   LITELLM_BASE_URL: "http://localhost:4000",
 };
 
@@ -13,8 +13,8 @@ describe("loadEnv", () => {
     const secretHash = createHash("sha256").update("secret").digest("hex");
     const env = loadEnv({
       ...requiredEnv,
-      AI_GUARD_API_KEY: "",
-      AI_GUARD_API_KEYS: JSON.stringify([
+      MODELGOV_API_KEY: "",
+      MODELGOV_API_KEYS: JSON.stringify([
         { name: "tenant-a", keyHash: secretHash, projectId: "tenant-a" },
       ]),
     });
@@ -32,8 +32,8 @@ describe("loadEnv", () => {
   it("normalizes empty optional production-compose values", () => {
     const env = loadEnv({
       ...requiredEnv,
-      AI_GUARD_API_KEY: "secret",
-      AI_GUARD_API_KEYS: "",
+      MODELGOV_API_KEY: "secret",
+      MODELGOV_API_KEYS: "",
       BUDGET_ALERT_WEBHOOK_URL: "",
       LANGFUSE_HOST: "",
       REDIS_URL: "",
@@ -49,9 +49,9 @@ describe("loadEnv", () => {
     expect(() =>
       loadEnv({
         ...requiredEnv,
-        AI_GUARD_API_KEY: "",
-        AI_GUARD_API_KEYS: "",
+        MODELGOV_API_KEY: "",
+        MODELGOV_API_KEYS: "",
       }),
-    ).toThrow(/AI_GUARD_API_KEY or AI_GUARD_API_KEYS is required/);
+    ).toThrow(/MODELGOV_API_KEY or MODELGOV_API_KEYS is required/);
   });
 });

@@ -1,4 +1,4 @@
-import type { SafetyPlan } from "@ai-guard/policy-engine";
+import type { SafetyPlan } from "@modelgov/policy-engine";
 import type { ChatMessage } from "../../types";
 import type { LiteLLMClient } from "../litellm";
 import { CompositeGuard } from "./composite";

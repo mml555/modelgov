@@ -58,7 +58,7 @@ async function main(): Promise<void> {
     metrics: env.METRICS_ENABLED === "true",
     metricsAuthToken: env.METRICS_AUTH_TOKEN,
     logLevel: env.LOG_LEVEL,
-    production: env.AI_GUARD_PRODUCTION === "true",
+    production: env.MODELGOV_PRODUCTION === "true",
     corsAllowOrigins: parseCsv(env.CORS_ALLOW_ORIGINS),
     bodyLimitBytes: env.REQUEST_BODY_LIMIT_BYTES,
     requestTimeoutMs: env.REQUEST_TIMEOUT_MS,
@@ -86,7 +86,7 @@ async function main(): Promise<void> {
   installLifecycle({ app, pool, redis, maintenanceTimer });
 
   await app.listen({ port: env.PORT, host: env.HOST });
-  app.log.info(`ai-guard listening on ${env.HOST}:${env.PORT}`);
+  app.log.info(`modelgov listening on ${env.HOST}:${env.PORT}`);
 }
 
 main().catch((err) => {

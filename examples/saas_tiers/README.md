@@ -15,16 +15,16 @@ Demonstrates **free vs paid AI access** with per-tier budgets and model classes.
 
 ```bash
 pnpm build
-pnpm ai-guard explain --local \
-  --config examples/saas_tiers/ai-guard.yaml \
+pnpm modelgov explain --local \
+  --config examples/saas_tiers/modelgov.yaml \
   --userType free_user --feature support_chat --modelClass standard
 ```
 
 Expected: **block** — free users cannot use `standard`.
 
 ```bash
-pnpm ai-guard explain --local \
-  --config examples/saas_tiers/ai-guard.yaml \
+pnpm modelgov explain --local \
+  --config examples/saas_tiers/modelgov.yaml \
   --userType paid_user --feature support_chat --modelClass standard
 ```
 
@@ -35,23 +35,23 @@ Expected: **allow**.
 1. Point the stack at this policy file:
 
    ```bash
-   export AI_GUARD_CONFIG=examples/saas_tiers/ai-guard.yaml
+   export MODELGOV_CONFIG=examples/saas_tiers/modelgov.yaml
    make setup
    ```
 
 2. Demo each tier:
 
    ```bash
-   AI_GUARD_API_KEY=sk-ai-guard-api-local DEMO_USER_TYPE=free_user \
+   MODELGOV_API_KEY=sk-modelgov-api-local DEMO_USER_TYPE=free_user \
      pnpm --filter saas-tiers-example start "Summarize my account"
 
-   AI_GUARD_API_KEY=sk-ai-guard-api-local DEMO_USER_TYPE=paid_user \
+   MODELGOV_API_KEY=sk-modelgov-api-local DEMO_USER_TYPE=paid_user \
      pnpm --filter saas-tiers-example start "Summarize my account"
    ```
 
 3. Or use explain with live budget data:
 
    ```bash
-   AI_GUARD_API_KEY=sk-ai-guard-api-local pnpm ai-guard explain \
+   MODELGOV_API_KEY=sk-modelgov-api-local pnpm modelgov explain \
      --userType paid_user --feature support_chat --modelClass premium
    ```

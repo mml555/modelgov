@@ -1,6 +1,6 @@
 -- Dynamic, versioned policy store.
 --
--- Instead of a single ai-guard.yaml baked into the image, policy can be stored
+-- Instead of a single modelgov.yaml baked into the image, policy can be stored
 -- here as immutable versions. Exactly one row is active at a time; activating a
 -- new version is an auditable, reversible operation (rollback = activate a prior
 -- version). Every version is validated before it can be saved.

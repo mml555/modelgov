@@ -1,5 +1,5 @@
 name: Bug report
-description: Report a defect in Ai-Guard (gateway, policy engine, SDKs, CLI, or deploy artifacts).
+description: Report a defect in Modelgov (gateway, policy engine, SDKs, CLI, or deploy artifacts).
 title: "[Bug]: "
 labels: ["bug"]
 body:
@@ -7,14 +7,14 @@ body:
     attributes:
       value: |
         Thanks for filing a bug. Please **do not** report security vulnerabilities here —
-        see the [security policy](https://github.com/mml555/Ai-Guard/blob/main/SECURITY.md)
+        see the [security policy](https://github.com/mml555/modelgov/blob/main/SECURITY.md)
         for private disclosure.
   - type: checkboxes
     id: preflight
     attributes:
       label: Preflight
       options:
-        - label: I searched [existing issues](https://github.com/mml555/Ai-Guard/issues?q=is%3Aissue) and this isn't a duplicate.
+        - label: I searched [existing issues](https://github.com/mml555/modelgov/issues?q=is%3Aissue) and this isn't a duplicate.
           required: true
         - label: This is a bug, not a security vulnerability (those go through the security policy).
           required: true
@@ -22,13 +22,13 @@ body:
     id: area
     attributes:
       label: Affected area
-      description: Which part of Ai-Guard is affected?
+      description: Which part of Modelgov is affected?
       options:
         - API / gateway (packages/api)
         - Policy engine (packages/policy-engine)
-        - TypeScript SDK (@ai-guard/sdk)
-        - Python SDK (ai-guard-sdk)
-        - CLI (@ai-guard/cli) / create-ai-guard
+        - TypeScript SDK (@modelgov/sdk)
+        - Python SDK (modelgov)
+        - CLI (@modelgov/cli) / create-modelgov
         - Deploy (Helm / Compose / Terraform / Docker)
         - Operator console
         - Docs / examples

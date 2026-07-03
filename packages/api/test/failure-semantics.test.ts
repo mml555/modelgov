@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseConfigObject } from "@ai-guard/policy-engine";
+import { parseConfigObject } from "@modelgov/policy-engine";
 import { ProviderError } from "../src/services/litellm";
 import { NoopObservability } from "../src/services/observability";
 import {
@@ -208,7 +208,7 @@ describe("dependency failure semantics", () => {
     expect(err.details.reasonCode).toBe("model_class_not_permitted");
     expect(err.details.budgetRemaining).toBeDefined();
     expect(err.details.auditRequestId).toBe("req_1");
-    expect(res.headers["x-ai-guard-request-id"]).toBe("req_1");
+    expect(res.headers["x-modelgov-request-id"]).toBe("req_1");
     expect(err.requestId).toEqual(expect.any(String));
     await server.close();
   });
@@ -227,7 +227,7 @@ describe("dependency failure semantics", () => {
     expect(res.statusCode).toBe(200);
     const body = res.json();
     expect(body.requestId).toBe("req_1");
-    expect(res.headers["x-ai-guard-request-id"]).toBe("req_1");
+    expect(res.headers["x-modelgov-request-id"]).toBe("req_1");
     await server.close();
   });
 });

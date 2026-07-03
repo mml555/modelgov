@@ -1,9 +1,9 @@
 /**
- * Reads ai-guard.yaml and emits TypeScript unions for feature / user_type /
+ * Reads modelgov.yaml and emits TypeScript unions for feature / user_type /
  * model_class names so the SDK enforces registered identifiers at compile time.
  *
  * Usage: pnpm generate-sdk-types
- * Env:   AI_GUARD_CONFIG (optional path to yaml; defaults to repo root)
+ * Env:   MODELGOV_CONFIG (optional path to yaml; defaults to repo root)
  */
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
@@ -12,7 +12,7 @@ import { parseConfig } from "../packages/policy-engine/src/index.ts";
 
 const ROOT = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const configPath = resolve(
-  process.env.AI_GUARD_CONFIG ?? resolve(ROOT, "ai-guard.yaml"),
+  process.env.MODELGOV_CONFIG ?? resolve(ROOT, "modelgov.yaml"),
 );
 const outPath = resolve(
   ROOT,
@@ -24,11 +24,11 @@ function unionType(name: string, values: readonly string[]): string {
     return `export type ${name} = string;`;
   }
   // Widen the union with `(string & {})` so the published SDK also accepts
-  // identifiers from a CONSUMER's own ai-guard.yaml — a closed union baked from
+  // identifiers from a CONSUMER's own modelgov.yaml — a closed union baked from
   // this repo's config would make the package a compile error for anyone else.
   // TypeScript keeps the string literals as editor autocomplete, and the API
   // still rejects unregistered identifiers at runtime. Regenerate against your
-  // own config (AI_GUARD_CONFIG=... pnpm generate-sdk-types) for tailored hints.
+  // own config (MODELGOV_CONFIG=... pnpm generate-sdk-types) for tailored hints.
   const members = [...values.map((v) => JSON.stringify(v)), "(string & {})"].join(" | ");
   return `export type ${name} = ${members};`;
 }

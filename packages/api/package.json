@@ -1,8 +1,8 @@
 {
-  "name": "@ai-guard/api",
+  "name": "@modelgov/api",
   "version": "1.0.0",
   "license": "MIT",
-  "description": "Ai-Guard API: stateful control plane (Postgres + LiteLLM + Safety).",
+  "description": "Modelgov API: stateful control plane (Postgres + LiteLLM + Safety).",
   "type": "module",
   "main": "./dist/index.js",
   "scripts": {
@@ -16,7 +16,7 @@
     "db:init": "tsx src/migrate.ts"
   },
   "dependencies": {
-    "@ai-guard/policy-engine": "workspace:*",
+    "@modelgov/policy-engine": "workspace:*",
     "@fastify/rate-limit": "^10.3.0",
     "@fastify/swagger": "^9.7.0",
     "fastify": "^5.2.0",

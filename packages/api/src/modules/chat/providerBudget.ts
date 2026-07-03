@@ -1,4 +1,4 @@
-import type { AiRequest, PolicyDecision } from "@ai-guard/policy-engine";
+import type { AiRequest, PolicyDecision } from "@modelgov/policy-engine";
 import type { Pool } from "pg";
 import {
   recordIncurredPathCost,

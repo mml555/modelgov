@@ -1,8 +1,8 @@
 // Build-time default; overridable at login and persisted, so one static build
 // serves any deployment (no rebuild per API URL — important for the nginx image).
-const DEFAULT_BASE = import.meta.env.VITE_AI_GUARD_URL ?? "http://127.0.0.1:3000";
-const TOKEN_KEY = "ai-guard-console-token";
-const BASE_KEY = "ai-guard-console-url";
+const DEFAULT_BASE = import.meta.env.VITE_MODELGOV_URL ?? "http://127.0.0.1:3000";
+const TOKEN_KEY = "modelgov-console-token";
+const BASE_KEY = "modelgov-console-url";
 
 export function getToken(): string | null {
   return sessionStorage.getItem(TOKEN_KEY);

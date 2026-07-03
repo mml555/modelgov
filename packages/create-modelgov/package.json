@@ -1,0 +1,25 @@
+{
+  "name": "create-modelgov",
+  "version": "1.0.0",
+  "license": "MIT",
+  "description": "Scaffold an modelgov.yaml + .env for a new project.",
+  "type": "module",
+  "bin": {
+    "create-modelgov": "./dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup src/index.ts --format esm --clean",
+    "typecheck": "tsc --noEmit",
+    "dev": "tsx src/index.ts"
+  },
+  "dependencies": {
+    "@clack/prompts": "^0.8.2",
+    "yaml": "^2.6.1"
+  },
+  "devDependencies": {
+    "@modelgov/policy-engine": "workspace:*"
+  }
+}

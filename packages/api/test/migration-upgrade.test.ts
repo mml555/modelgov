@@ -23,7 +23,7 @@ function databaseUrlForName(baseUrl: string, dbName: string): string {
 }
 
 async function withFreshDatabase<T>(fn: (url: string) => Promise<T>): Promise<T> {
-  const dbName = `aiguard_migration_${process.pid}_${Date.now()}`;
+  const dbName = `modelgov_migration_${process.pid}_${Date.now()}`;
   const admin = new Client({ connectionString: DATABASE_URL });
   await admin.connect();
   try {

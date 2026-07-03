@@ -1,6 +1,6 @@
-# Self-hosting Ai-Guard
+# Self-hosting Modelgov
 
-Ai-Guard is designed as an **open, self-hosted product**: you run the control
+Modelgov is designed as an **open, self-hosted product**: you run the control
 plane in your own cloud or on-prem environment. There is no requirement to use a
 vendor-hosted SaaS — your data, API keys, and policy stay on your infrastructure.
 
@@ -11,7 +11,7 @@ vendor-hosted SaaS — your data, API keys, and policy stay on your infrastructu
 │  Your VPC / datacenter                                  │
 │                                                         │
 │  ┌──────────────┐    ┌─────────┐    ┌──────────────┐   │
-│  │ Ai-Guard API │───▶│ LiteLLM │───▶│ OpenAI / etc │   │
+│  │ Modelgov API │───▶│ LiteLLM │───▶│ OpenAI / etc │   │
 │  │ + Postgres   │    └─────────┘    └──────────────┘   │
 │  └──────┬───────┘                                       │
 │         │ optional: Presidio (PII), Langfuse (traces)   │
@@ -22,7 +22,7 @@ vendor-hosted SaaS — your data, API keys, and policy stay on your infrastructu
 
 | Component | Required? | Role |
 | --- | --- | --- |
-| **Ai-Guard API** | Yes | Policy, budgets, safety orchestration |
+| **Modelgov API** | Yes | Policy, budgets, safety orchestration |
 | **Postgres** | Yes | Usage counters, audit logs, idempotency |
 | **LiteLLM** | Yes | Provider routing and execution |
 | **Presidio** | Recommended | PII mask/block when safety is enabled |
@@ -42,7 +42,7 @@ vendor-hosted SaaS — your data, API keys, and policy stay on your infrastructu
 
 ## Licensing
 
-Ai-Guard is released under the [MIT License](../LICENSE). You may use, modify,
+Modelgov is released under the [MIT License](../LICENSE). You may use, modify,
 and distribute it in your organization or product, subject to the license terms.
 
 Upstream components (LiteLLM, Presidio, Langfuse, Postgres) have their own
@@ -60,8 +60,8 @@ Report security issues per [SECURITY.md](../SECURITY.md).
 
 ## Multi-tenant note
 
-v1 assumes a **single policy file** (`ai-guard.yaml`) per deployment. Multiple
-apps can share one Ai-Guard instance using different API keys and `feature` names.
+v1 assumes a **single policy file** (`modelgov.yaml`) per deployment. Multiple
+apps can share one Modelgov instance using different API keys and `feature` names.
 Hard multi-tenant isolation (separate configs per customer) requires separate
 deployments or future tenancy features.
 

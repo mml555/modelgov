@@ -12,7 +12,7 @@ Use this checklist before calling a deployment **enterprise-ready**. Every item 
 
 ## Security
 
-- [x] [Production boot checks enabled](../packages/api/src/config/productionGuards.ts) — `AI_GUARD_PRODUCTION=true`
+- [x] [Production boot checks enabled](../packages/api/src/config/productionGuards.ts) — `MODELGOV_PRODUCTION=true`
 - [x] [Default secrets rejected](../packages/api/test/productionGuards.test.ts)
 - [x] [Metrics protected](../docs/production-deploy.md#required-environment-variables)
 - [x] [TLS/proxy documented](../docs/production-deploy.md#tls-and-load-balancer)
@@ -54,9 +54,9 @@ Use this checklist before calling a deployment **enterprise-ready**. Every item 
 ## Operator tooling
 
 - [x] [Operator console](../apps/operator-console/) — self-hosted admin UI
-- [x] [Production doctor](../packages/cli/src/doctorProduction.ts) — `pnpm ai-guard doctor production`
+- [x] [Production doctor](../packages/cli/src/doctorProduction.ts) — `pnpm modelgov doctor production`
 - [x] [Production readiness script](../scripts/prod-readiness-check.sh)
 
 ## Definition of done
 
-When all sections above are checked, Ai-Guard meets the [production claims](./production-claims.md) for a self-hosted enterprise deployment.
+When all sections above are checked, Modelgov meets the [production claims](./production-claims.md) for a self-hosted enterprise deployment.

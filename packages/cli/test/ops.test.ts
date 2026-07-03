@@ -4,7 +4,7 @@ import { modeConfig, parseOpsFlags, securityConfigWarnings, assertProductionDepl
 describe("securityConfigWarnings", () => {
   it("warns on dev API keys and OIDC without audience", () => {
     const lines = securityConfigWarnings({
-      AI_GUARD_API_KEY: "sk-ai-guard-api-local",
+      MODELGOV_API_KEY: "sk-modelgov-api-local",
       OIDC_ISSUER: "https://login.example.com/",
       OIDC_JWKS_URI: "https://login.example.com/.well-known/jwks.json",
       RATE_LIMIT_FAIL_OPEN: "true",
@@ -24,8 +24,8 @@ describe("securityConfigWarnings", () => {
 
   it("fails production misconfigurations", () => {
     const lines = securityConfigWarnings({
-      AI_GUARD_PRODUCTION: "true",
-      AI_GUARD_API_KEY: "sk-ai-guard-api-local",
+      MODELGOV_PRODUCTION: "true",
+      MODELGOV_API_KEY: "sk-modelgov-api-local",
       DATABASE_SSL: "disable",
       METRICS_ENABLED: "true",
     });
@@ -35,8 +35,8 @@ describe("securityConfigWarnings", () => {
   it("assertProductionDeploy throws on fail lines", () => {
     expect(() =>
       assertProductionDeploy({
-        AI_GUARD_PRODUCTION: "true",
-        AI_GUARD_API_KEY: "sk-ai-guard-api-local",
+        MODELGOV_PRODUCTION: "true",
+        MODELGOV_API_KEY: "sk-modelgov-api-local",
         DATABASE_SSL: "require",
         METRICS_ENABLED: "true",
         METRICS_AUTH_TOKEN: "secret",
@@ -44,8 +44,8 @@ describe("securityConfigWarnings", () => {
     ).toThrow(/production deploy checks failed/);
     expect(() =>
       assertProductionDeploy({
-        AI_GUARD_PRODUCTION: "true",
-        AI_GUARD_API_KEY: "sk-production-secret-key-12345",
+        MODELGOV_PRODUCTION: "true",
+        MODELGOV_API_KEY: "sk-production-secret-key-12345",
         DATABASE_SSL: "require",
         METRICS_ENABLED: "true",
         METRICS_AUTH_TOKEN: "secret",

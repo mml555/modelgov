@@ -14,7 +14,7 @@ if ! command -v docker >/dev/null 2>&1; then
   echo "error: DATABASE_URL is not set and docker is not available." >&2
   echo "" >&2
   echo "Integration tests require Postgres. Either:" >&2
-  echo "  export DATABASE_URL=postgres://user:pass@localhost:5432/aiguard" >&2
+  echo "  export DATABASE_URL=postgres://user:pass@localhost:5432/modelgov" >&2
   echo "  make test-db                    # disposable Postgres + full suite" >&2
   echo "  pnpm test:db -- --coverage      # same, with coverage" >&2
   exit 1

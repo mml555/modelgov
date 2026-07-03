@@ -3,8 +3,8 @@ import {
   findUnpricedModels,
   parseConfig,
   resolveSafetyPlan,
-  type AiGuardConfig,
-} from "@ai-guard/policy-engine";
+  type ModelgovConfig,
+} from "@modelgov/policy-engine";
 import { resolveUserPath } from "./paths.js";
 
 export interface ValidateIssue {
@@ -40,7 +40,7 @@ export function validateConfig(options: ValidateOptions): ValidateResult {
   return { ok: errors.length === 0, issues };
 }
 
-function validateAlways(config: AiGuardConfig, issues: ValidateIssue[]): void {
+function validateAlways(config: ModelgovConfig, issues: ValidateIssue[]): void {
   if (Object.keys(config.features).length === 0) {
     issues.push({
       level: "error",
@@ -70,7 +70,7 @@ function validateAlways(config: AiGuardConfig, issues: ValidateIssue[]): void {
 }
 
 function validateProduction(
-  config: AiGuardConfig,
+  config: ModelgovConfig,
   env: Record<string, string | undefined>,
   issues: ValidateIssue[],
 ): void {
@@ -174,7 +174,7 @@ function validateProduction(
   auditFeatureSafety(config, issues);
 }
 
-function auditFeatureSafety(config: AiGuardConfig, issues: ValidateIssue[]): void {
+function auditFeatureSafety(config: ModelgovConfig, issues: ValidateIssue[]): void {
   for (const [name, feature] of Object.entries(config.features)) {
     if (!feature.maxTokens || feature.maxTokens > 8000) {
       issues.push({

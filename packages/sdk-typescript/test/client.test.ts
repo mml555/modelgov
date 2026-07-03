@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
-  AiGuardError,
-  createAiGuardClient,
+  ModelgovError,
+  createModelgovClient,
   PolicyBlockedError,
   SafetyBlockedError,
 } from "../src/client";
@@ -28,7 +28,7 @@ const baseRequest = {
   messages: [{ role: "user", content: "hi" }],
 };
 
-describe("createAiGuardClient", () => {
+describe("createModelgovClient", () => {
   it("posts to /v1/chat and returns the parsed response", async () => {
     let capturedUrl = "";
     let capturedBody: unknown;
@@ -41,7 +41,7 @@ describe("createAiGuardClient", () => {
         decision: "allow",
       });
     };
-    const client = createAiGuardClient({ baseUrl: "http://api/", fetchImpl });
+    const client = createModelgovClient({ baseUrl: "http://api/", fetchImpl });
     const res = await client.chat(baseRequest);
 
     expect(capturedUrl).toBe("http://api/v1/chat");
@@ -62,7 +62,7 @@ describe("createAiGuardClient", () => {
         },
         403,
       );
-    const client = createAiGuardClient({ baseUrl: "http://api", fetchImpl });
+    const client = createModelgovClient({ baseUrl: "http://api", fetchImpl });
     await expect(client.chat(baseRequest)).rejects.toBeInstanceOf(PolicyBlockedError);
   });
 
@@ -79,7 +79,7 @@ describe("createAiGuardClient", () => {
         },
         403,
       );
-    const client = createAiGuardClient({ baseUrl: "http://api", fetchImpl });
+    const client = createModelgovClient({ baseUrl: "http://api", fetchImpl });
     await expect(client.chat(baseRequest)).rejects.toBeInstanceOf(SafetyBlockedError);
   });
 
@@ -103,7 +103,7 @@ describe("createAiGuardClient", () => {
         },
         403,
       );
-    const client = createAiGuardClient({ baseUrl: "http://api", fetchImpl });
+    const client = createModelgovClient({ baseUrl: "http://api", fetchImpl });
     try {
       await client.chat(baseRequest);
       throw new Error("expected throw");
@@ -125,7 +125,7 @@ describe("createAiGuardClient", () => {
       auth = new Headers(init?.headers).get("authorization");
       return jsonResponse({ message: { role: "assistant", content: "x" } });
     };
-    const client = createAiGuardClient({ baseUrl: "http://api", apiKey: "secret", fetchImpl });
+    const client = createModelgovClient({ baseUrl: "http://api", apiKey: "secret", fetchImpl });
     await client.chat(baseRequest);
     expect(auth).toBe("Bearer secret");
   });
@@ -140,7 +140,7 @@ describe("createAiGuardClient", () => {
         });
       });
     };
-    const client = createAiGuardClient({ baseUrl: "http://api", fetchImpl, timeoutMs: null });
+    const client = createModelgovClient({ baseUrl: "http://api", fetchImpl, timeoutMs: null });
 
     await expect(client.chat(baseRequest, { timeoutMs: 1 })).rejects.toThrow(/timed out/);
     expect(observedSignal?.aborted).toBe(true);
@@ -157,7 +157,7 @@ describe("createAiGuardClient", () => {
         "[DONE]",
       ]);
     };
-    const client = createAiGuardClient({ baseUrl: "http://api", apiKey: "k", fetchImpl });
+    const client = createModelgovClient({ baseUrl: "http://api", apiKey: "k", fetchImpl });
 
     const chunks: string[] = [];
     const it = client.chatStream(baseRequest);
@@ -174,17 +174,17 @@ describe("createAiGuardClient", () => {
   it("chatStream throws typed errors before streaming begins", async () => {
     const fetchImpl: typeof fetch = async () =>
       jsonResponse({ error: { code: "budget_exceeded", message: "x", details: {}, requestId: "r" } }, 403);
-    const client = createAiGuardClient({ baseUrl: "http://api", fetchImpl });
+    const client = createModelgovClient({ baseUrl: "http://api", fetchImpl });
     const it = client.chatStream(baseRequest);
     await expect(it.next()).rejects.toBeInstanceOf(PolicyBlockedError);
   });
 
-  it("chatStream surfaces the streaming_unsupported 400 as AiGuardError", async () => {
+  it("chatStream surfaces the streaming_unsupported 400 as ModelgovError", async () => {
     const fetchImpl: typeof fetch = async () =>
       jsonResponse({ error: { code: "streaming_unsupported", message: "x", details: {}, requestId: "r" } }, 400);
-    const client = createAiGuardClient({ baseUrl: "http://api", fetchImpl });
+    const client = createModelgovClient({ baseUrl: "http://api", fetchImpl });
     const it = client.chatStream(baseRequest);
-    await expect(it.next()).rejects.toBeInstanceOf(AiGuardError);
+    await expect(it.next()).rejects.toBeInstanceOf(ModelgovError);
   });
 
   it("posts to /v1/explain and returns the parsed response", async () => {
@@ -197,7 +197,7 @@ describe("createAiGuardClient", () => {
         wouldCallModel: false,
       });
     };
-    const client = createAiGuardClient({ baseUrl: "http://api/", fetchImpl });
+    const client = createModelgovClient({ baseUrl: "http://api/", fetchImpl });
     const res = await client.explain({
       userId: "u1",
       userType: "logged_in",

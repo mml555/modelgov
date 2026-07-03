@@ -1,16 +1,16 @@
 import { NextResponse } from "next/server";
 import {
-  AiGuardError,
+  ModelgovError,
   PolicyBlockedError,
   SafetyBlockedError,
   type ChatMessage,
   type FeatureName,
   type UserTypeName,
-} from "@ai-guard/sdk";
-import { ai } from "@/lib/ai-guard";
+} from "@modelgov/sdk";
+import { ai } from "@/lib/modelgov";
 
-// Demo "tiers" map to Ai-Guard user types. In a real app these come from your
-// auth/session — Ai-Guard only ever receives userId + userType.
+// Demo "tiers" map to Modelgov user types. In a real app these come from your
+// auth/session — Modelgov only ever receives userId + userType.
 const TIERS: UserTypeName[] = ["anonymous", "logged_in", "admin"];
 const FEATURES: FeatureName[] = ["support_chat", "notes_helper"];
 
@@ -30,7 +30,7 @@ export async function POST(request: Request): Promise<NextResponse> {
   }
 
   try {
-    // Ai-Guard checks budget / tokens / model access / safety BEFORE the model runs.
+    // Modelgov checks budget / tokens / model access / safety BEFORE the model runs.
     const res = await ai.chat({
       userId: `demo-${userType}`,
       userType,
@@ -72,10 +72,10 @@ export async function POST(request: Request): Promise<NextResponse> {
         { status: 429 },
       );
     }
-    if (err instanceof AiGuardError && err.status === 503) {
+    if (err instanceof ModelgovError && err.status === 503) {
       return NextResponse.json({ ok: false, kind: "unavailable", message: "A safety backend is unavailable." }, { status: 503 });
     }
-    console.error("ai-guard request failed", err);
+    console.error("modelgov request failed", err);
     return NextResponse.json({ ok: false, kind: "error", message: "Upstream error." }, { status: 502 });
   }
 }

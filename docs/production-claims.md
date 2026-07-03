@@ -1,14 +1,14 @@
 # Production claims
 
-What Ai-Guard guarantees, what you must guarantee, and known limitations.
+What Modelgov guarantees, what you must guarantee, and known limitations.
 
-## What Ai-Guard guarantees (shipped software)
+## What Modelgov guarantees (shipped software)
 
 | Claim | Detail |
 | --- | --- |
-| **Policy before provider** | Every `/v1/chat` request is evaluated against `ai-guard.yaml` (or active policy version) before LiteLLM is called |
+| **Policy before provider** | Every `/v1/chat` request is evaluated against `modelgov.yaml` (or active policy version) before LiteLLM is called |
 | **Atomic budget reservation** | Spend caps enforced via Postgres row locks — no over-admission past configured caps under normal operation |
-| **Fail-closed production mode** | With `AI_GUARD_PRODUCTION=true`, known dev keys, unauthenticated metrics, and unsafe capture defaults refuse to boot |
+| **Fail-closed production mode** | With `MODELGOV_PRODUCTION=true`, known dev keys, unauthenticated metrics, and unsafe capture defaults refuse to boot |
 | **Audit metadata** | Guarded requests fail closed if request audit metadata cannot be written; admin mutations commit only with a hash-chained admin audit row |
 | **Versioned API contract** | `/v1/*` documented in committed `openapi.json`, published per release |
 | **Admin APIs** | Keys, policy versions, audit log, usage — operable without SQL |
@@ -19,11 +19,11 @@ What Ai-Guard guarantees, what you must guarantee, and known limitations.
 | --- | --- |
 | End-user authentication | Your app |
 | Mapping users to `userId` / `userType` | Your app |
-| TLS to Ai-Guard | Your infra |
+| TLS to Modelgov | Your infra |
 | API key storage in app servers | Your app |
 | Correct `feature` name per call site | Your app |
 
-Ai-Guard is **not** a user identity provider.
+Modelgov is **not** a user identity provider.
 
 ## What infrastructure must guarantee
 
@@ -50,7 +50,7 @@ Ai-Guard is **not** a user identity provider.
 
 ## Unsupported assumptions
 
-- Ai-Guard as the only security layer (you still need app auth, network policy, secrets management)
+- Modelgov as the only security layer (you still need app auth, network policy, secrets management)
 - Floating `:latest` image tags in production
 - Running without Postgres backups
 - Multi-tenant hard isolation on a single file-config deployment without separate keys/tenants

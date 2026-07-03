@@ -1,5 +1,5 @@
-// ── Core type contracts shared across Ai-Guard ──────────────────────────────
-// These describe the parsed `ai-guard.yaml` (camelCase) plus the pure
+// ── Core type contracts shared across Modelgov ──────────────────────────────
+// These describe the parsed `modelgov.yaml` (camelCase) plus the pure
 // evaluator's input/output. The Policy Engine performs NO I/O; everything it
 // needs is passed in via EvaluateInput.
 
@@ -34,7 +34,7 @@ export type PolicyReasonCode =
   | "feature_monthly_token_limit_reached"
   | "global_monthly_token_limit_reached";
 
-// ── Parsed config (ai-guard.yaml) ───────────────────────────────────────────
+// ── Parsed config (modelgov.yaml) ───────────────────────────────────────────
 
 export interface ProjectConfig {
   name: string;
@@ -128,7 +128,7 @@ export interface RoutingConfig {
   classOrder?: string[];
 }
 
-export interface AiGuardConfig {
+export interface ModelgovConfig {
   project: ProjectConfig;
   providers: Record<string, ProviderConfig>;
   budgets: {
@@ -196,7 +196,7 @@ export interface UsageSnapshot {
 
 export interface EvaluateInput {
   request: AiRequest;
-  config: AiGuardConfig;
+  config: ModelgovConfig;
   usage: UsageSnapshot;
 }
 

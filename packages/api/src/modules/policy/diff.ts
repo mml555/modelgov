@@ -31,7 +31,7 @@ export function deepDiff(from: unknown, to: unknown, base = ""): DiffEntry[] {
   return [{ path: base, from, to }];
 }
 
-/** Diff two ai-guard.yaml documents (snake_case paths, matching the file). */
+/** Diff two modelgov.yaml documents (snake_case paths, matching the file). */
 export function diffConfigYaml(fromYaml: string, toYaml: string): DiffEntry[] {
   const from = parseYaml(fromYaml) as unknown;
   const to = parseYaml(toYaml) as unknown;

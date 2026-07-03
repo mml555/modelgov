@@ -1,6 +1,6 @@
 # HTTP API
 
-Base URL: your Ai-Guard API (default `http://localhost:3000`).
+Base URL: your Modelgov API (default `http://localhost:3000`).
 
 OpenAPI spec: **`GET /openapi.json`** (when server is running).
 
@@ -70,7 +70,7 @@ Default API keys include `chat:create` only. Add `usage:read` for the usage endp
 }
 ```
 
-`feature` is **required** and must exist in `ai-guard.yaml`.
+`feature` is **required** and must exist in `modelgov.yaml`.
 
 ### Streaming (`stream: true`)
 
@@ -133,7 +133,7 @@ Budget is settled after the stream completes; the terminal frame carries the
 including on a fallback) — no need to parse the model string. `decision` is
 `allow` / `degrade` / `fallback`.
 
-Response header: `x-ai-guard-request-id: req_42` (same value as `requestId`).
+Response header: `x-modelgov-request-id: req_42` (same value as `requestId`).
 
 `metadata` in the request body is stored on the audit log for operator search.
 It does **not** affect policy unless you add explicit rules later. Max 32 keys.
@@ -142,10 +142,10 @@ It does **not** affect policy unless you add explicit rules later. Max 32 keys.
 
 | Field / header | When | Format | Use |
 | --- | --- | --- | --- |
-| `requestId` (body) | Success `200` | `req_<n>` | `ai-guard requests show req_<n>` |
+| `requestId` (body) | Success `200` | `req_<n>` | `modelgov requests show req_<n>` |
 | `error.details.auditRequestId` | Policy/safety blocks | `req_<n>` | Same audit lookup |
 | `error.requestId` | All errors | UUID | HTTP trace id |
-| `x-ai-guard-request-id` | Success + many errors | `req_<n>` | Log in your app |
+| `x-modelgov-request-id` | Success + many errors | `req_<n>` | Log in your app |
 
 Log both your domain id and `requestId` / `auditRequestId` for support workflows.
 See [Integration debugging runbook](./runbooks/integration-debugging.md).
@@ -176,7 +176,7 @@ is stable inside `error.details`:
 }
 ```
 
-`details.auditRequestId` is the audit log row (`ai-guard requests show`).
+`details.auditRequestId` is the audit log row (`modelgov requests show`).
 `requestId` is the HTTP trace id (UUID).
 
 | Status | Code | Meaning |
@@ -239,7 +239,7 @@ Same identity fields as `/v1/chat`, but **no `messages`**:
 CLI equivalent:
 
 ```bash
-ai-guard explain --userType logged_in --feature support_chat --modelClass premium
+modelgov explain --userType logged_in --feature support_chat --modelClass premium
 ```
 
 ---
@@ -259,7 +259,7 @@ Query budget counters and recent request stats (operator dashboard / debugging).
 
 ```bash
 curl -s "http://localhost:3000/v1/usage?userId=user_123" \
-  -H "Authorization: Bearer $AI_GUARD_API_KEY" | jq .
+  -H "Authorization: Bearer $MODELGOV_API_KEY" | jq .
 ```
 
 Requires API key with `usage:read` permission.
@@ -277,11 +277,11 @@ Aggregated stats from `request_logs` for operator visibility.
 | `since` | `24h`, `7d`, or ISO-8601 (default `24h`) |
 
 ```bash
-curl -s "$AI_GUARD_URL/v1/usage/summary?feature=support_chat&since=7d" \
+curl -s "$MODELGOV_URL/v1/usage/summary?feature=support_chat&since=7d" \
   -H "Authorization: Bearer $OPS_KEY" | jq .
 ```
 
-CLI: `ai-guard usage summary --feature support_chat --since 7d`
+CLI: `modelgov usage summary --feature support_chat --since 7d`
 
 ---
 
@@ -315,10 +315,10 @@ for requests blocked before a model was selected. Records also carry
 (when the policy store is used) `policy.configHash` / `policy.policyVersion`.
 
 ```bash
-curl -s "$AI_GUARD_URL/v1/requests/req_123" -H "Authorization: Bearer $OPS_KEY" | jq .
+curl -s "$MODELGOV_URL/v1/requests/req_123" -H "Authorization: Bearer $OPS_KEY" | jq .
 ```
 
-CLI: `ai-guard requests show req_123`
+CLI: `modelgov requests show req_123`
 
 ---
 
@@ -350,7 +350,7 @@ Default: 120 requests / minute / IP (configurable via `RATE_LIMIT_MAX` and
 ## Admin: API keys
 
 DB-backed key lifecycle. All routes require the `keys:admin` permission — seed one
-bootstrap key with it via `AI_GUARD_API_KEYS`, then manage the rest here. Only the
+bootstrap key with it via `MODELGOV_API_KEYS`, then manage the rest here. Only the
 SHA-256 hash of each secret is stored; the plaintext `secret` is returned **once**
 on create/rotate and never again.
 
@@ -372,11 +372,11 @@ on create/rotate and never again.
 {
   "id": "b0c1…",
   "name": "checkout-svc",
-  "keyPrefix": "sk-ai-guard-a1b2c3",
+  "keyPrefix": "sk-modelgov-a1b2c3",
   "permissions": ["chat:create"],
   "projectId": "checkout",
   "createdAt": "2026-06-30T12:00:00Z",
-  "secret": "sk-ai-guard-…"
+  "secret": "sk-modelgov-…"
 }
 ```
 

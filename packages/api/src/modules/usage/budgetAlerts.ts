@@ -75,11 +75,11 @@ async function deliverWebhook(
   const json = JSON.stringify(body);
   const headers: Record<string, string> = {
     "content-type": "application/json",
-    "user-agent": "ai-guard/0.1",
+    "user-agent": "modelgov/0.1",
   };
   if (webhook.secret) {
     const digest = createHmac("sha256", webhook.secret).update(json).digest("hex");
-    headers["x-ai-guard-signature"] = `sha256=${digest}`;
+    headers["x-modelgov-signature"] = `sha256=${digest}`;
   }
 
   const controller = new AbortController();

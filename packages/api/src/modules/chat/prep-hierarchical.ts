@@ -6,7 +6,7 @@ import {
   type BudgetPathNode,
   type PolicyDecision,
   type UsageSnapshot,
-} from "@ai-guard/policy-engine";
+} from "@modelgov/policy-engine";
 import { logRequest } from "../usage/auditLogRepo";
 import {
   loadPathSnapshot,

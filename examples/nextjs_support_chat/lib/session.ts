@@ -9,7 +9,7 @@ export interface DemoSession {
 
 /**
  * Demo auth — replace with your real session/JWT/Clerk/Auth.js integration.
- * Ai-Guard never sees passwords or OAuth tokens; it only receives userId + userType.
+ * Modelgov never sees passwords or OAuth tokens; it only receives userId + userType.
  */
 export async function getSession(): Promise<DemoSession | null> {
   const jar = await cookies();

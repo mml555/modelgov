@@ -72,7 +72,7 @@ importers:
 
   examples/chatbot:
     dependencies:
-      '@ai-guard/sdk':
+      '@modelgov/sdk':
         specifier: workspace:*
         version: link:../../packages/sdk-typescript
       next:
@@ -100,7 +100,7 @@ importers:
 
   examples/document_extraction:
     dependencies:
-      '@ai-guard/sdk':
+      '@modelgov/sdk':
         specifier: workspace:*
         version: link:../../packages/sdk-typescript
     devDependencies:
@@ -110,7 +110,7 @@ importers:
 
   examples/event_intake_app:
     dependencies:
-      '@ai-guard/sdk':
+      '@modelgov/sdk':
         specifier: workspace:*
         version: link:../../packages/sdk-typescript
       express:
@@ -126,7 +126,7 @@ importers:
 
   examples/nextjs_support_chat:
     dependencies:
-      '@ai-guard/sdk':
+      '@modelgov/sdk':
         specifier: workspace:*
         version: link:../../packages/sdk-typescript
       next:
@@ -151,7 +151,7 @@ importers:
 
   examples/ocr_pipeline:
     dependencies:
-      '@ai-guard/sdk':
+      '@modelgov/sdk':
         specifier: workspace:*
         version: link:../../packages/sdk-typescript
     devDependencies:
@@ -164,7 +164,7 @@ importers:
 
   examples/rag_support:
     dependencies:
-      '@ai-guard/sdk':
+      '@modelgov/sdk':
         specifier: workspace:*
         version: link:../../packages/sdk-typescript
       pg:
@@ -183,7 +183,7 @@ importers:
 
   examples/saas_tiers:
     dependencies:
-      '@ai-guard/sdk':
+      '@modelgov/sdk':
         specifier: workspace:*
         version: link:../../packages/sdk-typescript
     devDependencies:
@@ -193,7 +193,7 @@ importers:
 
   examples/support_chat:
     dependencies:
-      '@ai-guard/sdk':
+      '@modelgov/sdk':
         specifier: workspace:*
         version: link:../../packages/sdk-typescript
     devDependencies:
@@ -203,15 +203,15 @@ importers:
 
   packages/api:
     dependencies:
-      '@ai-guard/policy-engine':
-        specifier: workspace:*
-        version: link:../policy-engine
       '@fastify/rate-limit':
         specifier: ^10.3.0
         version: 10.3.0
       '@fastify/swagger':
         specifier: ^9.7.0
         version: 9.7.0
+      '@modelgov/policy-engine':
+        specifier: workspace:*
+        version: link:../policy-engine
       fastify:
         specifier: ^5.2.0
         version: 5.9.0
@@ -243,7 +243,7 @@ importers:
 
   packages/cli:
     dependencies:
-      '@ai-guard/policy-engine':
+      '@modelgov/policy-engine':
         specifier: workspace:*
         version: link:../policy-engine
       yaml:
@@ -254,7 +254,7 @@ importers:
         specifier: ^4.19.2
         version: 4.22.4
 
-  packages/create-ai-guard:
+  packages/create-modelgov:
     dependencies:
       '@clack/prompts':
         specifier: ^0.8.2
@@ -263,7 +263,7 @@ importers:
         specifier: ^2.6.1
         version: 2.9.0
     devDependencies:
-      '@ai-guard/policy-engine':
+      '@modelgov/policy-engine':
         specifier: workspace:*
         version: link:../policy-engine
 

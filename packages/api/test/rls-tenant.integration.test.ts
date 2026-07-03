@@ -10,7 +10,7 @@ import {
 } from "../src/modules/policy/repo";
 
 const DATABASE_URL = process.env.DATABASE_URL;
-const APP_ROLE = "ai_guard_rls_test";
+const APP_ROLE = "modelgov_rls_test";
 const APP_PASS = "rls-test-pass";
 
 const yaml = (monthlyUsd: number): string => `

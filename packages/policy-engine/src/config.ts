@@ -3,12 +3,12 @@ import { z } from "zod";
 import { findUnpricedModels } from "./cost";
 import {
   PolicyConfigError,
-  type AiGuardConfig,
+  type ModelgovConfig,
   type FeatureSafetyOverride,
 } from "./types";
 
-// ai-guard.yaml is authored in snake_case; we validate it and transform to the
-// camelCase AiGuardConfig the engine consumes. env/VAR resolution for provider
+// modelgov.yaml is authored in snake_case; we validate it and transform to the
+// camelCase ModelgovConfig the engine consumes. env/VAR resolution for provider
 // keys happens in the API layer, not here.
 
 const presetEnum = z.enum(["dev", "balanced", "strict", "custom"]);
@@ -204,7 +204,7 @@ function normalizeFeatureSafety(
 
 /** Validate cross-references that zod's per-field schema can't express. */
 function validateRefs(
-  config: AiGuardConfig,
+  config: ModelgovConfig,
   options?: { strictPricing?: boolean },
 ): void {
   for (const [name, feature] of Object.entries(config.features)) {
@@ -269,26 +269,26 @@ function validateRefs(
 export function parseConfigObject(
   raw: unknown,
   options?: { strictPricing?: boolean },
-): AiGuardConfig {
+): ModelgovConfig {
   const result = configSchema.safeParse(raw);
   if (!result.success) {
     throw new PolicyConfigError(
-      `invalid ai-guard config: ${result.error.issues
+      `invalid modelgov config: ${result.error.issues
         .map((i) => `${i.path.join(".")}: ${i.message}`)
         .join("; ")}`,
       "invalid_config",
     );
   }
-  const config = result.data as AiGuardConfig;
+  const config = result.data as ModelgovConfig;
   validateRefs(config, options);
   return config;
 }
 
-/** Parse + validate an ai-guard.yaml document from its text. */
+/** Parse + validate an modelgov.yaml document from its text. */
 export function parseConfig(
   yamlText: string,
   options?: { strictPricing?: boolean },
-): AiGuardConfig {
+): ModelgovConfig {
   let raw: unknown;
   try {
     raw = parseYaml(yamlText);

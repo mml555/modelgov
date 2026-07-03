@@ -3,9 +3,9 @@ import {
   evaluateAiRequest,
   parseConfig,
   PolicyConfigError,
-  type AiGuardConfig,
+  type ModelgovConfig,
   type UsageSnapshot,
-} from "@ai-guard/policy-engine";
+} from "@modelgov/policy-engine";
 import { resolveUserPath } from "./paths.js";
 
 export interface ExplainFlags {
@@ -21,13 +21,13 @@ export interface ExplainFlags {
   json: boolean;
 }
 
-export function loadConfigFromPath(path: string): AiGuardConfig {
+export function loadConfigFromPath(path: string): ModelgovConfig {
   const text = readFileSync(resolveUserPath(path), "utf8");
   return parseConfig(text);
 }
 
 export function explainLocally(
-  config: AiGuardConfig,
+  config: ModelgovConfig,
   flags: ExplainFlags,
   usage: UsageSnapshot = emptyUsage(),
 ): Record<string, unknown> {
@@ -115,7 +115,7 @@ export async function runExplain(flags: ExplainFlags): Promise<void> {
 
   if (!flags.apiKey) {
     throw new Error(
-      "AI_GUARD_API_KEY is required for API mode. Use --local to evaluate a config file offline.",
+      "MODELGOV_API_KEY is required for API mode. Use --local to evaluate a config file offline.",
     );
   }
 

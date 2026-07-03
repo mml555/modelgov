@@ -1,6 +1,6 @@
 # Budget alerts runbook
 
-When global monthly spend crosses `budgets.global.alert_at_percent`, Ai-Guard
+When global monthly spend crosses `budgets.global.alert_at_percent`, Modelgov
 fires a webhook (if `BUDGET_ALERT_WEBHOOK_URL` is configured) and records the
 alert so it is not sent repeatedly for the same window.
 
@@ -18,29 +18,29 @@ Degrade and alert thresholds are independent in config but are often aligned at 
 
 ```bash
 # Budget counters (live)
-curl -s "$AI_GUARD_URL/v1/usage" -H "Authorization: Bearer $OPS_KEY" | jq .
+curl -s "$MODELGOV_URL/v1/usage" -H "Authorization: Bearer $OPS_KEY" | jq .
 
 # Aggregated audit summary (last 24h)
-pnpm ai-guard usage summary --since 24h
+pnpm modelgov usage summary --since 24h
 ```
 
 Requires API key with `usage:read`.
 
-> The `pnpm ai-guard ...` invocations in this runbook are the monorepo form. If
-> you installed the CLI as a package, drop the `pnpm` prefix and run `ai-guard ...`
+> The `pnpm modelgov ...` invocations in this runbook are the monorepo form. If
+> you installed the CLI as a package, drop the `pnpm` prefix and run `modelgov ...`
 > directly.
 
 ## Find expensive users and features
 
 ```bash
 # Recent blocked requests
-pnpm ai-guard requests list --status blocked --since 24h
+pnpm modelgov requests list --status blocked --since 24h
 
 # By feature
-pnpm ai-guard usage summary --feature support_chat --since 7d
+pnpm modelgov usage summary --feature support_chat --since 7d
 
 # Inspect one request
-pnpm ai-guard requests show req_123
+pnpm modelgov requests show req_123
 ```
 
 ### SQL (direct Postgres access)
@@ -72,7 +72,7 @@ ORDER BY 2 DESC;
 
 ## Raise a budget
 
-1. Edit `ai-guard.yaml`:
+1. Edit `modelgov.yaml`:
 
    ```yaml
    budgets:
@@ -103,9 +103,9 @@ budgets:
 There is no dedicated kill-switch endpoint, but when the policy store is enabled
 (`POLICY_STORE_ENABLED=true`) you can apply the changes below at runtime by
 activating a new policy version (`POST /v1/admin/policy/versions/:id/activate`)
-instead of redeploying. Otherwise, edit `ai-guard.yaml` and redeploy. Options:
+instead of redeploying. Otherwise, edit `modelgov.yaml` and redeploy. Options:
 
-1. **Remove the feature** from `ai-guard.yaml` and redeploy — requests return `400 unknown_feature`.
+1. **Remove the feature** from `modelgov.yaml` and redeploy — requests return `400 unknown_feature`.
 2. **Set caps to zero** on the user types that use it:
 
    ```yaml
@@ -114,17 +114,17 @@ instead of redeploying. Otherwise, edit `ai-guard.yaml` and redeploy. Options:
        daily_requests: 0
    ```
 
-3. **Block at the app layer** — stop calling Ai-Guard for that product path.
+3. **Block at the app layer** — stop calling Modelgov for that product path.
 
 Prefer (1) or (3) for emergencies; (2) produces `policy_blocked` errors.
 
 ## Verify policy before changes
 
 ```bash
-pnpm ai-guard explain --local \
+pnpm modelgov explain --local \
   --userType free_user --feature support_chat --modelClass standard
 
-pnpm ai-guard validate --config ai-guard.yaml --production
+pnpm modelgov validate --config modelgov.yaml --production
 ```
 
 ## Related docs

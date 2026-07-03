@@ -1,4 +1,4 @@
-import type { AiGuardConfig } from "@ai-guard/policy-engine";
+import type { ModelgovConfig } from "@modelgov/policy-engine";
 import type { Pool } from "pg";
 import { getActiveConfigVersion } from "./repo";
 
@@ -7,7 +7,7 @@ import { getActiveConfigVersion } from "./repo";
  * plus the identity stamped on the request log (which version decided).
  */
 export interface ResolvedTenantPolicy {
-  config: AiGuardConfig;
+  config: ModelgovConfig;
   policyMeta: { configHash?: string; policyVersion?: string };
 }
 

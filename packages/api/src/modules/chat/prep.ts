@@ -1,11 +1,11 @@
 import {
   evaluateAiRequest,
   PolicyConfigError,
-  type AiGuardConfig,
+  type ModelgovConfig,
   type AiRequest,
   type PolicyDecision,
   type UsageSnapshot,
-} from "@ai-guard/policy-engine";
+} from "@modelgov/policy-engine";
 import { SafetyServiceError } from "../../services/safety";
 import {
   loadUsageSnapshot,
@@ -26,7 +26,7 @@ import type { ChatFailure, ChatInput, ChatServiceDeps } from "./types";
 import type { ChatMessage } from "../../types";
 
 /** Map a validated chat body + config to the engine's request shape. */
-export function buildAiRequest(body: ChatInput, config: AiGuardConfig): AiRequest {
+export function buildAiRequest(body: ChatInput, config: ModelgovConfig): AiRequest {
   return {
     projectId: body.projectId ?? config.project.name,
     environment: body.environment ?? config.project.environment,

@@ -18,14 +18,14 @@ const baseEnvSchema = z.object({
   // config-versions transaction. Only enforces when the app connects as a
   // NON-OWNER DB role (the table owner bypasses RLS). Default false = unchanged.
   DB_RLS_ENABLED: z.enum(["true", "false"]).default("false"),
-  AI_GUARD_API_KEY: z.string().min(1).optional(),
-  AI_GUARD_API_KEYS: z.string().optional(),
+  MODELGOV_API_KEY: z.string().min(1).optional(),
+  MODELGOV_API_KEYS: z.string().optional(),
   // DB-backed key store (issue/rotate/revoke live via /v1/admin/keys). Static
   // env keys above still work and are used to bootstrap the first keys:admin key.
   API_KEYS_DB_ENABLED: z.enum(["true", "false"]).default("true"),
   API_KEY_CACHE_TTL_MS: z.coerce.number().int().positive().default(10_000),
   // Dynamic policy store: when true, boot loads the active config version from
-  // the DB (seeding it from AI_GUARD_CONFIG on first run), instead of always
+  // the DB (seeding it from MODELGOV_CONFIG on first run), instead of always
   // reading the file. Default false keeps file-based deploys unchanged.
   POLICY_STORE_ENABLED: z.enum(["true", "false"]).default("false"),
   // Per-request per-tenant policy resolution: when true (and POLICY_STORE_ENABLED),
@@ -49,9 +49,9 @@ const baseEnvSchema = z.object({
   OIDC_AUDIENCE_OPTIONAL: z.enum(["true", "false"]).default("false"),
   OIDC_ROLES_CLAIM: z.string().min(1).default("roles"),
   OIDC_NAME_CLAIM: z.string().min(1).default("sub"),
-  // JSON map of IdP role/group value -> Ai-Guard role name(s).
+  // JSON map of IdP role/group value -> Modelgov role name(s).
   OIDC_ROLE_MAP: z.string().optional(),
-  AI_GUARD_CONFIG: z.string().min(1, "AI_GUARD_CONFIG is required"),
+  MODELGOV_CONFIG: z.string().min(1, "MODELGOV_CONFIG is required"),
   LITELLM_BASE_URL: z.string().url("LITELLM_BASE_URL must be a URL"),
   LITELLM_MASTER_KEY: z.string().optional(),
   LITELLM_TIMEOUT_MS: z.coerce.number().int().positive().default(60_000),
@@ -63,7 +63,7 @@ const baseEnvSchema = z.object({
   LANGFUSE_HOST: z.string().url().optional(),
   // OpenTelemetry OTLP/HTTP trace export (provider: otel).
   OTEL_EXPORTER_OTLP_ENDPOINT: z.string().url().optional(),
-  OTEL_SERVICE_NAME: z.string().min(1).default("ai-guard"),
+  OTEL_SERVICE_NAME: z.string().min(1).default("modelgov"),
   REQUEST_BODY_LIMIT_BYTES: z.coerce.number().int().positive().default(1_048_576),
   REQUEST_TIMEOUT_MS: z.coerce.number().int().nonnegative().default(60_000),
   TRUST_PROXY: z.string().optional(),
@@ -88,17 +88,17 @@ const baseEnvSchema = z.object({
   /** Allow DATABASE_SSL=disable for bundled/local Postgres only. */
   DATABASE_SSL_DISABLE_ALLOWED: z.enum(["true", "false"]).default("false"),
   /** Set when the API sits behind a reverse proxy — requires TRUST_PROXY. */
-  AI_GUARD_BEHIND_PROXY: z.enum(["true", "false"]).default("false"),
+  MODELGOV_BEHIND_PROXY: z.enum(["true", "false"]).default("false"),
   /**
    * Deployment profile: selfhost (flat, single-tenant) or multitenant (SaaS control
    * plane). Drives doctor checks and Helm overlays — see deployProfiles in policy-engine.
    */
-  AI_GUARD_DEPLOY_PROFILE: z.enum(["selfhost", "multitenant"]).optional(),
+  MODELGOV_DEPLOY_PROFILE: z.enum(["selfhost", "multitenant"]).optional(),
   /** Allow static env keys with keys:admin / policy:write (bootstrap only). */
   ALLOW_BOOTSTRAP_ADMIN_KEY: z.enum(["true", "false"]).default("false"),
   // Declared by the production compose/Helm deployments (mirrors the Helm
   // chart's `production` flag). Turns known dev-only defaults into boot errors.
-  AI_GUARD_PRODUCTION: z.enum(["true", "false"]).default("false"),
+  MODELGOV_PRODUCTION: z.enum(["true", "false"]).default("false"),
   MAINTENANCE_ENABLED: z.enum(["true", "false"]).default("true"),
   IDEMPOTENCY_STALE_MS: z.coerce.number().int().positive().default(900_000),
   /** Completed idempotency replay rows older than this are pruned (default 7d). */
@@ -114,9 +114,9 @@ const baseEnvSchema = z.object({
   BUDGET_ALERT_WEBHOOK_ALLOW_PRIVATE: z.enum(["true", "false"]).default("false"),
 });
 
-const envSchema = baseEnvSchema.refine((env) => Boolean(env.AI_GUARD_API_KEY) || Boolean(env.AI_GUARD_API_KEYS), {
-  message: "AI_GUARD_API_KEY or AI_GUARD_API_KEYS is required",
-  path: ["AI_GUARD_API_KEY"],
+const envSchema = baseEnvSchema.refine((env) => Boolean(env.MODELGOV_API_KEY) || Boolean(env.MODELGOV_API_KEYS), {
+  message: "MODELGOV_API_KEY or MODELGOV_API_KEYS is required",
+  path: ["MODELGOV_API_KEY"],
 });
 
 export type ApiEnv = z.infer<typeof envSchema> & {
@@ -148,8 +148,8 @@ const databaseEnvSchema = baseEnvSchema.pick({
 export type DatabaseEnv = z.infer<typeof databaseEnvSchema>;
 
 const OPTIONAL_ENV_KEYS = [
-  "AI_GUARD_API_KEY",
-  "AI_GUARD_API_KEYS",
+  "MODELGOV_API_KEY",
+  "MODELGOV_API_KEYS",
   "DATABASE_SSL_CA",
   "LITELLM_MASTER_KEY",
   "PRESIDIO_ANALYZER_URL",
@@ -168,7 +168,7 @@ const OPTIONAL_ENV_KEYS = [
   "OIDC_AUDIENCE",
   "OIDC_ROLE_MAP",
   "OTEL_EXPORTER_OTLP_ENDPOINT",
-  "AI_GUARD_DEPLOY_PROFILE",
+  "MODELGOV_DEPLOY_PROFILE",
 ] as const;
 
 function normalizeOptionalEmptyStrings(
@@ -214,14 +214,14 @@ export function loadDatabaseEnv(raw: NodeJS.ProcessEnv = process.env): DatabaseE
 }
 
 function parseApiKeys(env: z.infer<typeof envSchema>): ApiKeyEnvPrincipal[] {
-  if (!env.AI_GUARD_API_KEYS) {
-    if (!env.AI_GUARD_API_KEY) {
-      throw new Error("Invalid environment: AI_GUARD_API_KEY or AI_GUARD_API_KEYS is required");
+  if (!env.MODELGOV_API_KEYS) {
+    if (!env.MODELGOV_API_KEY) {
+      throw new Error("Invalid environment: MODELGOV_API_KEY or MODELGOV_API_KEYS is required");
     }
     return [
       {
         name: "default",
-        key: env.AI_GUARD_API_KEY,
+        key: env.MODELGOV_API_KEY,
         permissions: ["chat:create"],
       },
     ];
@@ -229,9 +229,9 @@ function parseApiKeys(env: z.infer<typeof envSchema>): ApiKeyEnvPrincipal[] {
 
   let raw: unknown;
   try {
-    raw = JSON.parse(env.AI_GUARD_API_KEYS);
+    raw = JSON.parse(env.MODELGOV_API_KEYS);
   } catch {
-    throw new Error("Invalid environment: AI_GUARD_API_KEYS must be valid JSON");
+    throw new Error("Invalid environment: MODELGOV_API_KEYS must be valid JSON");
   }
 
   const schema = z.array(
@@ -256,7 +256,7 @@ function parseApiKeys(env: z.infer<typeof envSchema>): ApiKeyEnvPrincipal[] {
   const parsed = schema.safeParse(raw);
   if (!parsed.success) {
     const detail = parsed.error.issues
-      .map((issue) => `AI_GUARD_API_KEYS.${issue.path.join(".")}: ${issue.message}`)
+      .map((issue) => `MODELGOV_API_KEYS.${issue.path.join(".")}: ${issue.message}`)
       .join("; ");
     throw new Error(`Invalid environment: ${detail}`);
   }

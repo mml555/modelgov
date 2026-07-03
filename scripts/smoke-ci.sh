@@ -16,8 +16,8 @@ node packages/api/dist/migrate.js
 
 export PORT="${SMOKE_PORT:-3099}"
 export HOST="127.0.0.1"
-export AI_GUARD_API_KEY="${SMOKE_API_KEY:-smoke-test-key}"
-export AI_GUARD_CONFIG="${ROOT}/scripts/smoke-ai-guard.yaml"
+export MODELGOV_API_KEY="${SMOKE_API_KEY:-smoke-test-key}"
+export MODELGOV_CONFIG="${ROOT}/scripts/smoke-modelgov.yaml"
 export LITELLM_BASE_URL="${SMOKE_LITELLM_URL:-http://127.0.0.1:1}"
 export OBSERVABILITY_PROVIDER=none
 export METRICS_ENABLED=false
@@ -42,7 +42,7 @@ test "$code" = "401"
 
 # Authed request reaches the handler (502 provider_unavailable is expected without LiteLLM).
 code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "http://127.0.0.1:${PORT}/v1/chat" \
-  -H "authorization: Bearer ${AI_GUARD_API_KEY}" \
+  -H "authorization: Bearer ${MODELGOV_API_KEY}" \
   -H 'content-type: application/json' \
   -d '{"userId":"u","userType":"logged_in","feature":"support_chat","messages":[{"role":"user","content":"hi"}]}')
 if [ "$code" != "502" ] && [ "$code" != "403" ] && [ "$code" != "200" ]; then

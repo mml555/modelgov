@@ -20,8 +20,8 @@
     "forceConsistentCasingInFileNames": true,
     "baseUrl": ".",
     "paths": {
-      "@ai-guard/policy-engine": ["packages/policy-engine/src/index.ts"],
-      "@ai-guard/sdk": ["packages/sdk-typescript/src/index.ts"]
+      "@modelgov/policy-engine": ["packages/policy-engine/src/index.ts"],
+      "@modelgov/sdk": ["packages/sdk-typescript/src/index.ts"]
     }
   }
 }

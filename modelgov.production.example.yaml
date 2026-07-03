@@ -1,0 +1,72 @@
+# Production policy template for Modelgov.
+# Copy to modelgov.yaml and customize before `make up-prod`:
+#   cp modelgov.production.example.yaml modelgov.yaml
+#
+# Provider api_key env/VAR refs are resolved by the API at load time.
+# Align model_name values here with litellm_config.yaml (or regenerate LiteLLM
+# config from your model_classes).
+
+project:
+  name: my-app # must match projectId on scoped API keys when using multi-tenant keys
+  environment: production
+
+providers:
+  openai:
+    api_key: env/OPENAI_API_KEY
+  anthropic:
+    api_key: env/ANTHROPIC_API_KEY
+
+budgets:
+  global:
+    monthly_usd: 1000 # set to your org cap; 0 disables the global monthly cap
+    alert_at_percent: 80
+    hard_stop_at_percent: 100
+  by_user_type:
+    anonymous:
+      daily_usd: 0.05
+      daily_requests: 10
+      models: ["cheap"]
+    logged_in:
+      daily_usd: 1.00
+      daily_requests: 100
+      models: ["cheap", "standard"]
+    admin:
+      daily_usd: 25.00
+      daily_requests: 1000
+      models: ["cheap", "standard", "premium"]
+
+features:
+  # Customer-facing: strict safety blocks PII and prompt injection.
+  support_chat:
+    safety: strict
+    model_class: cheap
+    max_tokens: 500
+  # Internal tooling: balanced masks PII instead of hard-blocking.
+  notes_helper:
+    safety: balanced
+    model_class: cheap
+    max_tokens: 1000
+
+routing:
+  degrade_at_percent: 80 # downgrade one model class once global spend crosses this
+
+model_classes:
+  cheap:
+    primary: openai/gpt-4o-mini
+    fallback: anthropic/claude-haiku
+  standard:
+    primary: anthropic/claude-sonnet
+    fallback: openai/gpt-4o
+  premium:
+    primary: openai/gpt-4o # swap when your LiteLLM config exposes a newer model
+    fallback: anthropic/claude-opus
+
+safety:
+  preset: balanced
+  protect:
+    pii: mask
+    prompt_injection: block
+  injection_model: openai/gpt-4o-mini
+
+observability:
+  provider: none # set OBSERVABILITY_PROVIDER=langfuse in .env.production to override

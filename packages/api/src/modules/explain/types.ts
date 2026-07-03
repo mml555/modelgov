@@ -1,4 +1,4 @@
-import type { BudgetRemaining, PolicyDecisionKind, UsageSnapshot } from "@ai-guard/policy-engine";
+import type { BudgetRemaining, PolicyDecisionKind, UsageSnapshot } from "@modelgov/policy-engine";
 
 export interface ExplainInput {
   userId: string;
@@ -52,7 +52,7 @@ export interface ExplainResponse {
 }
 
 export interface ExplainServiceDeps {
-  config: import("@ai-guard/policy-engine").AiGuardConfig;
+  config: import("@modelgov/policy-engine").ModelgovConfig;
   pool: import("pg").Pool;
 }
 

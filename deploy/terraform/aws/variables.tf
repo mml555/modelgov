@@ -1,5 +1,5 @@
 variable "name" {
-  description = "Name prefix for all created resources (e.g. \"ai-guard-prod\")."
+  description = "Name prefix for all created resources (e.g. \"modelgov-prod\")."
   type        = string
 }
 
@@ -70,13 +70,13 @@ variable "postgres_multi_az" {
 variable "postgres_db_name" {
   description = "Initial database name."
   type        = string
-  default     = "aiguard"
+  default     = "modelgov"
 }
 
 variable "postgres_username" {
   description = "Master username."
   type        = string
-  default     = "aiguard"
+  default     = "modelgov"
 }
 
 variable "postgres_backup_retention_days" {
@@ -126,7 +126,7 @@ variable "create_k8s_secret" {
 variable "k8s_secret_name" {
   description = "Name of the Kubernetes Secret to create."
   type        = string
-  default     = "ai-guard-secrets"
+  default     = "modelgov-secrets"
 }
 
 variable "k8s_namespace" {
@@ -135,8 +135,8 @@ variable "k8s_namespace" {
   default     = "default"
 }
 
-variable "ai_guard_api_key" {
-  description = "Optional AI_GUARD_API_KEY to include in the created secret. Leave empty to manage it separately."
+variable "modelgov_api_key" {
+  description = "Optional MODELGOV_API_KEY to include in the created secret. Leave empty to manage it separately."
   type        = string
   default     = ""
   sensitive   = true

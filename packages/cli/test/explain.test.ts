@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { explainLocally } from "../src/explain.js";
-import { parseConfigObject } from "@ai-guard/policy-engine";
+import { parseConfigObject } from "@modelgov/policy-engine";
 
 const config = parseConfigObject({
   project: { name: "saas-demo", environment: "development" },
@@ -21,7 +21,7 @@ const config = parseConfigObject({
   safety: { preset: "balanced" },
 });
 
-describe("ai-guard explain --local", () => {
+describe("modelgov explain --local", () => {
   it("blocks premium for free users", () => {
     const body = explainLocally(config, {
       userId: "u1",

@@ -1,10 +1,10 @@
 # Threat model (STRIDE)
 
-A STRIDE-style threat model for a self-hosted Ai-Guard deployment. It identifies
+A STRIDE-style threat model for a self-hosted Modelgov deployment. It identifies
 trust boundaries, assets, and per-category threats, and maps each threat to the
 **mitigations that ship today** versus **residual risk the operator must own**.
 
-Ai-Guard is a self-hosted control plane: you own network exposure, TLS, Postgres
+Modelgov is a self-hosted control plane: you own network exposure, TLS, Postgres
 access control, and provider-key handling (see [SECURITY.md](../../SECURITY.md)).
 This model assumes the [production checklist](../operations.md#production-checklist)
 and [hardening recommendations](../../SECURITY.md#hardening-recommendations) are
@@ -21,9 +21,9 @@ followed; where they are not, threats that they mitigate become residual.
 └───────────────┬─────────────────────────────────────────────────────┘
                 │ HTTPS + Authorization: Bearer <API key>   ── TB2 ──►
 ┌───────────────▼─────────────────────────────────────────────────────┐
-│ TB3: Ai-Guard trust zone (private network)                           │
+│ TB3: Modelgov trust zone (private network)                           │
 │                                                                      │
-│  Ai-Guard API ── policy engine (pure) ── budget reserve (Postgres)   │
+│  Modelgov API ── policy engine (pure) ── budget reserve (Postgres)   │
 │      │                                                               │
 │      ├── Presidio (PII / injection)                                  │
 │      ├── Postgres (budgets, audit, api_keys, idempotency)            │
@@ -38,8 +38,8 @@ followed; where they are not, threats that they mitigate become residual.
 | Boundary | Between | Crossing control |
 | --- | --- | --- |
 | **TB1** | Internet ↔ your edge | TLS at LB/proxy (no built-in TLS); `TRUST_PROXY` for real client IPs |
-| **TB2** | Application ↔ Ai-Guard API | Bearer API key; per-key permissions + scope (`projectId`, `allowedUserTypes/Ids`) |
-| **TB3** | Ai-Guard API ↔ its backends | Private network only; Postgres/Redis/Presidio not internet-exposed |
+| **TB2** | Application ↔ Modelgov API | Bearer API key; per-key permissions + scope (`projectId`, `allowedUserTypes/Ids`) |
+| **TB3** | Modelgov API ↔ its backends | Private network only; Postgres/Redis/Presidio not internet-exposed |
 | **TB4** | LiteLLM ↔ upstream provider | Provider API keys (held by LiteLLM), `LITELLM_MASTER_KEY` between API and LiteLLM |
 | **TB5** | Operator/automation ↔ control plane | `keys:admin` API key **or** OIDC JWT → operator RBAC role → permissions |
 
@@ -65,7 +65,7 @@ followed; where they are not, threats that they mitigate become residual.
 
 | Threat | Mitigation (shipped) | Residual |
 | --- | --- | --- |
-| Caller forges another app's identity to spend its budget | Per-key bearer auth; scoped keys pin `projectId` and can restrict `allowedUserTypes` / `allowedUserIds` | App is responsible for authenticating the end user; Ai-Guard trusts the `userId`/`userType` the key is allowed to send |
+| Caller forges another app's identity to spend its budget | Per-key bearer auth; scoped keys pin `projectId` and can restrict `allowedUserTypes` / `allowedUserIds` | App is responsible for authenticating the end user; Modelgov trusts the `userId`/`userType` the key is allowed to send |
 | Operator impersonation on control plane | OIDC JWT verified against IdP JWKS (signature, `iss`, `aud`, `exp`); or `keys:admin` bearer | Strength of IdP + `OIDC_AUDIENCE` config; a verified token with no mapped role gets **403**, not access |
 | Client IP spoofing to dodge rate limits | `TRUST_PROXY` set to the proxy CIDR so `X-Forwarded-For` can't be spoofed | Must be configured; unset `TRUST_PROXY` = spoofable buckets |
 | Fake upstream provider (MITM to LiteLLM) | Providers over TLS; LiteLLM in private zone | Operator must keep provider egress TLS-verified |
@@ -76,8 +76,8 @@ followed; where they are not, threats that they mitigate become residual.
 | --- | --- | --- |
 | Tamper with budget counters to over-spend | Atomic reservations under row locks; counters only mutated by the API | Direct Postgres write access bypasses this — restrict DB to private network + least-privilege roles |
 | Alter/delete audit records | **Hash-chained admin audit log** (`admin_audit_log`): each row's SHA-256 over the prior row's hash; `GET /v1/admin/audit/verify` re-walks the chain and detects any altered/deleted/inserted row | Detection (not prevention) — pair with WORM/SIEM export + immutable DB backups; the request-audit `request_logs` table is not yet chained |
-| Modify policy (`ai-guard.yaml`) to widen limits | Config is operator-controlled; `policy-admin` role gates policy writes; `ai-guard validate --production` | File/ConfigMap write access = policy control — protect via GitOps + RBAC on the deploy pipeline |
-| Tamper with budget-alert webhook payload | Optional `X-Ai-Guard-Signature` HMAC (`BUDGET_ALERT_WEBHOOK_SECRET`) | Only if secret is set |
+| Modify policy (`modelgov.yaml`) to widen limits | Config is operator-controlled; `policy-admin` role gates policy writes; `modelgov validate --production` | File/ConfigMap write access = policy control — protect via GitOps + RBAC on the deploy pipeline |
+| Tamper with budget-alert webhook payload | Optional `X-Modelgov-Signature` HMAC (`BUDGET_ALERT_WEBHOOK_SECRET`) | Only if secret is set |
 | Container/image tampering | CI publishes **SBOM + provenance attestations**; Trivy scan; no floating `:latest` (pin by digest) | Operator must actually pin digests and verify attestations |
 
 ### R — Repudiation (non-repudiation)
@@ -116,7 +116,7 @@ followed; where they are not, threats that they mitigate become residual.
 | --- | --- | --- |
 | Low-scope key performs admin actions | Per-permission checks; `keys:admin` required for all `/v1/admin/keys/*`; default keys carry only `chat:create` | Correct permission scoping is the operator's job at issuance |
 | OIDC user gains more than intended | Least-privilege built-in roles (`viewer`/`finops`/`key-admin`/`policy-admin`/`owner`); IdP-group→role map; unmapped token → 403 | Depends on `OIDC_ROLE_MAP` accuracy and IdP group hygiene |
-| Caller uses Ai-Guard to authorize a product action | Architectural boundary: Ai-Guard enforces **AI policy only**, never product authorization | App **must** run its own RBAC first — misuse is an integration error, not something Ai-Guard can prevent |
+| Caller uses Modelgov to authorize a product action | Architectural boundary: Modelgov enforces **AI policy only**, never product authorization | App **must** run its own RBAC first — misuse is an integration error, not something Modelgov can prevent |
 | Revoked/rotated key still accepted briefly | Rotate/revoke effective immediately on the handling replica; across the fleet within `API_KEY_CACHE_TTL_MS` (default 10s) | Up to the cache TTL window on other replicas — lower TTL if intolerable |
 
 ---
@@ -135,7 +135,7 @@ Risks that remain the operator's responsibility even with all shipped mitigation
 | R6 | Safety coverage bounded by Presidio recognizers; `dev` preset disables it | Use `balanced`/`strict` in production; extend recognizers as needed |
 | R7 | Global-counter throughput ceiling | Monitor contention; shard the counter at scale |
 | R8 | Key-cache TTL window for revocation propagation | Lower `API_KEY_CACHE_TTL_MS` if the 10s default is unacceptable |
-| R9 | Ai-Guard does not authenticate end users | App must run auth + product RBAC before calling |
+| R9 | Modelgov does not authenticate end users | App must run auth + product RBAC before calling |
 
 See [SOC 2 control mapping](./soc2-controls.md), [data-flow & DLP](./data-flow.md),
 and [failure semantics](../failure-semantics.md).

@@ -6,7 +6,7 @@ import {
 import { resolveSafetyPlan } from "./safety";
 import {
   PolicyConfigError,
-  type AiGuardConfig,
+  type ModelgovConfig,
   type BudgetRemaining,
   type EvaluateInput,
   type FeatureConfig,
@@ -277,7 +277,7 @@ export function evaluateAiRequest(input: EvaluateInput): PolicyDecision {
  * feature declares no sensitivity or the class has no allow-lists.
  */
 function checkDataSensitivity(
-  config: AiGuardConfig,
+  config: ModelgovConfig,
   feature: FeatureConfig,
   modelClass: string,
   provider: string,
@@ -298,7 +298,7 @@ function checkDataSensitivity(
 // ── Internal decision builder ────────────────────────────────────────────────
 
 interface BuildCtx {
-  config: AiGuardConfig;
+  config: ModelgovConfig;
   feature: FeatureConfig;
   userBudget: UserTypeBudget;
   usage: UsageSnapshot;

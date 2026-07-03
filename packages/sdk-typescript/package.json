@@ -1,8 +1,8 @@
 {
-  "name": "@ai-guard/sdk",
+  "name": "@modelgov/sdk",
   "version": "1.0.0",
   "license": "MIT",
-  "description": "Ai-Guard API client. `feature` and `userType` are mandatory at the type level.",
+  "description": "Modelgov API client. `feature` and `userType` are mandatory at the type level.",
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",

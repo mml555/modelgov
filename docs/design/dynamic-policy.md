@@ -1,6 +1,6 @@
 # Dynamic policy store — design & status
 
-Moves policy off a static `ai-guard.yaml` baked into the image and into a
+Moves policy off a static `modelgov.yaml` baked into the image and into a
 **versioned, validated, auditable** store, so operators can change budgets,
 safety rules, and routing without editing files in the image.
 
@@ -18,7 +18,7 @@ safety rules, and routing without editing files in the image.
 - **Audit** — `policy.save` and `policy.activate` are written to the
   tamper-evident audit log (`[audit]`), with actor + checksum.
 - **Boot loading** — with the flag on, a replica loads the active version at
-  boot; on an empty store it seeds version 1 from `AI_GUARD_CONFIG`.
+  boot; on an empty store it seeds version 1 from `MODELGOV_CONFIG`.
 - **RBAC** — reads require `policy:read`, mutations `policy:write` (the
   `policy-admin` and `owner` roles).
 

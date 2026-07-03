@@ -115,7 +115,7 @@ export function buildServer(opts: BuildServerOptions): FastifyInstance {
     // Unify Fastify's log `reqId` with the client-facing request id: honor an
     // inbound x-request-id (bounded) or mint a UUID. requestContext reuses this
     // same request.id, so pino logs, the error-envelope requestId, and the
-    // x-ai-guard-request-id header all correlate to one id per request.
+    // x-modelgov-request-id header all correlate to one id per request.
     genReqId: (req) => requestIdFromHeaders(req.headers),
     bodyLimit: opts.bodyLimitBytes,
     trustProxy: opts.trustProxy ?? false,

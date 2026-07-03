@@ -1,5 +1,5 @@
 name: Feature request
-description: Propose a new capability or an enhancement to Ai-Guard.
+description: Propose a new capability or an enhancement to Modelgov.
 title: "[Feature]: "
 labels: ["enhancement"]
 body:
@@ -8,20 +8,20 @@ body:
     attributes:
       label: Preflight
       options:
-        - label: I searched [existing issues](https://github.com/mml555/Ai-Guard/issues?q=is%3Aissue) and this isn't already proposed.
+        - label: I searched [existing issues](https://github.com/mml555/modelgov/issues?q=is%3Aissue) and this isn't already proposed.
           required: true
   - type: textarea
     id: problem
     attributes:
       label: Problem / motivation
-      description: What are you trying to do that Ai-Guard makes hard or impossible today? Focus on the problem, not a specific solution.
+      description: What are you trying to do that Modelgov makes hard or impossible today? Focus on the problem, not a specific solution.
     validations:
       required: true
   - type: textarea
     id: proposal
     attributes:
       label: Proposed solution
-      description: What should Ai-Guard do? If it touches policy/config, sketch the `ai-guard.yaml` shape or the API/SDK surface.
+      description: What should Modelgov do? If it touches policy/config, sketch the `modelgov.yaml` shape or the API/SDK surface.
     validations:
       required: true
   - type: dropdown

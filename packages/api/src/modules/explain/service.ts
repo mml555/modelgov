@@ -1,9 +1,9 @@
 import {
   evaluateAiRequest,
   PolicyConfigError,
-  type AiGuardConfig,
+  type ModelgovConfig,
   type AiRequest,
-} from "@ai-guard/policy-engine";
+} from "@modelgov/policy-engine";
 import type { Pool } from "pg";
 import { loadUsageSnapshot } from "../usage/repo";
 import { formatExplainSummary, wouldCallModel } from "./format";
@@ -11,7 +11,7 @@ import type { ExplainInput, ExplainResponse } from "./types";
 import { usageSnapshotToUsed } from "./types";
 
 export async function handleExplain(
-  config: AiGuardConfig,
+  config: ModelgovConfig,
   pool: Pool,
   body: ExplainInput,
   tenantId?: string,

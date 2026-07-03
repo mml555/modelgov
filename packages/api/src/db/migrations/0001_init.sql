@@ -1,4 +1,4 @@
--- Initial Ai-Guard schema.
+-- Initial Modelgov schema.
 
 CREATE TABLE IF NOT EXISTS budget_counters (
   scope         text          NOT NULL,

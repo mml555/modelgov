@@ -28,7 +28,7 @@ export function registerRequestContext(app: FastifyInstance): void {
   app.addHook("onRequest", async (request) => {
     // Reuse Fastify's request.id (set by genReqId from x-request-id, or a fresh
     // UUID) so the client-facing ctx.requestId, the value pino logs as `reqId`,
-    // and the x-ai-guard-request-id header are all the SAME id. Fall back to the
+    // and the x-modelgov-request-id header are all the SAME id. Fall back to the
     // header/UUID logic directly if genReqId is not configured (defensive).
     const requestIdHeader = request.headers["x-request-id"];
     const requestId =

@@ -1,21 +1,21 @@
 # Providers
 
-Ai-Guard is **provider-agnostic**: it decides policy, then hands execution to
+Modelgov is **provider-agnostic**: it decides policy, then hands execution to
 **LiteLLM**, which talks to the actual provider. So "adding a provider" means
 three things:
 
 1. Point a `model_classes` entry at the provider's model string.
 2. Give LiteLLM the credentials + routing for that model.
-3. If the model isn't in Ai-Guard's built-in price table, add a
+3. If the model isn't in Modelgov's built-in price table, add a
    [`pricing`](./configuration.md#pricing-optional--custom-token-prices) entry so
    budgets estimate correctly.
 
-`npx create-ai-guard` wires all three for you — pick a provider in the wizard
+`npx create-modelgov` wires all three for you — pick a provider in the wizard
 (OpenAI, Anthropic, Gemini, OpenRouter, Azure OpenAI) and it generates the
-`ai-guard.yaml` (with `pricing` for non-table models), the LiteLLM config, and
+`modelgov.yaml` (with `pricing` for non-table models), the LiteLLM config, and
 the right `.env` keys.
 
-> Note: `create-ai-guard` is not yet published to npm. Until then, run it from
+> Note: `create-modelgov` is not yet published to npm. Until then, run it from
 > source — see [self-host.md](./self-host.md).
 
 ## Provider reference
@@ -33,7 +33,7 @@ the right `.env` keys.
 ### OpenRouter
 
 ```yaml
-# ai-guard.yaml
+# modelgov.yaml
 model_classes:
   standard: { primary: openrouter/anthropic/claude-3.5-sonnet }
 pricing:
@@ -54,7 +54,7 @@ model_list:
 Azure routes by **deployment name**, and needs the endpoint + API version:
 
 ```yaml
-# ai-guard.yaml
+# modelgov.yaml
 model_classes:
   cheap: { primary: azure/gpt-4o-mini }   # "gpt-4o-mini" is YOUR deployment name
 pricing:
@@ -77,13 +77,13 @@ model_list:
 Bedrock, Vertex, Mistral, Cohere, Together, Groq, self-hosted vLLM, … all work
 the same way: name the model in `model_classes`, add a `model_list` entry with
 the provider's params, and add a `pricing` entry if it's not in the built-in
-table. Ai-Guard's budgets, tokens, safety, routing, and audit apply uniformly
+table. Modelgov's budgets, tokens, safety, routing, and audit apply uniformly
 regardless of provider.
 
 ## Why pricing matters here
 
 For models outside the built-in table (OpenRouter, Azure deployments, Bedrock),
-Ai-Guard can't know the rate. Without a `pricing` entry it falls back to a
+Modelgov can't know the rate. Without a `pricing` entry it falls back to a
 conservative default — fine to run, but your USD budgets won't match reality.
 Declare the price and both the **reservation estimate** and the **settled-cost
 fallback** use it. (Token budgets work regardless of price.)

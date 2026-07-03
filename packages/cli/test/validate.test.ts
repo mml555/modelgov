@@ -3,10 +3,10 @@ import { resolve } from "node:path";
 import { validateConfig } from "../src/validate.js";
 import { runPolicyTestFile } from "../src/testPolicy.js";
 
-describe("ai-guard validate", () => {
+describe("modelgov validate", () => {
   it("accepts production example config when keys are set", () => {
     const result = validateConfig({
-      configPath: "ai-guard.production.example.yaml",
+      configPath: "modelgov.production.example.yaml",
       production: true,
       env: { OPENAI_API_KEY: "x", ANTHROPIC_API_KEY: "x" },
     });
@@ -15,7 +15,7 @@ describe("ai-guard validate", () => {
 
   it("rejects missing provider keys in production mode", () => {
     const result = validateConfig({
-      configPath: "ai-guard.yaml",
+      configPath: "modelgov.yaml",
       production: true,
       env: {},
     });
@@ -28,7 +28,7 @@ describe("ai-guard validate", () => {
     process.chdir(resolve(root, "packages/cli"));
     try {
       const result = validateConfig({
-        configPath: "ai-guard.production.example.yaml",
+        configPath: "modelgov.production.example.yaml",
         production: true,
         env: {
           INIT_CWD: root,
@@ -43,9 +43,9 @@ describe("ai-guard validate", () => {
   });
 });
 
-describe("ai-guard test-policy", () => {
+describe("modelgov test-policy", () => {
   it("runs repo policy regression file", () => {
-    const { ok, results } = runPolicyTestFile("ai-guard.policy-tests.yaml");
+    const { ok, results } = runPolicyTestFile("modelgov.policy-tests.yaml");
     expect(results.length).toBeGreaterThan(0);
     expect(ok).toBe(true);
   });
@@ -56,7 +56,7 @@ describe("ai-guard test-policy", () => {
     process.chdir(resolve(root, "packages/cli"));
     process.env.INIT_CWD = root;
     try {
-      const { ok, results } = runPolicyTestFile("ai-guard.policy-tests.yaml");
+      const { ok, results } = runPolicyTestFile("modelgov.policy-tests.yaml");
       expect(results.length).toBeGreaterThan(0);
       expect(ok).toBe(true);
     } finally {

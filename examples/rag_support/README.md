@@ -2,10 +2,10 @@
 
 A customer-service chatbot that answers **only** from a knowledge base — no
 external sources, no hallucinations — and can be embedded on **any** website
-with one `<script>` tag. It proves Ai-Guard end-to-end on a real use case:
+with one `<script>` tag. It proves Modelgov end-to-end on a real use case:
 
 - **Retrieval is governed** — the KB and every user question are embedded
-  through Ai-Guard's `POST /v1/embeddings` (feature `kb_embedding`), so
+  through Modelgov's `POST /v1/embeddings` (feature `kb_embedding`), so
   embedding spend is budgeted + audited like everything else. Vectors are stored
   in **Postgres/pgvector** (cosine kNN with an HNSW index).
 - **Answers are grounded** — the `support_chat` feature is `grounding: strict`.
@@ -18,7 +18,7 @@ with one `<script>` tag. It proves Ai-Guard end-to-end on a real use case:
   daily budget, shown right in the widget.
 
 Runs fully locally against **Ollama** (no cloud key): LiteLLM maps the cloud
-model names in `ai-guard.yaml` to `llama3.2:3b` (chat) and `nomic-embed-text`
+model names in `modelgov.yaml` to `llama3.2:3b` (chat) and `nomic-embed-text`
 (embeddings).
 
 ## Run it
@@ -29,13 +29,13 @@ model names in `ai-guard.yaml` to `llama3.2:3b` (chat) and `nomic-embed-text`
 ollama pull llama3.2:3b && ollama pull nomic-embed-text
 ```
 
-**2. Start an Ai-Guard gateway that loads THIS folder's `ai-guard.yaml`** and
+**2. Start an Modelgov gateway that loads THIS folder's `modelgov.yaml`** and
 maps models via `litellm.ollama.yaml`. From the repo root:
 
 ```bash
-export AI_GUARD_CONFIG=examples/rag_support/ai-guard.yaml
+export MODELGOV_CONFIG=examples/rag_support/modelgov.yaml
 export LITELLM_CONFIG=examples/rag_support/litellm.ollama.yaml
-make up-local        # or: pnpm ai-guard up local
+make up-local        # or: pnpm modelgov up local
 ```
 
 > The gateway must have **Presidio** running (safety `pii: mask`) — the
@@ -73,7 +73,7 @@ corner.
    user type has a small `$0.50/day` cap; hammer it and you'll hit
    `budget_exceeded`, rendered as a friendly limit notice.
 4. **Audit trail** → every embed + chat is a row in the gateway:
-   `pnpm ai-guard requests list`.
+   `pnpm modelgov requests list`.
 
 ## Embed on your own site
 

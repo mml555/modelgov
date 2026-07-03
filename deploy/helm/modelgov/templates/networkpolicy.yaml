@@ -1,0 +1,86 @@
+{{- if .Values.networkPolicy.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "modelgov.fullname" . }}-api
+  labels:
+    {{- include "modelgov.labels" . | nindent 4 }}
+    app.kubernetes.io/component: api
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "modelgov.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: api
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Traffic to the API port from within the release namespace (ingress
+    # controller, sidecars) plus any explicitly allowed namespaces.
+    - from:
+        - podSelector: {}
+        {{- range .Values.networkPolicy.ingressNamespaceSelectors }}
+        - namespaceSelector:
+            {{- toYaml . | nindent 12 }}
+        {{- end }}
+      ports:
+        - protocol: TCP
+          port: 3000
+  egress:
+    # DNS resolution.
+    - to: []
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # In-cluster dependencies in the same namespace: LiteLLM, Redis, Presidio.
+    - to:
+        - podSelector: {}
+      ports:
+        - protocol: TCP
+          port: 4000
+        - protocol: TCP
+          port: 6379
+        - protocol: TCP
+          port: 3000
+    # Postgres — typically a managed instance outside the cluster. Tighten the
+    # destination with networkPolicy.extraEgress in locked-down environments.
+    - to: []
+      ports:
+        - protocol: TCP
+          port: 5432
+    {{- with .Values.networkPolicy.extraEgress }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+---
+# Sidecar lockdown: LiteLLM, Redis, and Presidio must only be reachable from the
+# API pod. Without this, any pod in the cluster could hit LiteLLM on :4000 with
+# the master key (driving the provider account) or read/write Redis — bypassing
+# every Modelgov budget/policy/audit control. Only Ingress is restricted here, so
+# LiteLLM keeps its outbound path to provider APIs.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "modelgov.fullname" . }}-sidecars
+  labels:
+    {{- include "modelgov.labels" . | nindent 4 }}
+    app.kubernetes.io/component: sidecars
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "modelgov.selectorLabels" . | nindent 6 }}
+    matchExpressions:
+      - key: app.kubernetes.io/component
+        operator: In
+        values: ["litellm", "redis", "presidio-analyzer", "presidio-anonymizer"]
+  policyTypes:
+    - Ingress
+  ingress:
+    # Only the API pod of this release may reach the sidecars.
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "modelgov.selectorLabels" . | nindent 14 }}
+              app.kubernetes.io/component: api
+{{- end }}

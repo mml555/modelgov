@@ -1,8 +1,8 @@
 # Service Level Agreement (template)
 
-> **Template only — not a commitment from the Ai-Guard project.** Ai-Guard ships
+> **Template only — not a commitment from the Modelgov project.** Modelgov ships
 > as self-hosted software with **no vendor-operated SLA** today. This template is
-> for a party that **operates** Ai-Guard (a commercial provider or an internal
+> for a party that **operates** Modelgov (a commercial provider or an internal
 > platform team) and wishes to offer an SLA to its customers/downstream teams.
 > Replace every **`[BRACKETED]`** value. Targets below are illustrative defaults
 > aligned with the [HA reference architecture](../deployment/high-availability.md).
@@ -14,18 +14,18 @@
 
 ## 1. Scope
 
-This SLA covers the availability and support of the **Ai-Guard control plane API**
+This SLA covers the availability and support of the **Modelgov control plane API**
 operated by `[PROVIDER]` for `[CUSTOMER]`. It applies to the `/v1/*` request path
 and control-plane endpoints.
 
 **Explicitly excluded from availability calculations:**
 
 - **Upstream model-provider outages** (OpenAI, Anthropic, Gemini, Bedrock, etc.).
-  Ai-Guard returns `502 provider_unavailable` after exhausting the configured
+  Modelgov returns `502 provider_unavailable` after exhausting the configured
   `fallback` model class; provider downtime counts against the provider, not this
   SLA. Fallback across providers is the mitigation.
 - Scheduled maintenance announced ≥ `[48]` hours in advance (max `[4]` hours/month).
-- Customer-caused issues: misconfiguration of `ai-guard.yaml`, exhausted budgets
+- Customer-caused issues: misconfiguration of `modelgov.yaml`, exhausted budgets
   (a correct `403 budget_exceeded` is **not** downtime), rate-limit rejections
   from customer traffic, invalid API keys, or customer network/DNS faults.
 - Force majeure and cloud-provider regional outages beyond `[PROVIDER]`'s HA design.
@@ -81,7 +81,7 @@ credit against the affected month's fees.
 
 **Claim process:** submit within `[30]` days of the affected month via
 `[SUPPORT CHANNEL]`, including approximate timestamps and `requestId` /
-`x-ai-guard-request-id` values where available. Credits are the **sole and
+`x-modelgov-request-id` values where available. Credits are the **sole and
 exclusive remedy** for availability misses and are capped at `[100%]` of the
 monthly fee. Credits do not apply to the excluded categories in §1.
 

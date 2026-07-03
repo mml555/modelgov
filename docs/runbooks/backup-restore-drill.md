@@ -18,11 +18,11 @@ Tested procedure for Postgres backup, restore, and verification.
 From a running deployment with `DATABASE_URL` set:
 
 ```bash
-export DATABASE_URL='postgres://user:pass@host:5432/aiguard'
+export DATABASE_URL='postgres://user:pass@host:5432/modelgov'
 scripts/backup-postgres.sh ./backups
 ```
 
-Output: `backups/ai-guard-<timestamp>.sql.gz` (+ optional `.sha256`).
+Output: `backups/modelgov-<timestamp>.sql.gz` (+ optional `.sha256`).
 
 **RPO:** Depends on backup schedule — aim for ≤15 min with managed Postgres PITR or hourly logical dumps.
 
@@ -31,15 +31,15 @@ Output: `backups/ai-guard-<timestamp>.sql.gz` (+ optional `.sha256`).
 **Warning:** Overwrites objects in the target database.
 
 ```bash
-export DATABASE_URL='postgres://user:pass@fresh-host:5432/aiguard'
-scripts/restore-postgres.sh ./backups/ai-guard-20260701T120000Z.sql.gz
+export DATABASE_URL='postgres://user:pass@fresh-host:5432/modelgov'
+scripts/restore-postgres.sh ./backups/modelgov-20260701T120000Z.sql.gz
 ```
 
 ## Smoke test after restore
 
 ```bash
 export DATABASE_URL='postgres://...'
-export AI_GUARD_API_KEY='your-key'
+export MODELGOV_API_KEY='your-key'
 scripts/verify-restore.sh
 ```
 
@@ -48,7 +48,7 @@ Expected: `/ready` returns `ready`, critical tables present.
 Then run the full readiness drill:
 
 ```bash
-export AI_GUARD_URL=http://127.0.0.1:3098  # verify-restore default port
+export MODELGOV_URL=http://127.0.0.1:3098  # verify-restore default port
 scripts/prod-readiness-check.sh
 ```
 
@@ -59,7 +59,7 @@ scripts/prod-readiness-check.sh
 | **RPO** | ≤15 min with continuous archiving or frequent logical backups |
 | **RTO** | ≤60 min to restore DB + redeploy API replicas (depends on backup size and infra) |
 
-Ai-Guard software does not perform backups — your Postgres operator or `pg_dump` schedule does.
+Modelgov software does not perform backups — your Postgres operator or `pg_dump` schedule does.
 
 ## Drill checklist
 

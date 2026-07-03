@@ -1,8 +1,8 @@
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { AiGuardError } from "@ai-guard/sdk";
-import { ai, EMBED_FEATURE, INGESTOR, RAG_DATABASE_URL } from "./aiguard.js";
+import { ModelgovError } from "@modelgov/sdk";
+import { ai, EMBED_FEATURE, INGESTOR, RAG_DATABASE_URL } from "./modelgov.js";
 import { chunkMarkdown } from "./chunk.js";
 import { count, createPool, initStore, insertRecords, type KbRecord } from "./store.js";
 
@@ -33,8 +33,8 @@ async function main(): Promise<void> {
       input: chunks.map((c) => c.text),
     });
   } catch (err) {
-    if (err instanceof AiGuardError) {
-      console.error(`\n⛔ embedding blocked by Ai-Guard (${err.code}): ${JSON.stringify(err.body)}`);
+    if (err instanceof ModelgovError) {
+      console.error(`\n⛔ embedding blocked by Modelgov (${err.code}): ${JSON.stringify(err.body)}`);
       process.exit(1);
     }
     throw err;

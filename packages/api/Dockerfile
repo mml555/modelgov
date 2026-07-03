@@ -1,4 +1,4 @@
-# Build the Ai-Guard API. Multi-stage: build the whole workspace, then ship a
+# Build the Modelgov API. Multi-stage: build the whole workspace, then ship a
 # runtime that bundles our workspace code and carries only the third-party deps
 # the bundle leaves external (fastify, pg, jose, …).
 
@@ -7,8 +7,8 @@ RUN corepack enable
 WORKDIR /app
 COPY . .
 RUN pnpm install --frozen-lockfile
-RUN pnpm --filter @ai-guard/policy-engine build \
- && pnpm --filter @ai-guard/api build
+RUN pnpm --filter @modelgov/policy-engine build \
+ && pnpm --filter @modelgov/api build
 # Produce a self-contained, production-only deployment of the API whose
 # node_modules is resolved ENTIRELY from the frozen workspace lockfile
 # (pnpm-lock.yaml) — direct AND transitive versions come from lockfile truth,
@@ -19,7 +19,7 @@ RUN pnpm --filter @ai-guard/policy-engine build \
 # Target is OUTSIDE the workspace root (/app) — deploying into a subdir of the
 # workspace trips ERR_PNPM_DEPLOY_DIR_NOT_EMPTY. --legacy uses the stable deploy
 # implementation (the default in pnpm 10 is still experimental).
-RUN pnpm --filter @ai-guard/api --prod --legacy deploy /deploy
+RUN pnpm --filter @modelgov/api --prod --legacy deploy /deploy
 
 FROM node:22-alpine AS runtime
 WORKDIR /app
@@ -32,7 +32,7 @@ COPY --from=build /deploy/node_modules ./node_modules
 COPY --from=build /deploy/package.json ./package.json
 # Ship our bundled app code (tsup output; workspace deps inlined into dist).
 COPY --from=build /app/packages/api/dist ./dist
-COPY ai-guard.yaml ./ai-guard.yaml
+COPY modelgov.yaml ./modelgov.yaml
 # Strip npm/corepack/yarn shipped in the base image: the runtime CMD only ever
 # runs `node`, and the package managers' vendored dependencies otherwise ship
 # CVEs the app never executes.

@@ -1,4 +1,4 @@
-import { parseConfigObject } from "@ai-guard/policy-engine";
+import { parseConfigObject } from "@modelgov/policy-engine";
 import { describe, expect, it } from "vitest";
 import { NoopObservability } from "../src/services/observability";
 import { NoopGuard } from "../src/services/safety";

@@ -1,4 +1,4 @@
-import type { BudgetRemaining, PolicyDecision, PolicyReasonCode } from "@ai-guard/policy-engine";
+import type { BudgetRemaining, PolicyDecision, PolicyReasonCode } from "@modelgov/policy-engine";
 import type { BudgetScope } from "./modules/usage/repo";
 
 /** Fields promoted to the top-level `error` object for stable client contracts. */

@@ -1,0 +1,57 @@
+# Policy regression tests — version-control expected AI policy behavior.
+# Run: pnpm --filter @modelgov/cli exec modelgov test-policy --file modelgov.policy-tests.yaml
+
+config: examples/saas_tiers/modelgov.yaml
+
+cases:
+  - name: free user cannot use standard model
+    input:
+      userType: free_user
+      feature: support_chat
+      modelClass: standard
+    expect:
+      decision: block
+      reasonCode: model_class_not_permitted
+      resolvedModelClass: standard
+      wouldCallModel: false
+
+  - name: paid user may use standard model
+    input:
+      userType: paid_user
+      feature: support_chat
+      modelClass: standard
+    expect:
+      decision: allow
+      resolvedModelClass: standard
+      wouldCallModel: true
+
+  - name: anonymous blocked after daily request limit
+    input:
+      userType: anonymous
+      feature: support_chat
+      modelClass: cheap
+    usage:
+      userDailyRequestsUsed: 3
+    expect:
+      decision: block
+      reasonCode: daily_request_limit_reached
+      wouldCallModel: false
+
+  - name: admin premium allowed under budget
+    input:
+      userType: admin
+      feature: support_chat
+      modelClass: premium
+    expect:
+      decision: allow
+      resolvedModelClass: premium
+      wouldCallModel: true
+
+  - name: free user default cheap model
+    input:
+      userType: free_user
+      feature: support_chat
+    expect:
+      decision: allow
+      resolvedModelClass: cheap
+      wouldCallModel: true

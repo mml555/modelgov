@@ -1,5 +1,5 @@
 import { writeFileSync } from "node:fs";
-import { parseConfigObject } from "@ai-guard/policy-engine";
+import { parseConfigObject } from "@modelgov/policy-engine";
 import { buildServer } from "./server";
 import { NoopObservability } from "./services/observability";
 import { NoopGuard } from "./services/safety";

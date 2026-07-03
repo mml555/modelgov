@@ -1,8 +1,8 @@
 {
-  "name": "@ai-guard/policy-engine",
+  "name": "@modelgov/policy-engine",
   "version": "1.0.0",
   "license": "MIT",
-  "description": "Pure, deterministic AI policy evaluator for Ai-Guard. No I/O.",
+  "description": "Pure, deterministic AI policy evaluator for Modelgov. No I/O.",
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",

@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { parseConfig } from "@ai-guard/policy-engine";
+import { parseConfig } from "@modelgov/policy-engine";
 import { describe, expect, it } from "vitest";
 import type { ChatRequest } from "../src/index";
 
@@ -41,8 +41,8 @@ function extractUnion(name: string, source: string): string[] {
 }
 
 describe("generated SDK config types", () => {
-  it("matches feature and user_type keys from ai-guard.yaml", () => {
-    const yaml = readFileSync(resolve(ROOT, "ai-guard.yaml"), "utf8");
+  it("matches feature and user_type keys from modelgov.yaml", () => {
+    const yaml = readFileSync(resolve(ROOT, "modelgov.yaml"), "utf8");
     const config = parseConfig(yaml);
     const generated = readFileSync(GENERATED, "utf8");
 

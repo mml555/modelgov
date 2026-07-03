@@ -12,7 +12,7 @@ jobs:
         image: postgres:16-alpine
         env:
           POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: aiguard
+          POSTGRES_DB: modelgov
         ports:
           - 55432:5432
         options: >-
@@ -21,7 +21,7 @@ jobs:
           --health-timeout 3s
           --health-retries 12
     env:
-      DATABASE_URL: postgres://postgres:postgres@localhost:55432/aiguard
+      DATABASE_URL: postgres://postgres:postgres@localhost:55432/modelgov
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -45,15 +45,15 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm lint
       - name: Policy regression tests
-        run: pnpm ai-guard test-policy --file ai-guard.policy-tests.yaml
+        run: pnpm modelgov test-policy --file modelgov.policy-tests.yaml
       - name: Verify version surfaces
         run: bash scripts/verify-versions.sh
       - name: Production example deploy checks
         run: pnpm exec tsx scripts/doctor-production-example.ts
       - name: Validate production example config
-        run: OPENAI_API_KEY=x ANTHROPIC_API_KEY=x pnpm ai-guard validate --config ai-guard.production.example.yaml --production
+        run: OPENAI_API_KEY=x ANTHROPIC_API_KEY=x pnpm modelgov validate --config modelgov.production.example.yaml --production
       - run: pnpm test:coverage 2>&1 | tee /tmp/test.log
-      - name: Scaffold smoke (create-ai-guard)
+      - name: Scaffold smoke (create-modelgov)
         run: pnpm exec tsx scripts/scaffold-smoke.ts
       - name: Integration tests ran (not skipped)
         run: |
@@ -61,11 +61,11 @@ jobs:
             echo "::error::Integration tests were skipped — DATABASE_URL must be set in CI"
             exit 1
           fi
-      - run: pnpm --filter @ai-guard/api openapi:export
+      - run: pnpm --filter @modelgov/api openapi:export
       - name: OpenAPI spec is committed and current
         run: |
           git diff --exit-code packages/api/openapi.json \
-            || (echo "::error::openapi.json is stale — run 'pnpm --filter @ai-guard/api openapi:export' and commit the result" && exit 1)
+            || (echo "::error::openapi.json is stale — run 'pnpm --filter @modelgov/api openapi:export' and commit the result" && exit 1)
       - name: API boot smoke test
         run: bash scripts/smoke-ci.sh
 
@@ -76,7 +76,7 @@ jobs:
         image: postgres:16-alpine
         env:
           POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: aiguard
+          POSTGRES_DB: modelgov
         ports:
           - 55432:5432
         options: >-
@@ -85,7 +85,7 @@ jobs:
           --health-timeout 3s
           --health-retries 12
     env:
-      DATABASE_URL: postgres://postgres:postgres@localhost:55432/aiguard
+      DATABASE_URL: postgres://postgres:postgres@localhost:55432/modelgov
       HIERARCHICAL_BUDGETS: "true"
       MULTI_TENANT_POLICY: "true"
       POLICY_STORE_ENABLED: "true"

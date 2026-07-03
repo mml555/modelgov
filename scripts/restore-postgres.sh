@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Restore Ai-Guard Postgres from a pg_dump backup.
-# Usage: DATABASE_URL=... scripts/restore-postgres.sh backups/ai-guard-*.sql.gz
+# Restore Modelgov Postgres from a pg_dump backup.
+# Usage: DATABASE_URL=... scripts/restore-postgres.sh backups/modelgov-*.sql.gz
 set -euo pipefail
 
 : "${DATABASE_URL:?DATABASE_URL is required}"
@@ -11,7 +11,7 @@ if [ ! -f "$BACKUP" ]; then
   exit 1
 fi
 
-echo "Restoring Ai-Guard Postgres from $BACKUP"
+echo "Restoring Modelgov Postgres from $BACKUP"
 echo "WARNING: this drops and recreates objects in the target database."
 read -r -p "Continue? [y/N] " confirm
 if [ "$confirm" != "y" ] && [ "$confirm" != "Y" ]; then

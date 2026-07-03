@@ -1,25 +1,25 @@
 import { randomUUID } from "node:crypto";
 import express from "express";
 import {
-  createAiGuardClient,
+  createModelgovClient,
   PolicyBlockedError,
   SafetyBlockedError,
-} from "@ai-guard/sdk";
+} from "@modelgov/sdk";
 
 /**
  * Jewgo-style event intake demo.
  *
  * Boundary:
  *   This app decides WHO may create event drafts (admin auth stub).
- *   Ai-Guard decides WHETHER the AI extraction call may run.
+ *   Modelgov decides WHETHER the AI extraction call may run.
  */
 
 const app = express();
 app.use(express.json({ limit: "64kb" }));
 
-const ai = createAiGuardClient({
-  baseUrl: process.env.AI_GUARD_URL ?? "http://localhost:3000",
-  apiKey: process.env.AI_GUARD_API_KEY,
+const ai = createModelgovClient({
+  baseUrl: process.env.MODELGOV_URL ?? "http://localhost:3000",
+  apiKey: process.env.MODELGOV_API_KEY,
 });
 
 const ADMIN_TOKEN = process.env.ADMIN_TOKEN ?? "dev-admin-token";
@@ -82,9 +82,9 @@ ${flyerText}`;
       temperature: 0,
     });
 
-  // Correlate host app entity ↔ Ai-Guard audit row for debugging.
+  // Correlate host app entity ↔ Modelgov audit row for debugging.
     console.log(
-      `jewgo_event_draft=${draftId} ai_guard_request_id=${result.requestId} decision=${result.decision}`,
+      `jewgo_event_draft=${draftId} modelgov_request_id=${result.requestId} decision=${result.decision}`,
     );
 
     let extraction: unknown;
@@ -103,7 +103,7 @@ ${flyerText}`;
         model: result.model,
         decision: result.decision,
         costUsd: result.cost.actualUsd,
-        debug: `ai-guard requests show ${result.requestId}`,
+        debug: `modelgov requests show ${result.requestId}`,
       },
     });
   } catch (err) {
@@ -111,7 +111,7 @@ ${flyerText}`;
       const body = err.body as { error?: { details?: { auditRequestId?: string; reasonCode?: string } } };
       const auditId = body.error?.details?.auditRequestId;
       console.warn(
-        `jewgo_event_draft=${draftId} policy_blocked reason=${body.error?.details?.reasonCode} ai_guard_request_id=${auditId ?? "n/a"}`,
+        `jewgo_event_draft=${draftId} policy_blocked reason=${body.error?.details?.reasonCode} modelgov_request_id=${auditId ?? "n/a"}`,
       );
       return res.status(402).json({
         error: "ai_policy_blocked",

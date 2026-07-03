@@ -1,8 +1,8 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
-import { AiGuardError } from "@ai-guard/sdk";
-import { ai, CHAT_FEATURE, RAG_DATABASE_URL, VISITOR } from "./aiguard.js";
+import { ModelgovError } from "@modelgov/sdk";
+import { ai, CHAT_FEATURE, RAG_DATABASE_URL, VISITOR } from "./modelgov.js";
 import { count, createPool, type Pool } from "./store.js";
 import { retrieve } from "./retrieve.js";
 
@@ -97,7 +97,7 @@ async function handleChat(res: ServerResponse, body: Record<string, unknown>): P
       },
     });
   } catch (err) {
-    if (err instanceof AiGuardError) {
+    if (err instanceof ModelgovError) {
       return sendJson(res, 200, {
         blocked: true,
         code: err.code,

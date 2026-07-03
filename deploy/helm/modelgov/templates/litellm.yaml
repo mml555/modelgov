@@ -1,0 +1,59 @@
+{{- if .Values.litellm.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "modelgov.fullname" . }}-litellm
+  labels:
+    {{- include "modelgov.labels" . | nindent 4 }}
+    app.kubernetes.io/component: litellm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "modelgov.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: litellm
+  template:
+    metadata:
+      labels:
+        {{- include "modelgov.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: litellm
+      annotations:
+        checksum/config: {{ .Values.litellm.config | sha256sum }}
+    spec:
+      containers:
+        - name: litellm
+          image: {{ .Values.litellm.image | quote }}
+          args: ["--config", "/app/config.yaml", "--port", "4000"]
+          ports:
+            - containerPort: 4000
+          # Provider keys + LITELLM_MASTER_KEY come from the secret.
+          envFrom:
+            - secretRef:
+                name: {{ include "modelgov.secretName" . }}
+          volumeMounts:
+            - name: litellm-config
+              mountPath: /app/config.yaml
+              subPath: config.yaml
+              readOnly: true
+          resources:
+            {{- toYaml .Values.litellm.resources | nindent 12 }}
+      volumes:
+        - name: litellm-config
+          configMap:
+            name: {{ include "modelgov.fullname" . }}-litellm
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "modelgov.fullname" . }}-litellm
+  labels:
+    {{- include "modelgov.labels" . | nindent 4 }}
+    app.kubernetes.io/component: litellm
+spec:
+  selector:
+    {{- include "modelgov.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: litellm
+  ports:
+    - port: 4000
+      targetPort: 4000
+{{- end }}

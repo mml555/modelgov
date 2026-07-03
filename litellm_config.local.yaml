@@ -1,10 +1,10 @@
 # Local-only LiteLLM config for end-to-end testing with Ollama.
-# Maps every model name ai-guard.yaml references to a single local model, so
+# Maps every model name modelgov.yaml references to a single local model, so
 # the whole pipeline runs with NO external provider keys.
 # Used by docker-compose.local.yml (layered over the simple stack).
 
 model_list:
-  # openai/gpt-4o-mini doubles as the injection guard model (per ai-guard.yaml
+  # openai/gpt-4o-mini doubles as the injection guard model (per modelgov.yaml
   # safety.injection_model). Route it to the 3B model — large enough to follow
   # the one-word classify instruction reliably. The 1B model cannot.
   - model_name: openai/gpt-4o-mini

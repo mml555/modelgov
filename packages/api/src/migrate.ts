@@ -16,7 +16,7 @@ async function main(): Promise<void> {
   });
   try {
     await applySchema(pool);
-    console.log("ai-guard schema applied");
+    console.log("modelgov schema applied");
     // Opt-in tenant-isolation RLS on config_versions (kept OUT of the auto
     // migration chain so it never surprises a non-owner-role deploy).
     if (env.DB_RLS_ENABLED === "true") {

@@ -7,9 +7,9 @@ import {
 } from "../src/deployProfiles";
 
 describe("resolveDeployProfile", () => {
-  it("uses explicit AI_GUARD_DEPLOY_PROFILE", () => {
-    expect(resolveDeployProfile({ AI_GUARD_DEPLOY_PROFILE: "selfhost" })).toBe("selfhost");
-    expect(resolveDeployProfile({ AI_GUARD_DEPLOY_PROFILE: "multitenant" })).toBe("multitenant");
+  it("uses explicit MODELGOV_DEPLOY_PROFILE", () => {
+    expect(resolveDeployProfile({ MODELGOV_DEPLOY_PROFILE: "selfhost" })).toBe("selfhost");
+    expect(resolveDeployProfile({ MODELGOV_DEPLOY_PROFILE: "multitenant" })).toBe("multitenant");
   });
 
   it("infers multitenant from MULTI_TENANT_POLICY", () => {
@@ -40,8 +40,8 @@ describe("deployProfileChecks", () => {
   it("fails multitenant profile when RLS is off in production", () => {
     const checks = deployProfileChecks(
       {
-        AI_GUARD_DEPLOY_PROFILE: "multitenant",
-        AI_GUARD_PRODUCTION: "true",
+        MODELGOV_DEPLOY_PROFILE: "multitenant",
+        MODELGOV_PRODUCTION: "true",
         POLICY_STORE_ENABLED: "true",
         MULTI_TENANT_POLICY: "true",
         DB_RLS_ENABLED: "false",
@@ -53,7 +53,7 @@ describe("deployProfileChecks", () => {
 
   it("warns selfhost when hierarchical budgets are enabled", () => {
     const checks = deployProfileChecks({
-      AI_GUARD_DEPLOY_PROFILE: "selfhost",
+      MODELGOV_DEPLOY_PROFILE: "selfhost",
       HIERARCHICAL_BUDGETS: "true",
     });
     expect(checks.some((c) => c.code === "selfhost_hierarchical")).toBe(true);
@@ -62,8 +62,8 @@ describe("deployProfileChecks", () => {
   it("assertDeployProfilePosture throws on production multitenant misconfig", () => {
     expect(() =>
       assertDeployProfilePosture({
-        AI_GUARD_PRODUCTION: "true",
-        AI_GUARD_DEPLOY_PROFILE: "multitenant",
+        MODELGOV_PRODUCTION: "true",
+        MODELGOV_DEPLOY_PROFILE: "multitenant",
         POLICY_STORE_ENABLED: "true",
         MULTI_TENANT_POLICY: "true",
         DB_RLS_ENABLED: "false",

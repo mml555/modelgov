@@ -1,4 +1,4 @@
-import { ai, EMBED_FEATURE, VISITOR } from "./aiguard.js";
+import { ai, EMBED_FEATURE, VISITOR } from "./modelgov.js";
 import { topK, type Pool, type ScoredChunk } from "./store.js";
 
 export interface RetrievalReceipt {

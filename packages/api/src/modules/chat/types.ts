@@ -1,7 +1,7 @@
 import type {
-  AiGuardConfig,
+  ModelgovConfig,
   BudgetRemaining,
-} from "@ai-guard/policy-engine";
+} from "@modelgov/policy-engine";
 import type { Pool } from "pg";
 import type { LiteLLMClient } from "../../services/litellm";
 import type { Observability } from "../../services/observability";
@@ -10,7 +10,7 @@ import type { ChatMessage } from "../../types";
 import type { BudgetAlertWebhookConfig } from "../usage/budgetAlerts";
 
 export interface ChatServiceDeps {
-  config: AiGuardConfig;
+  config: ModelgovConfig;
   pool: Pool;
   litellm: LiteLLMClient;
   safety: SafetyGuard;
@@ -60,7 +60,7 @@ export interface ChatSuccess {
      */
     budgetRemaining: BudgetRemaining | null;
     safety: { piiMasked: boolean; injectionBlocked: boolean; grounded?: boolean };
-    /** Audit log id — use with `ai-guard requests show <id>`. */
+    /** Audit log id — use with `modelgov requests show <id>`. */
     requestId: string;
   };
 }

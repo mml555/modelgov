@@ -1,8 +1,8 @@
-name: ai-guard-prod
+name: modelgov-prod
 
 services:
   api:
-    image: ${AI_GUARD_API_IMAGE:?AI_GUARD_API_IMAGE must point to a built immutable image}
+    image: ${MODELGOV_API_IMAGE:?MODELGOV_API_IMAGE must point to a built immutable image}
     restart: unless-stopped
     depends_on:
       postgres:
@@ -20,13 +20,13 @@ services:
       HOST: 0.0.0.0
       # Turns known dev-only defaults (e.g. the dev Langfuse overlay's keys)
       # into boot errors instead of silent production footguns.
-      AI_GUARD_PRODUCTION: "true"
-      AI_GUARD_API_KEY: ${AI_GUARD_API_KEY:-}
-      AI_GUARD_API_KEYS: ${AI_GUARD_API_KEYS:-}
+      MODELGOV_PRODUCTION: "true"
+      MODELGOV_API_KEY: ${MODELGOV_API_KEY:-}
+      MODELGOV_API_KEYS: ${MODELGOV_API_KEYS:-}
       DATABASE_URL: ${DATABASE_URL:?set a production Postgres URL}
       LITELLM_BASE_URL: http://litellm:4000
       LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:?set a LiteLLM master key}
-      AI_GUARD_CONFIG: /app/ai-guard.yaml
+      MODELGOV_CONFIG: /app/modelgov.yaml
       PRESIDIO_ANALYZER_URL: http://presidio-analyzer:3000
       PRESIDIO_ANONYMIZER_URL: http://presidio-anonymizer:3000
       REQUEST_BODY_LIMIT_BYTES: ${REQUEST_BODY_LIMIT_BYTES:-1048576}
@@ -61,9 +61,9 @@ services:
       REQUEST_LOG_RETENTION_MS: ${REQUEST_LOG_RETENTION_MS:-2592000000}
       BUDGET_ALERT_WEBHOOK_ALLOW_PRIVATE: ${BUDGET_ALERT_WEBHOOK_ALLOW_PRIVATE:-false}
     volumes:
-      - ./ai-guard.yaml:/app/ai-guard.yaml:ro
+      - ./modelgov.yaml:/app/modelgov.yaml:ro
     ports:
-      - "${AI_GUARD_PUBLIC_PORT:-3000}:3000"
+      - "${MODELGOV_PUBLIC_PORT:-3000}:3000"
     healthcheck:
       # Node-based (no dependency on wget/busybox in the runtime image).
       test:
@@ -84,7 +84,7 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set a production DB password}
-      POSTGRES_DB: ${POSTGRES_DB:-aiguard}
+      POSTGRES_DB: ${POSTGRES_DB:-modelgov}
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:

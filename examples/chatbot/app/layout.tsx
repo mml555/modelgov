@@ -1,6 +1,6 @@
 export const metadata = {
-  title: "Ai-Guard Chatbot Demo",
-  description: "A chatbot where every message is checked by Ai-Guard before the model runs.",
+  title: "Modelgov Chatbot Demo",
+  description: "A chatbot where every message is checked by Modelgov before the model runs.",
 };
 
 const css = `

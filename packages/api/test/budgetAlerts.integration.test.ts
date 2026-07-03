@@ -44,7 +44,7 @@ describe.skipIf(!DATABASE_URL)("budget alert webhooks (integration)", () => {
     expect(init.method).toBe("POST");
     expect(init.headers).toMatchObject({
       "content-type": "application/json",
-      "x-ai-guard-signature": expect.stringMatching(/^sha256=/),
+      "x-modelgov-signature": expect.stringMatching(/^sha256=/),
     });
     const body = JSON.parse(String(init.body));
     expect(body.event).toBe("budget.alert");

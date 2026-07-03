@@ -32,11 +32,11 @@ export interface ChatMessage {
 
 /**
  * A chat request. `feature` and `userType` are REQUIRED — omitting either is a
- * compile-time error, which is how Ai-Guard enforces "every call declares its
+ * compile-time error, which is how Modelgov enforces "every call declares its
  * feature" at the SDK boundary (the API also rejects it at runtime).
  *
  * `FeatureName`, `UserTypeName`, and `ModelClassName` are generated from
- * `ai-guard.yaml` via `pnpm generate-sdk-types`.
+ * `modelgov.yaml` via `pnpm generate-sdk-types`.
  */
 export interface ChatRequest {
   userId: string;
@@ -81,7 +81,7 @@ export interface ChatResponse {
   /** `grounded` is present only for grounded features: whether the answer's
    * citations were verified against the provided context. */
   safety: { piiMasked: boolean; injectionBlocked: boolean; grounded?: boolean };
-  /** Audit log id for `ai-guard requests show`. */
+  /** Audit log id for `modelgov requests show`. */
   requestId: string;
 }
 
