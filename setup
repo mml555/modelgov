@@ -1,0 +1,93 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "$0")" && pwd)"
+cd "$ROOT"
+
+fail() {
+  printf 'setup: %s\n' "$1" >&2
+  exit 1
+}
+
+need_command() {
+  local cmd="$1"
+  local fix="$2"
+  if ! command -v "$cmd" >/dev/null 2>&1; then
+    fail "missing $cmd. $fix"
+  fi
+}
+
+need_command docker "Install Docker Desktop, start it, then rerun ./setup."
+need_command node "Install Node.js 20 or newer, then rerun ./setup."
+need_command corepack "Install Node.js with Corepack support, then rerun ./setup."
+
+node -e "const major=Number(process.versions.node.split('.')[0]); process.exit(major >= 20 ? 0 : 1)" \
+  || fail "Node.js 20 or newer is required. Current version: $(node --version)."
+
+docker info >/dev/null 2>&1 \
+  || fail "Docker is installed but not running. Start Docker Desktop, then rerun ./setup."
+
+docker compose version >/dev/null 2>&1 \
+  || fail "Docker Compose is unavailable. Install/update Docker Desktop, then rerun ./setup."
+
+if ! command -v pnpm >/dev/null 2>&1; then
+  corepack enable >/dev/null 2>&1 || fail "could not enable pnpm through Corepack. Run 'corepack enable', then rerun ./setup."
+fi
+
+if [ ! -f .env ]; then
+  cp .env.local.example .env
+  printf 'Created .env from .env.local.example.\n'
+fi
+
+env_value() {
+  local key="$1"
+  awk -F= -v key="$key" '$1 == key { print $2; found=1 } END { if (!found) exit 1 }' .env 2>/dev/null || true
+}
+
+port_available() {
+  local port="$1"
+  node -e "const net=require('node:net'); const s=net.createServer(); s.once('error',()=>process.exit(1)); s.once('listening',()=>s.close(()=>process.exit(0))); s.listen(Number(process.argv[1]), '127.0.0.1');" "$port"
+}
+
+modelgov_on_port() {
+  local port="$1"
+  node -e "fetch('http://127.0.0.1:'+process.argv[1]+'/health').then(async r => { const b = await r.json().catch(()=>({})); process.exit(r.ok && b.status === 'ok' ? 0 : 1); }).catch(()=>process.exit(1));" "$port"
+}
+
+set_env_value() {
+  local key="$1"
+  local value="$2"
+  if grep -q "^${key}=" .env; then
+    perl -0pi -e "s|^${key}=.*$|${key}=${value}|m" .env
+  else
+    printf '\n%s=%s\n' "$key" "$value" >> .env
+  fi
+}
+
+api_port="$(env_value MODELGOV_PUBLIC_PORT)"
+if [ -z "$api_port" ]; then
+  api_port=3090
+  while ! port_available "$api_port"; do
+    api_port=$((api_port + 1))
+    if [ "$api_port" -gt 3099 ]; then
+      fail "no free API port found in 3090-3099. Stop the process using those ports or set MODELGOV_PUBLIC_PORT in .env."
+    fi
+  done
+  set_env_value MODELGOV_PUBLIC_PORT "$api_port"
+elif ! port_available "$api_port" && ! modelgov_on_port "$api_port"; then
+  fail "MODELGOV_PUBLIC_PORT=$api_port is already in use. Stop that process or change MODELGOV_PUBLIC_PORT in .env, then rerun ./setup."
+fi
+set_env_value MODELGOV_URL "http://localhost:${api_port}"
+
+if [ ! -d node_modules ]; then
+  pnpm install
+fi
+
+pnpm --filter @modelgov/cli dev -- setup simple
+
+printf '\nReady.\n'
+printf 'API:    http://localhost:%s\n' "$api_port"
+printf 'Env:    MODELGOV_URL=http://localhost:%s\n' "$api_port"
+printf 'Status: make status\n'
+printf 'Stop:   make stop\n'
+printf 'Cloud providers later: make start-cloud\n'

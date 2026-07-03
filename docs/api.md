@@ -1,6 +1,6 @@
 # HTTP API
 
-Base URL: your Modelgov API (default `http://localhost:3000`).
+Base URL: your Modelgov API (`./setup` prints the local URL; default `http://localhost:3090`).
 
 OpenAPI spec: **`GET /openapi.json`** (when server is running).
 
@@ -258,7 +258,7 @@ Query budget counters and recent request stats (operator dashboard / debugging).
 ### Example
 
 ```bash
-curl -s "http://localhost:3000/v1/usage?userId=user_123" \
+curl -s "$MODELGOV_URL/v1/usage?userId=user_123" \
   -H "Authorization: Bearer $MODELGOV_API_KEY" | jq .
 ```
 

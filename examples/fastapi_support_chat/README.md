@@ -11,12 +11,12 @@ safety).
 pip install -r requirements.txt
 pip install -e ../../packages/sdk-python      # the Modelgov Python SDK
 
-export MODELGOV_URL=http://localhost:3000
+export MODELGOV_URL=http://localhost:3090  # or the URL printed by ./setup
 export MODELGOV_API_KEY=sk-modelgov-api-local   # a key your Modelgov deployment accepts
 uvicorn app.main:app --reload
 ```
 
-Point it at a running Modelgov gateway (see the repo `make up-local` for an
+Point it at a running Modelgov gateway (see the repo `./setup` for an
 Ollama-only stack, or `npx create-modelgov` to scaffold one).
 
 ## Try it

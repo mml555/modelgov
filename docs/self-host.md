@@ -26,15 +26,16 @@ vendor-hosted SaaS — your data, API keys, and policy stay on your infrastructu
 | **Postgres** | Yes | Usage counters, audit logs, idempotency |
 | **LiteLLM** | Yes | Provider routing and execution |
 | **Presidio** | Recommended | PII mask/block when safety is enabled |
-| **Langfuse** | Optional | Trace UI and cost dashboards (`make up-full`) |
+| **Langfuse** | Optional | Trace UI and cost dashboards (`make start-full`) |
 
 ## Deployment modes
 
 | Mode | Command | Intended use |
 | --- | --- | --- |
-| **Development** | `make up` | Local / dev — API + LiteLLM + Postgres + Presidio |
-| **Full observability** | `make up-full` | Local / dev with Langfuse |
-| **Local models** | `make up-local` | Local Ollama evaluation |
+| **Development** | `./setup` | Local / dev — API + demo provider + LiteLLM + Postgres + Presidio |
+| **Cloud-provider dev** | `make start-cloud` | Local / dev with real OpenAI/Anthropic keys |
+| **Full observability** | `make start-full` | Local / dev with Langfuse |
+| **Local models** | `make start-local` | Local Ollama evaluation |
 | **Small production** | `make up-prod` | Self-hosted production on one host (**not HA**) |
 | **Enterprise production** | [Helm](./production-deploy.md) | **Recommended** — managed Postgres + Redis + TLS + pinned images |
 

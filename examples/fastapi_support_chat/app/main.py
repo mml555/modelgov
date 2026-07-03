@@ -2,7 +2,7 @@
 
 Run:
     pip install -r requirements.txt
-    export MODELGOV_URL=http://localhost:3000
+    export MODELGOV_URL=http://localhost:3090
     export MODELGOV_API_KEY=sk-modelgov-api-local
     uvicorn app.main:app --reload
 
@@ -21,7 +21,7 @@ from modelgov import ModelgovClient, PolicyBlockedError, SafetyBlockedError
 app = FastAPI(title="support-chat")
 
 ai = ModelgovClient(
-    base_url=os.environ.get("MODELGOV_URL", "http://localhost:3000"),
+    base_url=os.environ.get("MODELGOV_URL", "http://localhost:3090"),
     api_key=os.environ.get("MODELGOV_API_KEY", ""),
 )
 

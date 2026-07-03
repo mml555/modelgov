@@ -1,6 +1,6 @@
 # High-availability reference architecture
 
-The default deploy modes (`make up`, `make up-prod`) run **single instances** of
+The default local and compose deploy modes (`./setup`, `make up-prod`) run **single instances** of
 LiteLLM, Postgres, Presidio, and Redis. That is fine for evaluation and low
 traffic, but the [Operations guide](../operations.md#scaling) and
 [failure semantics](../failure-semantics.md) call out the single points of

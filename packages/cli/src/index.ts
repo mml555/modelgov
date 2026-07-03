@@ -163,7 +163,7 @@ Options:
   --modelClass <class>    Model class (optional)
   --config <path>         modelgov.yaml (default: ./modelgov.yaml)
   --local                 Offline evaluation (no API)
-  --baseUrl <url>         API URL (default: http://localhost:3000)
+  --baseUrl <url>         API URL (default: http://localhost:3090)
   --apiKey <key>          API key (default: $MODELGOV_API_KEY)
   --json                  JSON output
 `;
@@ -171,14 +171,14 @@ Options:
 const OPS_USAGE = `modelgov ops commands
 
 Usage:
-  modelgov setup [simple|full|local]
-  modelgov up [simple|full|local|prod]
-  modelgov down [simple|full|local|prod]
-  modelgov status [simple|full|local|prod]
-  modelgov logs [simple|full|local|prod] [--no-follow]
-  modelgov doctor [simple|full|local|prod]
-  modelgov smoke [simple|full|local|prod]
-  modelgov reset [simple|full|local|prod] --yes
+  modelgov setup [simple|full|local|cloud]
+  modelgov up [simple|full|local|cloud|prod]
+  modelgov down [simple|full|local|cloud|prod]
+  modelgov status [simple|full|local|cloud|prod]
+  modelgov logs [simple|full|local|cloud|prod] [--no-follow]
+  modelgov doctor [simple|full|local|cloud|prod] [--strict]
+  modelgov smoke [simple|full|local|cloud|prod]
+  modelgov reset [simple|full|local|cloud|prod] --yes
 `;
 
 function parseExplainFlags(args: string[]): ExplainFlags {
@@ -186,7 +186,7 @@ function parseExplainFlags(args: string[]): ExplainFlags {
     userId: "explain-user",
     configPath: "./modelgov.yaml",
     local: false,
-    baseUrl: process.env.MODELGOV_URL ?? "http://localhost:3000",
+    baseUrl: process.env.MODELGOV_URL ?? "http://localhost:3090",
     apiKey: process.env.MODELGOV_API_KEY,
     json: false,
   };

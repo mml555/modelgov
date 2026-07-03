@@ -27,7 +27,7 @@ Usage:
   modelgov keys revoke <id>
 
 Auth: set MODELGOV_API_KEY to a key with the keys:admin permission,
-and MODELGOV_URL to the API base URL (default http://localhost:3000).
+and MODELGOV_URL to the API base URL (default http://localhost:3090).
 `;
 
 export async function runKeysCommand(args: string[]): Promise<void> {

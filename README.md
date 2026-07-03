@@ -13,27 +13,32 @@ the model call happens.
 
 ## Quick start
 
-**Add Modelgov to your app** (scaffolds config + compose + an example route for
-your framework, then a one-command smoke test):
+**Run the gateway from this repo:**
 
 ```bash
-npx create-modelgov my-app        # asks: framework, feature template, provider, key
-cd my-app && docker compose up -d
-node scripts/smoke.mjs            # first guarded request → prints a requestId
+./setup
 ```
 
-> Note: the packages (`create-modelgov`, `@modelgov/sdk`, `modelgov`) are not
-> yet published to npm/PyPI. Until then, run from source — see
-> [docs/self-host.md](docs/self-host.md).
+That one command checks prerequisites, creates local config, starts Docker,
+waits for readiness, and runs a real chat smoke test against the built-in demo
+provider. No OpenAI key, Anthropic key, Ollama model, or compose knowledge is
+needed for the default local stack.
 
-Templates: `support_chat`, `document_extraction`, `admin_assistant`, `saas_tiers`,
-`event_intake`, `local_dev`, `general_gateway`. Frameworks: Next.js, Express,
-Fastify, FastAPI.
+Successful setup ends with:
 
-**Or run the gateway from this repo:**
+```text
+ok smoke chat succeeded
+API:    http://localhost:3090
+Status: make status
+Stop:   make stop
+```
+
+After setup:
 
 ```bash
-make setup       # creates .env if needed, starts the stack, waits, smoke-tests
+make status      # containers plus /health and /ready
+make stop        # stop the local stack
+make start       # start it again
 ```
 
 Call Modelgov from your app:
@@ -42,7 +47,7 @@ Call Modelgov from your app:
 import { createModelgovClient } from "@modelgov/sdk";
 
 const ai = createModelgovClient({
-  baseUrl: process.env.MODELGOV_URL!,
+  baseUrl: process.env.MODELGOV_URL!, // ./setup writes this to .env
   apiKey: process.env.MODELGOV_API_KEY!,
 });
 
@@ -108,7 +113,7 @@ or any LiteLLM-supported provider.
 | [`nextjs_support_chat`](./examples/nextjs_support_chat) | Next.js API route — app auth → Modelgov SDK |
 
 ```bash
-make setup
+./setup
 MODELGOV_API_KEY=sk-modelgov-api-local \
   pnpm --filter support-chat-example start "How do I reset my password?"
 ```
@@ -127,9 +132,11 @@ MODELGOV_API_KEY=sk-modelgov-api-local \
 
 | Command | Intended use |
 | --- | --- |
-| `make up` | Local / dev |
-| `make up-full` | Local / dev + Langfuse |
-| `make up-local` | Local Ollama eval |
+| `./setup` | One-command local setup with built-in demo provider |
+| `make start` / `make stop` | Start or stop the default local stack |
+| `make start-cloud` | Local dev with real OpenAI/Anthropic keys |
+| `make start-full` | Local dev + Langfuse |
+| `make start-local` | Local Ollama eval |
 | `make up-prod` | Small self-hosted production (**not HA**) |
 | **Helm** | [Enterprise production](./docs/production-deploy.md) — recommended |
 
@@ -137,7 +144,7 @@ MODELGOV_API_KEY=sk-modelgov-api-local \
 
 | Command | Stack |
 | --- | --- |
-| `make setup` | First-run setup + readiness wait + smoke test |
+| `./setup` | First-run setup + readiness wait + smoke test |
 | `make status` | Containers plus `/health` and `/ready` |
 | `make doctor` | Local prerequisites and runtime health |
 | `pnpm modelgov doctor production` | Production env posture check |

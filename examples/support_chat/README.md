@@ -7,7 +7,7 @@ End-to-end demo of calling an AI feature through Modelgov with the TypeScript SD
 1. Start Modelgov from the repo root:
 
    ```bash
-   make setup
+   ./setup
    ```
 
 2. In another terminal, build the workspace and run the demo:
@@ -49,7 +49,7 @@ remaining budget, and safety flags.
 
 | Var               | Default                  | Purpose                       |
 | ----------------- | ------------------------ | ----------------------------- |
-| `MODELGOV_URL`    | `http://localhost:3000`  | Modelgov API base URL         |
+| `MODELGOV_URL`    | setup output URL          | Modelgov API base URL         |
 | `MODELGOV_API_KEY`| _(required)_             | Bearer token for the API      |
 | `DEMO_USER_ID`    | `demo-user-1`            | userId sent on the request    |
 | `DEMO_USER_TYPE`  | `logged_in`              | userType (drives the budget)  |

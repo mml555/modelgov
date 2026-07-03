@@ -7,7 +7,7 @@ Add Modelgov to an existing app in about 20 minutes.
 ```bash
 npx create-modelgov my-project   # or clone this repo
 cd my-project
-make setup                       # creates .env if needed, starts, waits, smoke-tests
+./setup                          # creates .env if needed, starts, waits, smoke-tests
 ```
 
 > Note: the packages (`create-modelgov`, `@modelgov/sdk`, `modelgov`) are not
@@ -19,7 +19,7 @@ Stack: Modelgov API + LiteLLM + Postgres + Presidio.
 Verify:
 
 ```bash
-curl http://localhost:3000/health
+curl "$MODELGOV_URL/health"
 ```
 
 ## 2. Define policy (5 min)
@@ -116,7 +116,7 @@ MODELGOV_API_KEY=sk-... modelgov explain --userType paid_user --feature support_
 
 ## Production checklist
 
-- [ ] Set `MODELGOV_PRODUCTION=true` and run `pnpm modelgov doctor prod --strict` before go-live
+- [ ] Set `MODELGOV_PRODUCTION=true` and run `pnpm modelgov doctor production --strict` before go-live
 - [ ] Copy [`modelgov.production.example.yaml`](../modelgov.production.example.yaml) and [`.env.production.example`](../.env.production.example)
 - [ ] Set scoped API keys (`chat:create` for app servers, `usage:read` for ops)
 - [ ] Configure `BUDGET_ALERT_WEBHOOK_URL` for spend alerts

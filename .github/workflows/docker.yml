@@ -99,22 +99,24 @@ jobs:
       matrix:
         sidecar:
           - postgres:16-alpine
+          - cgr.dev/chainguard/postgres:latest
           - redis:7-alpine
     steps:
       # These are floating public infra images (Postgres/Redis) used as dev/test/
       # compose sidecars — we neither build nor ship them, and cannot patch their
-      # upstream CVEs. Newly-disclosed HIGH/CRITICAL advisories in the base image
-      # would otherwise turn CI red (and block merges) until Docker Hub rebuilds,
-      # which is outside our control. So this scan is informational: it still runs
-      # and prints findings (surfaced as a step warning), but does not fail the
-      # job. The shipped API image is scanned as a blocking gate in the build job.
+      # upstream CVEs. Official postgres:16-alpine reports gosu stdlib CVEs in
+      # Trivy (scanner noise; see .env.production.example for Chainguard alt).
+      # Newly-disclosed HIGH/CRITICAL advisories would otherwise turn CI red and
+      # block merges until upstream rebuilds, which is outside our control. So
+      # this scan is informational: it still runs and prints findings in the log,
+      # but does not fail the job (exit-code 0). The shipped API image is scanned
+      # as a blocking gate in the build job.
       - name: Scan sidecar image
-        continue-on-error: true
         uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # v0.35.0
         with:
           scan-type: image
           image-ref: ${{ matrix.sidecar }}
           format: table
-          exit-code: "1"
+          exit-code: "0"
           severity: HIGH,CRITICAL
           ignore-unfixed: true

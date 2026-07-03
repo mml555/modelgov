@@ -24,7 +24,7 @@ pnpm modelgov explain --local \
 
 ```bash
 export MODELGOV_CONFIG=examples/document_extraction/modelgov.yaml
-make setup
+./setup
 
 MODELGOV_API_KEY=sk-modelgov-api-local \
   pnpm --filter document-extraction-example start

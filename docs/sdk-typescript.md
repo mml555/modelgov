@@ -21,7 +21,7 @@ When published to npm (future): `npm install @modelgov/sdk`.
 import { createModelgovClient } from "@modelgov/sdk";
 
 const ai = createModelgovClient({
-  baseUrl: process.env.MODELGOV_URL ?? "http://localhost:3000",
+  baseUrl: process.env.MODELGOV_URL ?? "http://localhost:3090",
   apiKey: process.env.MODELGOV_API_KEY,
   timeoutMs: 60_000, // default; set null to disable
 });

@@ -1,6 +1,5 @@
-# Simple deploy: Modelgov API + LiteLLM + Postgres + Presidio.
-#   cp .env.example .env   (set OPENAI_API_KEY, ANTHROPIC_API_KEY)
-#   docker compose -f docker-compose.simple.yml up --build
+# Simple deploy: zero-secret local Modelgov stack.
+#   ./setup
 #
 # Backing services publish to 127.0.0.1 only (dev-local). Third-party images use
 # floating tags here for convenience; production pins them via required env vars
@@ -13,7 +12,6 @@ services:
     environment:
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: modelgov
-    ports: ["127.0.0.1:5432:5432"]
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -30,20 +28,35 @@ services:
     image: ghcr.io/berriai/litellm:main-stable
     command: ["--config", "/app/config.yaml", "--port", "4000"]
     environment:
-      OPENAI_API_KEY: ${OPENAI_API_KEY}
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
-      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-demo-unused}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-demo-unused}
+      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:-sk-modelgov-local}
     volumes:
       - ./litellm_config.yaml:/app/config.yaml:ro
-    ports: ["127.0.0.1:4000:4000"]
     deploy:
       resources:
         limits:
           memory: 1G
 
+  demo-llm:
+    build:
+      context: ./tools/demo-llm
+    healthcheck:
+      test:
+        - "CMD"
+        - "node"
+        - "-e"
+        - "fetch('http://localhost:8080/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+
   presidio-analyzer:
     image: mcr.microsoft.com/presidio-analyzer:latest
-    ports: ["127.0.0.1:5002:3000"]
     deploy:
       resources:
         limits:
@@ -51,7 +64,6 @@ services:
 
   presidio-anonymizer:
     image: mcr.microsoft.com/presidio-anonymizer:latest
-    ports: ["127.0.0.1:5001:3000"]
     deploy:
       resources:
         limits:
@@ -64,6 +76,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      demo-llm:
+        condition: service_healthy
       litellm:
         condition: service_started
       presidio-analyzer:
@@ -72,16 +86,16 @@ services:
         condition: service_started
     environment:
       PORT: 3000
-      MODELGOV_API_KEY: ${MODELGOV_API_KEY}
+      MODELGOV_API_KEY: ${MODELGOV_API_KEY:-sk-modelgov-api-local}
       DATABASE_URL: postgres://postgres:postgres@postgres:5432/modelgov
       LITELLM_BASE_URL: http://litellm:4000
-      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY}
+      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:-sk-modelgov-local}
       MODELGOV_CONFIG: /app/modelgov.yaml
       PRESIDIO_ANALYZER_URL: http://presidio-analyzer:3000
       PRESIDIO_ANONYMIZER_URL: http://presidio-anonymizer:3000
     volumes:
       - ./modelgov.yaml:/app/modelgov.yaml:ro
-    ports: ["127.0.0.1:3000:3000"]
+    ports: ["127.0.0.1:${MODELGOV_PUBLIC_PORT:-3090}:3000"]
     healthcheck:
       # Node-based (no dependency on wget/busybox being present in the image).
       test:

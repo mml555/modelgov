@@ -2,6 +2,16 @@
 
 Run Modelgov in production on your own infrastructure.
 
+For local development, start with the repo root command:
+
+```bash
+./setup
+```
+
+That path uses the built-in demo provider and requires no cloud keys. Use
+`make start-cloud` only when you intentionally want local calls to reach
+OpenAI/Anthropic through LiteLLM.
+
 ## Production checklist
 
 - [ ] TLS termination (nginx, ALB, Cloudflare) in front of the API
@@ -58,7 +68,7 @@ make up-prod    # uses docker-compose.production.yml + .env.production
 make down-prod
 ```
 
-Or manually:
+Equivalent lower-level command:
 
 ```bash
 docker compose -f docker-compose.production.yml --env-file .env.production up -d
@@ -278,7 +288,7 @@ make up-prod
 ```bash
 ollama pull llama3.2:1b
 ollama pull llama3.2:3b
-make up-local
+make start-local
 ```
 
 API on port **3080**. No cloud provider keys required.
@@ -288,7 +298,7 @@ API on port **3080**. No cloud provider keys required.
 | Mode | Traces |
 | --- | --- |
 | `observability.provider: none` | Postgres `request_logs` only |
-| `make up-full` / Langfuse | UI at :3001 |
+| `make start-full` / Langfuse | UI at :3001 |
 | `observability.provider: otel` | OTLP/HTTP spans to any OpenTelemetry collector |
 
 For OpenTelemetry, set `OBSERVABILITY_PROVIDER=otel` and

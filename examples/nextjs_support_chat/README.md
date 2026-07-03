@@ -14,7 +14,7 @@ for demonstration.
 
 ## Prerequisites
 
-- Modelgov stack running (`make setup` from repo root)
+- Modelgov stack running (`./setup` from repo root)
 - Node.js 20+
 
 ## Setup

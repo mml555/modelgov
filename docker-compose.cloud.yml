@@ -1,0 +1,9 @@
+# Cloud-provider overlay for local development with real OpenAI/Anthropic keys.
+
+name: modelgov
+
+services:
+  litellm:
+    command: ["--config", "/app/config.cloud.yaml", "--port", "4000"]
+    volumes:
+      - ./litellm_config.cloud.yaml:/app/config.cloud.yaml:ro

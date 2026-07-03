@@ -135,7 +135,7 @@ provider**: prompt (post-masking) and completion content transit LiteLLM to
 OpenAI/Anthropic/Gemini/Bedrock (or your chosen provider), whose processing region
 and retention are governed by *your* contract with *that* provider. To keep data
 in-region, choose a regional/self-hosted model (e.g. Bedrock in-region, Ollama via
-`make up-local`) so no content leaves your boundary.
+`./setup` for the built-in demo provider or `make start-local` for Ollama) so no content leaves your boundary.
 
 ---
 

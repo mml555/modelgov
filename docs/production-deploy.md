@@ -13,9 +13,10 @@ This guide walks from empty infrastructure to a running production Modelgov depl
 
 | Mode | Command | Intended use |
 | --- | --- | --- |
-| `make up` | `pnpm modelgov up simple` | Local / dev |
-| `make up-full` | `pnpm modelgov up full` | Local / dev with Langfuse |
-| `make up-local` | `pnpm modelgov up local` | Local Ollama evaluation |
+| `./setup` | `pnpm modelgov setup simple` | Zero-secret local dev |
+| `make start-cloud` | `pnpm modelgov up cloud` | Local dev with real provider keys |
+| `make start-full` | `pnpm modelgov up full` | Local dev with Langfuse |
+| `make start-local` | `pnpm modelgov up local` | Local Ollama evaluation |
 | `make up-prod` | `pnpm modelgov up prod` | Small self-hosted production (**not HA**) |
 | **Helm** | See below | **Recommended enterprise production** |
 

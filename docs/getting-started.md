@@ -1,77 +1,48 @@
 # Getting started
 
-Get from zero to a guarded LLM call in under 5 minutes once Docker is running.
+Get from zero to a guarded LLM call with one command once Docker is running.
 
-## Fastest path — scaffold a project
-
-```bash
-npx create-modelgov my-app
-```
-
-> Note: the packages (`create-modelgov`, `@modelgov/sdk`, `modelgov`) are not
-> yet published to npm/PyPI. Until then, run from source — see
-> [self-host.md](./self-host.md).
-
-The wizard asks four things — **framework**, **AI feature (template)**,
-**provider**, and your **API key** — then generates everything you need:
-
-```text
-modelgov.yaml   docker-compose.yml   litellm_config.yaml   .env
-scripts/smoke.mjs   + an example route & SDK client for your framework
-```
-
-Non-interactive (CI/scripts):
+## One-command repo setup
 
 ```bash
-npx create-modelgov my-app --template support_chat --framework nextjs --provider openai --yes
-cd my-app
-# set your provider key in .env, set the api image in docker-compose.yml
-docker compose up -d
-node scripts/smoke.mjs        # → prints a requestId on the first guarded call
+./setup
 ```
 
-**Templates:** `support_chat`, `document_extraction`, `admin_assistant`,
-`saas_tiers`, `event_intake`, `local_dev` (Ollama, no cloud key),
-`general_gateway`.
-**Frameworks:** `nextjs`, `express`, `fastify`, `fastapi`, `none`.
-
-The rest of this guide runs the gateway from the repo directly.
+`./setup` checks Docker, Docker Compose, Node, and pnpm; creates `.env` from
+`.env.local.example`; starts the local Docker stack; waits for `/ready`; and
+runs an authenticated `/v1/chat` smoke test. The default stack uses the built-in
+demo LLM provider, so it does not need OpenAI, Anthropic, Ollama, or Langfuse.
+It also writes `MODELGOV_URL` and `MODELGOV_PUBLIC_PORT` to `.env`.
 
 ## Prerequisites
 
 - Docker and Docker Compose
-- Node.js 20+ and pnpm (for the SDK example and wizard)
-- At least one provider API key (OpenAI and/or Anthropic), **or** [Ollama](./operations.md#local-ollama) for fully local mode
+- Node.js 20+ with Corepack
 
-## Step 1 — Start the stack
+If either tool is missing, `./setup` stops with the exact fix to apply.
 
-From the Modelgov repo root:
+## Daily commands
 
-```bash
-make setup
+| Command | What it does |
+| --- | --- |
+| `./setup` | First run or repair: config, start, readiness wait, smoke test |
+| `make status` | Containers plus `/health` and `/ready` |
+| `make stop` | Stop the default local stack |
+| `make start` | Start the default local stack again |
+
+The API URL is printed at the end of setup. By default it uses the first free
+port in `3090-3099`.
+
+Successful setup ends with:
+
+```text
+ok smoke chat succeeded
+API:    http://localhost:3090
+Status: make status
+Stop:   make stop
 ```
 
-If `.env` does not exist, setup copies `.env.example` → `.env`. Edit `.env`:
-
-```bash
-OPENAI_API_KEY=sk-...
-ANTHROPIC_API_KEY=sk-ant-...
-MODELGOV_API_KEY=sk-modelgov-api-local   # any secret; apps use this to call the API
-```
-
-Run again:
-
-```bash
-make setup
-```
-
-Setup starts the stack, waits for `/ready`, runs an authenticated smoke request,
-and prints the API URL. The API listens at **http://localhost:3000**.
-
-Optional: `make up-full` adds Langfuse at http://localhost:3001 (`admin@example.com` / `modelgov-admin`).
-For local Ollama mode, run `make up-local`.
-
-## Step 2 — Understand policy (optional)
+## Understand policy (optional)
 
 Policy lives in [`modelgov.yaml`](../modelgov.yaml). Out of the box you get:
 
@@ -81,7 +52,7 @@ Policy lives in [`modelgov.yaml`](../modelgov.yaml). Out of the box you get:
 
 See [Configuration](./configuration.md) to customize.
 
-## Step 3 — Call from your app
+## Call from your app
 
 ### TypeScript SDK
 
@@ -89,7 +60,7 @@ See [Configuration](./configuration.md) to customize.
 import { createModelgovClient } from "@modelgov/sdk";
 
 const ai = createModelgovClient({
-  baseUrl: "http://localhost:3000",
+  baseUrl: process.env.MODELGOV_URL!,
   apiKey: process.env.MODELGOV_API_KEY!,
 });
 
@@ -113,7 +84,7 @@ Details: [TypeScript SDK](./sdk-typescript.md).
 ### curl
 
 ```bash
-curl -s http://localhost:3000/v1/chat \
+curl -s "$MODELGOV_URL/v1/chat" \
   -H "Authorization: Bearer sk-modelgov-api-local" \
   -H "Content-Type: application/json" \
   -d '{
@@ -124,10 +95,9 @@ curl -s http://localhost:3000/v1/chat \
   }' | jq .
 ```
 
-## Step 4 — Run the included example
+## Run the included example
 
 ```bash
-pnpm install && pnpm build
 MODELGOV_API_KEY=sk-modelgov-api-local \
   pnpm --filter support-chat-example start "How do I reset my password?"
 ```
@@ -135,7 +105,22 @@ MODELGOV_API_KEY=sk-modelgov-api-local \
 See [`examples/support_chat/README.md`](../examples/support_chat/README.md) for
 budget blocks, PII, and injection demos.
 
-## Step 5 — Scaffold a new project
+## Connect real providers
+
+The default stack proves the gateway locally with the built-in demo provider.
+When you want real model calls:
+
+```bash
+cp .env.example .env
+# set OPENAI_API_KEY or ANTHROPIC_API_KEY in .env
+make start-cloud
+```
+
+`make start-local` uses Ollama instead. `make start-full` adds Langfuse.
+Production setup stays in [Operations](./operations.md) and
+[Production deploy](./production-deploy.md).
+
+## Scaffold a new project
 
 ```bash
 pnpm exec create-modelgov ./my-app

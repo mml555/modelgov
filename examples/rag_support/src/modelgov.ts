@@ -3,7 +3,7 @@ import { createModelgovClient } from "@modelgov/sdk";
 // One shared client pointed at the Modelgov gateway (which must load this
 // folder's modelgov.yaml). Every embed + chat call goes through it.
 export const ai = createModelgovClient({
-  baseUrl: process.env.MODELGOV_URL ?? "http://localhost:3000",
+  baseUrl: process.env.MODELGOV_URL ?? "http://localhost:3090",
   apiKey: process.env.MODELGOV_API_KEY,
 });
 

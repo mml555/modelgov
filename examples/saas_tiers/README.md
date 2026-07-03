@@ -36,7 +36,7 @@ Expected: **allow**.
 
    ```bash
    export MODELGOV_CONFIG=examples/saas_tiers/modelgov.yaml
-   make setup
+   ./setup
    ```
 
 2. Demo each tier:

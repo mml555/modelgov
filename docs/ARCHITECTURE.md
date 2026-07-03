@@ -130,7 +130,9 @@ as the source of truth.
 | --- | --- |
 | **simple** (default) | Modelgov API + LiteLLM + Postgres + Presidio |
 | **full** | simple + Langfuse |
-| **local** | simple routed to Ollama (no cloud provider keys) |
+| **simple** | built-in deterministic demo provider (no cloud provider keys) |
+| **local** | Ollama overlay (no cloud provider keys) |
+| **cloud** | real OpenAI/Anthropic provider keys through LiteLLM |
 
 ---
 

@@ -79,6 +79,12 @@ services:
         limits:
           memory: ${API_MEMORY_LIMIT:-512M}
 
+  # In-cluster Postgres for self-hosted compose stacks. Prefer managed Postgres
+  # (RDS, Cloud SQL, etc.) in production — set DATABASE_URL to it and omit this
+  # service. POSTGRES_IMAGE defaults to official postgres:16-alpine in
+  # .env.production.example; Trivy flags gosu stdlib CVEs in that image (scanner
+  # noise — gosu is not on the request path). For a scanner-clean alternative
+  # with the same POSTGRES_* env vars, use Chainguard (see .env.production.example).
   postgres:
     image: ${POSTGRES_IMAGE:?set a pinned postgres image}
     restart: unless-stopped

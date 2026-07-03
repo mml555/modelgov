@@ -35,7 +35,7 @@ maps models via `litellm.ollama.yaml`. From the repo root:
 ```bash
 export MODELGOV_CONFIG=examples/rag_support/modelgov.yaml
 export LITELLM_CONFIG=examples/rag_support/litellm.ollama.yaml
-make up-local        # or: pnpm modelgov up local
+./setup
 ```
 
 > The gateway must have **Presidio** running (safety `pii: mask`) — the

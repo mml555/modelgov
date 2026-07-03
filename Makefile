@@ -1,17 +1,25 @@
-# Modelgov one-command ops. Make targets are aliases for the CLI.
+# Modelgov one-command ops. Make targets are aliases for ./setup or the CLI.
 #   make setup      first-run setup, stack start, readiness wait, smoke test
-#   make up         API + LiteLLM + Postgres + Presidio
-#   make up-full    plus Langfuse observability
-#   make up-local   Ollama-only provider mode
+#   make start      API + demo LLM + LiteLLM + Postgres + Presidio
+#   make stop       stop the default stack
+#   make start-full plus Langfuse observability
+#   make start-local Ollama-only provider mode
+#   make start-cloud real OpenAI/Anthropic provider mode
 #   make up-prod    production compose
 #   make status     containers plus /health and /ready
 
-.PHONY: setup status status-full status-local doctor doctor-full doctor-local smoke reset up up-full up-local up-prod down down-full down-local down-prod logs logs-full logs-local test test-db smoke-ci build install build-image
+.PHONY: setup start start-full start-local start-cloud start-prod stop stop-full stop-local stop-cloud stop-prod status status-full status-local status-cloud doctor doctor-full doctor-local doctor-cloud smoke reset up up-full up-local up-cloud up-prod down down-full down-local down-cloud down-prod logs logs-full logs-local logs-cloud test test-db smoke-ci build install build-image
 
 CLI := pnpm --filter @modelgov/cli dev --
 
 setup:
-	$(CLI) setup simple
+	./setup
+
+start:
+	$(CLI) up simple
+
+stop:
+	$(CLI) down simple
 
 status:
 	$(CLI) status simple
@@ -22,6 +30,9 @@ status-full:
 status-local:
 	$(CLI) status local
 
+status-cloud:
+	$(CLI) status cloud
+
 doctor:
 	$(CLI) doctor simple
 
@@ -31,6 +42,9 @@ doctor-full:
 doctor-local:
 	$(CLI) doctor local
 
+doctor-cloud:
+	$(CLI) doctor cloud
+
 smoke:
 	$(CLI) smoke simple
 
@@ -38,7 +52,7 @@ reset:
 	$(CLI) reset simple --yes
 
 up:
-	$(CLI) up simple
+	$(MAKE) start
 
 up-full:
 	$(CLI) up full
@@ -46,17 +60,23 @@ up-full:
 up-local:
 	$(CLI) up local
 
+up-cloud:
+	$(CLI) up cloud
+
 up-prod:
 	$(CLI) up prod
 
 down:
-	$(CLI) down simple
+	$(MAKE) stop
 
 down-full:
 	$(CLI) down full
 
 down-local:
 	$(CLI) down local
+
+down-cloud:
+	$(CLI) down cloud
 
 down-prod:
 	$(CLI) down prod
@@ -69,6 +89,18 @@ logs:
 
 logs-full:
 	$(CLI) logs full
+
+logs-cloud:
+	$(CLI) logs cloud
+
+start-full: up-full
+start-local: up-local
+start-cloud: up-cloud
+start-prod: up-prod
+stop-full: down-full
+stop-local: down-local
+stop-cloud: down-cloud
+stop-prod: down-prod
 
 install:
 	pnpm install

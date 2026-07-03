@@ -27,8 +27,8 @@ Reference run on a **single VM**, Docker Compose, Postgres 16, Redis enabled, No
 **Reproduce:**
 
 ```bash
-make up
-MODELGOV_URL=http://127.0.0.1:3000 MODELGOV_API_KEY=sk-modelgov-api-local \
+./setup
+MODELGOV_URL=http://127.0.0.1:3090 MODELGOV_API_KEY=sk-modelgov-api-local \
   BENCH_OPS=500 BENCH_CONCURRENCY=16 npx tsx scripts/bench-api-latency.ts
 ```
 
@@ -102,7 +102,7 @@ provider** to add the reservation + settlement write path.
 
 Run A and B/C/D on **identical config** apart from the endpoint so overhead is
 comparable. For B–E, point `model_classes.*.primary` at a local mock (e.g. an
-Ollama tiny model via `make up-local`, or a stub LiteLLM route) so provider
+the built-in demo provider via `./setup`, Ollama tiny model via `make start-local`, or a stub LiteLLM route) so provider
 latency does not swamp the signal — and label the run accordingly.
 
 ---
@@ -171,12 +171,12 @@ export default function () {
 
 ```bash
 # targets.txt
-# POST http://localhost:3000/v1/explain
+# POST http://localhost:3090/v1/explain
 # Authorization: Bearer $MODELGOV_API_KEY
 # Content-Type: application/json
 # @body.json
 
-echo 'POST http://localhost:3000/v1/explain
+echo 'POST http://localhost:3090/v1/explain
 Authorization: Bearer '"$MODELGOV_API_KEY"'
 Content-Type: application/json
 @body.json' > targets.txt

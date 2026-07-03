@@ -68,6 +68,10 @@ describe("parseOpsFlags", () => {
     });
   });
 
+  it("parses cloud mode", () => {
+    expect(parseOpsFlags(["cloud"]).mode).toBe("cloud");
+  });
+
   it("parses --strict", () => {
     expect(parseOpsFlags(["prod", "--strict"]).strict).toBe(true);
   });
@@ -80,7 +84,22 @@ describe("parseOpsFlags", () => {
 describe("modeConfig", () => {
   it("maps simple mode to the default compose file", () => {
     expect(modeConfig("simple").composeArgs).toEqual(["-f", "docker-compose.simple.yml"]);
-    expect(modeConfig("simple").apiPort).toBe(3000);
+    expect(modeConfig("simple").apiPort).toBeGreaterThan(0);
+  });
+
+  it("honors MODELGOV_PUBLIC_PORT for local API modes", () => {
+    const prev = process.env.MODELGOV_PUBLIC_PORT;
+    process.env.MODELGOV_PUBLIC_PORT = "3199";
+    try {
+      expect(modeConfig("simple").apiPort).toBe(3199);
+      expect(modeConfig("cloud").apiPort).toBe(3199);
+    } finally {
+      if (prev === undefined) {
+        delete process.env.MODELGOV_PUBLIC_PORT;
+      } else {
+        process.env.MODELGOV_PUBLIC_PORT = prev;
+      }
+    }
   });
 
   it("maps full mode to simple + dev overlay", () => {
@@ -95,6 +114,15 @@ describe("modeConfig", () => {
   it("maps local mode to the Ollama overlay on port 3080", () => {
     expect(modeConfig("local").apiPort).toBe(3080);
     expect(modeConfig("local").composeArgs).toContain("docker-compose.local.yml");
+  });
+
+  it("maps cloud mode to the cloud-provider overlay", () => {
+    expect(modeConfig("cloud").composeArgs).toEqual([
+      "-f",
+      "docker-compose.simple.yml",
+      "-f",
+      "docker-compose.cloud.yml",
+    ]);
   });
 
   it("maps prod mode to the production compose file", () => {

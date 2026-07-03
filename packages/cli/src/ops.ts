@@ -12,7 +12,7 @@ export type OpsCommand =
   | "status"
   | "up";
 
-type Mode = "simple" | "full" | "local" | "prod";
+type Mode = "simple" | "full" | "local" | "cloud" | "prod";
 
 interface OpsFlags {
   mode: Mode;
@@ -96,8 +96,10 @@ export async function runOps(command: OpsCommand, args: string[]): Promise<void>
   const flags = parseOpsFlags(args);
   switch (command) {
     case "setup":
+      await up(flags, { strictSmoke: true });
+      return;
     case "up":
-      await up(flags);
+      await up(flags, { strictSmoke: false });
       return;
     case "down":
       await dockerCompose(flags.mode, ["down"]);
@@ -145,10 +147,10 @@ export function parseOpsFlags(args: string[]): OpsFlags {
 }
 
 function isMode(value: string): value is Mode {
-  return value === "simple" || value === "full" || value === "local" || value === "prod";
+  return value === "simple" || value === "full" || value === "local" || value === "cloud" || value === "prod";
 }
 
-async function up(flags: OpsFlags): Promise<void> {
+async function up(flags: OpsFlags, opts: { strictSmoke: boolean }): Promise<void> {
   if (flags.mode === "prod") {
     await run("bash", ["scripts/up-prod.sh"]);
     return;
@@ -157,21 +159,26 @@ async function up(flags: OpsFlags): Promise<void> {
   ensureEnv(flags.mode);
   if (flags.mode === "local") {
     await ensureOllama();
-  } else {
+  } else if (flags.mode === "cloud") {
     ensureProviderKeys();
   }
 
   console.log(`Starting Modelgov (${flags.mode})...`);
   await dockerCompose(flags.mode, ["up", "--build", "-d"]);
   await waitForReady(modeConfig(flags.mode).apiPort);
-  await smoke(flags.mode, { strict: false });
+  await smoke(flags.mode, { strict: opts.strictSmoke });
   printSuccess(flags.mode);
 }
 
 function ensureEnv(mode: Mode): void {
   if (existsSync(resolve(ROOT, ".env"))) return;
-  copyFileSync(resolve(ROOT, ".env.example"), resolve(ROOT, ".env"));
-  console.log("Created .env from .env.example.");
+  const template = mode === "cloud" ? ".env.example" : ".env.local.example";
+  copyFileSync(resolve(ROOT, template), resolve(ROOT, ".env"));
+  console.log(`Created .env from ${template}.`);
+  if (mode === "simple" || mode === "full") {
+    console.log("Default setup uses the built-in demo provider, so no cloud API keys are required.");
+    return;
+  }
   if (mode === "local") {
     console.log("Local mode uses Ollama. Keep the dummy provider keys in .env.");
     console.log("Run these once if needed:");
@@ -181,7 +188,7 @@ function ensureEnv(mode: Mode): void {
   }
   console.log("Add at least one provider key to .env, then rerun:");
   console.log(`  ${rerunCommand(mode)}`);
-  console.log("Required for simple/full:");
+  console.log("Required for cloud:");
   console.log("  OPENAI_API_KEY=sk-...");
   console.log("  or ANTHROPIC_API_KEY=sk-ant-...");
   process.exit(0);
@@ -193,7 +200,7 @@ function ensureProviderKeys(): void {
   const anthropic = env.ANTHROPIC_API_KEY;
   if (isRealSecret(openAi) || isRealSecret(anthropic)) return;
   throw new Error(
-    "Set OPENAI_API_KEY or ANTHROPIC_API_KEY in .env, then rerun. Use `make up-local` for Ollama-only setup.",
+    "Set OPENAI_API_KEY or ANTHROPIC_API_KEY in .env, then rerun. Use `./setup` for the zero-secret demo stack.",
   );
 }
 
@@ -204,7 +211,7 @@ async function ensureOllama(): Promise<void> {
   } catch {
     // handled below
   }
-  throw new Error("Ollama is not reachable at http://localhost:11434. Start Ollama, then rerun `make up-local`.");
+  throw new Error("Ollama is not reachable at http://localhost:11434. Start Ollama, then rerun `make start-local`.");
 }
 
 async function status(mode: Mode): Promise<void> {
@@ -221,8 +228,15 @@ async function doctor(mode: Mode, strict: boolean): Promise<void> {
   const envFile = mode === "prod" ? ".env.production" : ".env";
   const securityLines: string[] = [];
   if (mode !== "prod") {
-    console.log(existsSync(resolve(ROOT, ".env")) ? "ok .env exists" : "missing .env; run `make setup`");
-    if (mode === "local") {
+    console.log(existsSync(resolve(ROOT, ".env")) ? "ok .env exists" : "missing .env; run `./setup`");
+    if (mode === "simple" || mode === "full") {
+      console.log("ok built-in demo provider mode (no cloud keys required)");
+      if (existsSync(resolve(ROOT, ".env"))) {
+        const env = readEnvFile(".env");
+        securityLines.push(...securityConfigWarnings(env));
+        for (const line of securityLines) console.log(line);
+      }
+    } else if (mode === "local") {
       await checkOllamaForDoctor();
     } else if (existsSync(resolve(ROOT, ".env"))) {
       const env = readEnvFile(".env");
@@ -303,22 +317,40 @@ async function dockerCompose(mode: Mode, command: string[]): Promise<void> {
 export function modeConfig(mode: Mode): ModeConfig {
   switch (mode) {
     case "full":
-      return { apiPort: 3000, composeArgs: ["-f", "docker-compose.simple.yml", "-f", "docker-compose.dev.full.yml"] };
+      return { apiPort: localPublicPort(3090), composeArgs: ["-f", "docker-compose.simple.yml", "-f", "docker-compose.dev.full.yml"] };
     case "local":
       return { apiPort: 3080, composeArgs: ["-f", "docker-compose.simple.yml", "-f", "docker-compose.local.yml"] };
+    case "cloud":
+      return { apiPort: localPublicPort(3090), composeArgs: ["-f", "docker-compose.simple.yml", "-f", "docker-compose.cloud.yml"] };
     case "prod":
       return { apiPort: Number(process.env.MODELGOV_PUBLIC_PORT ?? 3000), envFile: ".env.production", composeArgs: ["-f", "docker-compose.production.yml"] };
     case "simple":
-      return { apiPort: 3000, composeArgs: ["-f", "docker-compose.simple.yml"] };
+      return { apiPort: localPublicPort(3090), composeArgs: ["-f", "docker-compose.simple.yml"] };
   }
+}
+
+function localPublicPort(defaultPort: number): number {
+  const fromProcess = process.env.MODELGOV_PUBLIC_PORT;
+  if (fromProcess) return Number(fromProcess);
+  const fromEnvFile = readEnvFile(".env").MODELGOV_PUBLIC_PORT;
+  return Number(fromEnvFile ?? defaultPort);
 }
 
 async function waitForReady(port: number): Promise<void> {
   for (let i = 0; i < 60; i++) {
     try {
       const res = await fetch(`http://127.0.0.1:${port}/ready`);
-      const body = await res.json().catch(() => undefined) as { status?: string } | undefined;
-      if (res.ok && body?.status === "ready") return;
+      const body = await res.json().catch(() => undefined) as {
+        status?: string;
+        checks?: { database?: string; litellm?: string; presidio?: string };
+      } | undefined;
+      if (
+        res.ok &&
+        body?.status === "ready" &&
+        body.checks?.database === "ok" &&
+        body.checks?.litellm !== "fail" &&
+        body.checks?.presidio !== "fail"
+      ) return;
     } catch {
       // retry below
     }
@@ -376,17 +408,20 @@ function printSuccess(mode: Mode): void {
   console.log("");
   console.log(`Modelgov API: http://localhost:${port}`);
   if (mode === "full") console.log("Langfuse UI: http://localhost:3001");
-  console.log(`Status: ${rerunCommand("status")}`);
+  console.log(`Status: ${rerunCommand("status", mode)}`);
   console.log(`Logs:   ${rerunCommand("logs", mode)}`);
   console.log(`Stop:   ${rerunCommand("down", mode)}`);
 }
 
 function rerunCommand(commandOrMode: Mode | OpsCommand, mode?: Mode): string {
-  if (commandOrMode === "simple") return "make up";
-  if (commandOrMode === "full") return "make up-full";
-  if (commandOrMode === "local") return "make up-local";
+  if (commandOrMode === "simple") return "make start";
+  if (commandOrMode === "full") return "make start-full";
+  if (commandOrMode === "local") return "make start-local";
+  if (commandOrMode === "cloud") return "make start-cloud";
   if (commandOrMode === "prod") return "make up-prod";
   const suffix = mode && mode !== "simple" ? `-${mode}` : "";
+  if (commandOrMode === "up") return mode && mode !== "simple" ? `make start${suffix}` : "make start";
+  if (commandOrMode === "down") return mode && mode !== "simple" ? `make stop${suffix}` : "make stop";
   return `make ${commandOrMode}${suffix}`;
 }
 

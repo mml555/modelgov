@@ -5,8 +5,46 @@
 FROM node:22-alpine AS build
 RUN corepack enable
 WORKDIR /app
-COPY . .
+
+# Install dependencies from lockfile + workspace manifests first. Keeping source,
+# docs, and examples out of this layer makes repeated `./setup` runs reuse the
+# expensive pnpm install cache unless dependencies actually changed.
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc tsconfig.base.json ./
+RUN mkdir -p \
+  apps/operator-console \
+  examples/chatbot \
+  examples/document_extraction \
+  examples/event_intake_app \
+  examples/nextjs_support_chat \
+  examples/ocr_pipeline \
+  examples/rag_support \
+  examples/saas_tiers \
+  examples/support_chat \
+  packages/api \
+  packages/cli \
+  packages/create-modelgov \
+  packages/policy-engine \
+  packages/sdk-typescript
+COPY apps/operator-console/package.json apps/operator-console/package.json
+COPY examples/chatbot/package.json examples/chatbot/package.json
+COPY examples/document_extraction/package.json examples/document_extraction/package.json
+COPY examples/event_intake_app/package.json examples/event_intake_app/package.json
+COPY examples/nextjs_support_chat/package.json examples/nextjs_support_chat/package.json
+COPY examples/ocr_pipeline/package.json examples/ocr_pipeline/package.json
+COPY examples/rag_support/package.json examples/rag_support/package.json
+COPY examples/saas_tiers/package.json examples/saas_tiers/package.json
+COPY examples/support_chat/package.json examples/support_chat/package.json
+COPY packages/api/package.json packages/api/package.json
+COPY packages/cli/package.json packages/cli/package.json
+COPY packages/create-modelgov/package.json packages/create-modelgov/package.json
+COPY packages/policy-engine/package.json packages/policy-engine/package.json
+COPY packages/sdk-typescript/package.json packages/sdk-typescript/package.json
 RUN pnpm install --frozen-lockfile
+
+# The API image only needs API + policy-engine source to build. Avoid copying
+# repo docs/examples here so documentation changes do not invalidate API builds.
+COPY packages/api packages/api
+COPY packages/policy-engine packages/policy-engine
 RUN pnpm --filter @modelgov/policy-engine build \
  && pnpm --filter @modelgov/api build
 # Produce a self-contained, production-only deployment of the API whose

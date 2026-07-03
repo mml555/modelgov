@@ -5,11 +5,11 @@ import {
 } from "@modelgov/sdk";
 
 // End-to-end demo: a "support chat" feature calling through Modelgov.
-// Run the stack first:  make setup
+// Run the stack first: ./setup
 // Then:                 pnpm --filter support-chat-example start
 
 const client = createModelgovClient({
-  baseUrl: process.env.MODELGOV_URL ?? "http://localhost:3000",
+  baseUrl: process.env.MODELGOV_URL ?? "http://localhost:3090",
   apiKey: process.env.MODELGOV_API_KEY,
 });
 

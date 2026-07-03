@@ -18,7 +18,7 @@ estimates use the real price table; execution is local).
 ```bash
 ollama pull llama3.2:1b && ollama pull llama3.2:3b   # once
 cd examples/chatbot
-docker compose up --build            # gateway on http://localhost:3000
+./setup                              # prints the gateway URL
 ```
 
 **2. Start the chatbot UI:**
@@ -31,7 +31,7 @@ npm run dev                          # http://localhost:3002
 ```
 
 (If you already run a gateway another way — e.g. `npx create-modelgov` or
-`make up-local` — just point `.env`'s `MODELGOV_URL`/`MODELGOV_API_KEY` at it and
+`./setup` — just point `.env`'s `MODELGOV_URL`/`MODELGOV_API_KEY` at it and
 skip step 1. The gateway must load this folder's `modelgov.yaml`.)
 
 ## Prove it — a 60-second tour
@@ -81,5 +81,5 @@ add a [`pricing`](../../docs/providers.md) block so USD estimates stay accurate 
 ### Optional: see safety blocking
 
 Set `support_chat`'s `safety: strict` in `modelgov.yaml` and run the gateway with
-Presidio (see the repo's `make up` / operations docs). Then a message containing
+Presidio (see the repo's `./setup` / operations docs). Then a message containing
 an email or SSN is blocked with a `safety_blocked` bubble.

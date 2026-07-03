@@ -22,7 +22,7 @@ Admin uploads flyer text
 
 ```bash
 export MODELGOV_CONFIG=examples/event_intake_app/modelgov.yaml
-make up
+./setup
 
 cd examples/event_intake_app
 cp .env.example .env

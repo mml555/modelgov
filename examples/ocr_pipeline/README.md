@@ -41,7 +41,7 @@ export MODELGOV_CONFIG=examples/ocr_pipeline/modelgov.yaml
 # Cloud (verified):   export LITELLM_CONFIG=examples/ocr_pipeline/litellm.gemini.yaml
 # Local (offline):    export LITELLM_CONFIG=examples/ocr_pipeline/litellm.ollama.yaml
 export LITELLM_CONFIG=examples/ocr_pipeline/litellm.gemini.yaml
-make up-local
+make start-local
 ```
 
 **2. Generate a sample receipt and extract it:**
