@@ -375,6 +375,7 @@ export async function executeSyncChat(
           billing: deps.billing,
           skipInternalBudget:
             deps.billing?.enabled === true && deps.billing.mode === "credits_only",
+          safetyCostUsd,
         })
       : createHierarchicalProviderBudget({
           pool,

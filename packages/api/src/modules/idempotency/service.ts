@@ -113,12 +113,19 @@ function redactForStorage<T extends IdempotentHttpResult>(result: T): T {
   if (!result.ok) return result;
   if (!("body" in result)) return result;
   const body = (result as { body: Record<string, unknown> }).body;
-  if (!body || typeof body !== "object" || !("message" in body)) return result;
-  return {
-    ...result,
-    body: {
-      ...body,
-      message: { ...(body.message as object), content: "" },
-    },
-  } as T;
+  if (!body || typeof body !== "object") return result;
+  const next: Record<string, unknown> = { ...body };
+  let changed = false;
+  // Chat: drop the completion text.
+  if ("message" in next) {
+    next.message = { ...(next.message as object), content: "" };
+    changed = true;
+  }
+  // Embeddings: drop the generated vectors (the produced content for that route).
+  if ("embeddings" in next) {
+    next.embeddings = [];
+    changed = true;
+  }
+  if (!changed) return result;
+  return { ...result, body: next } as T;
 }

@@ -59,15 +59,25 @@ export async function settleBillingCredits(
   }
 }
 
-/** Release a credit reservation with nothing booked (no model spend occurred). */
+/**
+ * Release a credit reservation when the model call did not run. If safety /
+ * prompt-injection spend was already incurred (`incurredUsd`), that portion is
+ * booked from the wallet and only the remainder is released — a full refund
+ * would give back credits for classifier work that was actually paid for.
+ */
 export async function releaseBillingCredits(
   billing: BillingService | undefined,
   log: SettleLog,
-  params: { tenantId: string; userId: string; reservedUsd: number },
+  params: { tenantId: string; userId: string; reservedUsd: number; incurredUsd?: number },
 ): Promise<void> {
   if (!billing?.usesCredits()) return;
   try {
-    await billing.releaseCredits(params.tenantId, params.userId, params.reservedUsd);
+    const incurred = params.incurredUsd ?? 0;
+    if (incurred > 0) {
+      await billing.settleCredits(params.tenantId, params.userId, params.reservedUsd, incurred);
+    } else {
+      await billing.releaseCredits(params.tenantId, params.userId, params.reservedUsd);
+    }
   } catch (err) {
     log?.error({ err }, "billing credit release failed");
   }

@@ -25,9 +25,11 @@ export function createFlatProviderBudget(args: {
   tenantId?: string;
   billing?: import("../billing/service").BillingService;
   skipInternalBudget?: boolean;
+  /** Safety/classifier spend already incurred — booked from credits on release. */
+  safetyCostUsd?: number;
 }): ProviderBudgetCtx {
   let reservedUsd = args.initialReservedUsd;
-  const { pool, aiRequest, decision, now, leaseId, tenantId, billing, skipInternalBudget } = args;
+  const { pool, aiRequest, decision, now, leaseId, tenantId, billing, skipInternalBudget, safetyCostUsd } = args;
 
   const incur: IncurFn = (costUsd) =>
     recordIncurredCost(pool, {
@@ -61,10 +63,21 @@ export function createFlatProviderBudget(args: {
         });
       }
       if (billing?.usesCredits() && reservedUsd > 0) {
-        await billing.releaseCredits(tenantId ?? "", aiRequest.userId, reservedUsd);
+        const incurred = safetyCostUsd ?? 0;
+        if (incurred > 0) {
+          // Book the incurred safety spend from credits and release the rest —
+          // a full refund would give back credits for work already paid for.
+          await billing.settleCredits(tenantId ?? "", aiRequest.userId, reservedUsd, incurred);
+        } else {
+          await billing.releaseCredits(tenantId ?? "", aiRequest.userId, reservedUsd);
+        }
       }
     },
     topUp: async (additionalUsd): Promise<TopUpOutcome> => {
+      // credits_only skips the internal budget ledger, so there is no lease to
+      // release a top-up against — writing reserved_usd here would leak it.
+      // The credit wallet is the ledger in that mode.
+      if (skipInternalBudget) return { ok: true };
       const result = await topUpBudget(pool, {
         projectId: aiRequest.projectId,
         userId: aiRequest.userId,

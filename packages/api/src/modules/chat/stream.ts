@@ -218,10 +218,12 @@ export async function releaseStream(deps: ChatServiceDeps, ctx: StreamContext): 
   } catch (err) {
     deps.log?.error({ err }, "failed to release stream reservation; lease sweep will reconcile");
   }
-  // Release the credit reservation too — no model spend occurred on this path.
+  // Release the credit reservation too — no model spend, but book any incurred
+  // safety/classifier spend from credits rather than refunding the whole hold.
   await releaseBillingCredits(deps.billing, deps.log, {
     tenantId: deps.policyMeta?.tenantId ?? "",
     userId: aiRequest.userId,
     reservedUsd: hold.reservedUsd,
+    incurredUsd: safetyCostUsd,
   });
 }
