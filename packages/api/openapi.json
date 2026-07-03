@@ -2,7 +2,7 @@
   "openapi": "3.0.3",
   "info": {
     "title": "Modelgov API",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "description": "Self-hosted AI policy gateway. Every completion is checked against budget, token, model-access, and safety policy before a provider is called."
   },
   "components": {

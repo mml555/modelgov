@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { cancel, confirm, group, intro, isCancel, multiselect, note, outro, select, text } from "@clack/prompts";

@@ -29,7 +29,7 @@ scripts/backup-postgres.sh ./backups
 # 2. Upgrade chart + image
 helm upgrade modelgov deploy/helm/modelgov \
   --namespace modelgov \
-  --set image.tag=v1.0.0 \
+  --set image.tag=v1.0.1 \
   -f your-values.yaml
 
 # 3. Wait for rollout
