@@ -5,6 +5,11 @@ on:
     tags: ["v*"]
   pull_request:
   workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Image tag to publish (e.g. 1.1.0) when running manually — used only on workflow_dispatch, e.g. to back-publish a release whose tag build predates a workflow fix."
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -44,6 +49,7 @@ jobs:
           tags: |
             type=ref,event=tag
             type=sha,prefix=
+            type=raw,value=${{ inputs.image_tag }},enable=${{ github.event_name == 'workflow_dispatch' && inputs.image_tag != '' }}
 
       # Always build a single-arch image locally first so we can prove it BOOTS
       # (not just assembles) and scan it — before any release push happens.
@@ -66,7 +72,7 @@ jobs:
       - name: Scan image for vulnerabilities
         # Pinned to the release commit SHA (not the mutable tag) after the
         # trivy-action tag-integrity incident; bump by SHA only.
-        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # v0.35.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: modelgov-api:ci
           format: table
@@ -74,9 +80,16 @@ jobs:
           severity: HIGH,CRITICAL
           ignore-unfixed: true
 
-      # Release (tags): multi-arch build + push with provenance & SBOM
-      # attestations. Reuses the layers cached by the smoke build above, and
-      # only runs after the smoke test has proven the image boots.
+      # Release (tags): build + push with provenance & SBOM attestations. Reuses
+      # the layers cached by the smoke build above, and only runs after the smoke
+      # test has proven the image boots.
+      #
+      # amd64-only for now: building linux/arm64 here means QEMU-emulating the
+      # entire pnpm install + monorepo build (no arm64 cache), which repeatedly
+      # hung for 50+ min and blocked the v1.1.0 image push. amd64 covers the vast
+      # majority of container hosts. TODO: restore arm64 as a proper multi-arch
+      # image via a native arm64 runner (matrix build per-arch + manifest merge),
+      # not QEMU emulation.
       - name: Build and push (release)
         if: github.event_name != 'pull_request'
         uses: docker/build-push-action@v6
@@ -84,7 +97,7 @@ jobs:
           context: .
           file: packages/api/Dockerfile
           push: true
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64
           provenance: true
           sbom: true
           tags: ${{ steps.meta.outputs.tags }}
@@ -112,7 +125,7 @@ jobs:
       # but does not fail the job (exit-code 0). The shipped API image is scanned
       # as a blocking gate in the build job.
       - name: Scan sidecar image
-        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # v0.35.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           scan-type: image
           image-ref: ${{ matrix.sidecar }}
