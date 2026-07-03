@@ -1,3 +1,4 @@
+import { createHmac } from "node:crypto";
 import { parseConfigObject } from "@modelgov/policy-engine";
 import type { FastifyInstance } from "fastify";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
@@ -192,6 +193,56 @@ describe.skipIf(!DATABASE_URL)("billing + emergency (integration)", () => {
     });
     expect(res.statusCode).toBe(400);
     expect(res.json().error.code).toBe("webhook_invalid");
+  });
+
+  const signStripe = (secret: string, body: string): string => {
+    const t = Math.floor(Date.now() / 1000);
+    const digest = createHmac("sha256", secret).update(`${t}.${body}`).digest("hex");
+    return `t=${t},v1=${digest}`;
+  };
+
+  it("credits the buyer's own tenant when checkout omits tenant_id metadata", async () => {
+    const secret = "whsec_tenant_fallback";
+    const svc = createBillingService(pool, {
+      billing: config.billing,
+      stripeWebhookSecret: secret,
+    })!;
+    // A returning buyer already has an account under tenant "acme".
+    await topUpCreditsInTransaction(pool, {
+      tenantId: "acme",
+      userId: "u_ck",
+      creditsUsd: 1,
+      stripeCustomerId: "cus_ck",
+    });
+    const body = JSON.stringify({
+      id: "evt_ck_fallback",
+      type: "checkout.session.completed",
+      data: { object: { customer: "cus_ck", metadata: { user_id: "u_ck", credits_usd: "5" } } },
+    });
+    await svc.handleStripeWebhook(Buffer.from(body), signStripe(secret, body));
+
+    // Resolved from the customer's existing account, not stranded in "".
+    expect((await svc.getBalance("acme", "u_ck")).creditsUsd).toBeCloseTo(6, 6);
+    expect((await svc.getBalance("", "u_ck")).creditsUsd).toBeCloseTo(0, 6);
+  });
+
+  it("honors explicit tenant_id metadata on checkout", async () => {
+    const secret = "whsec_tenant_explicit";
+    const svc = createBillingService(pool, {
+      billing: config.billing,
+      stripeWebhookSecret: secret,
+    })!;
+    const body = JSON.stringify({
+      id: "evt_ck_explicit",
+      type: "checkout.session.completed",
+      data: {
+        object: { customer: "cus_x", metadata: { user_id: "u_x", tenant_id: "beta", credits_usd: "4" } },
+      },
+    });
+    await svc.handleStripeWebhook(Buffer.from(body), signStripe(secret, body));
+
+    expect((await svc.getBalance("beta", "u_x")).creditsUsd).toBeCloseTo(4, 6);
+    expect((await svc.getBalance("", "u_x")).creditsUsd).toBeCloseTo(0, 6);
   });
 
   it("pauses and resumes AI requests via emergency endpoints", async () => {

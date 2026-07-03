@@ -18,6 +18,7 @@ import {
 } from "./services/rateLimitRedis";
 import type { BudgetAlertWebhookConfig } from "./modules/usage/budgetAlerts";
 import { createDbKeyResolver } from "./modules/keys/resolver";
+import { isPrivateHttpHost } from "./util/httpUrlGuard";
 import { createOidcVerifier } from "./modules/authz/oidc";
 import type { ResolvedPrincipal } from "./plugins/auth";
 import {
@@ -81,16 +82,7 @@ export function assertPublicHttpUrl(raw: string): void {
     throw new Error(`webhook URL must be http(s): ${raw}`);
   }
   const host = url.hostname.toLowerCase();
-  const isPrivate =
-    host === "localhost" ||
-    host === "0.0.0.0" ||
-    host === "::1" ||
-    /^127\./.test(host) ||
-    /^10\./.test(host) ||
-    /^192\.168\./.test(host) ||
-    /^169\.254\./.test(host) ||
-    /^172\.(1[6-9]|2\d|3[01])\./.test(host);
-  if (isPrivate) {
+  if (isPrivateHttpHost(host)) {
     throw new Error(
       `budget alert webhook host '${host}' is private/link-local; set BUDGET_ALERT_WEBHOOK_ALLOW_PRIVATE=true to allow it`,
     );
@@ -357,6 +349,7 @@ export function startBackgroundJobs(
     requestLogRetentionMs: env.REQUEST_LOG_RETENTION_MS,
     featureRetentionDays,
     billing,
+    allowPrivateWebhookHosts: env.BUDGET_ALERT_WEBHOOK_ALLOW_PRIVATE === "true",
     log,
   });
 }
