@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/mml555/Ai-Guard/security/advisories/new
+    about: Report security issues privately via a GitHub security advisory — please do NOT open a public issue.
+  - name: Question / usage help
+    url: https://github.com/mml555/Ai-Guard/blob/main/docs/README.md
+    about: Check the docs (getting-started, configuration, operations) before filing an issue.
