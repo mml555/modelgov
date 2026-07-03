@@ -555,6 +555,17 @@ export async function executeSyncChat(
           piiMasked,
           injectionBlocked,
         });
+        // The model ran (spend is real) but the audit write failed — settle the
+        // credit reservation anyway so it isn't stranded forever (there is no
+        // wallet reconciliation sweep); no audit id, so metering is skipped.
+        await settleBillingCredits(deps.billing, log, {
+          tenantId: deps.policyMeta?.tenantId ?? "",
+          userId: aiRequest.userId,
+          feature: aiRequest.feature,
+          reservedUsd: settledReservedUsd,
+          actualCostUsd,
+          requestId: "",
+        });
         return auditUnavailableFailure(false);
       }
       // Model call ran (spend is real) but output safety is down: settle the
@@ -602,6 +613,17 @@ export async function executeSyncChat(
       actualCostUsd,
       piiMasked,
       injectionBlocked,
+    });
+    // The model ran (spend is real) but the final audit write failed — settle
+    // the credit reservation anyway so it isn't stranded (no wallet sweep
+    // reconciles it); no audit id, so metering is skipped.
+    await settleBillingCredits(deps.billing, log, {
+      tenantId: deps.policyMeta?.tenantId ?? "",
+      userId: aiRequest.userId,
+      feature: aiRequest.feature,
+      reservedUsd: settledReservedUsd,
+      actualCostUsd,
+      requestId: "",
     });
     return auditUnavailableFailure(false);
   }

@@ -29,6 +29,13 @@ type SettleLog = { error(obj: unknown, msg: string): void } | undefined;
  * Must be called on EVERY post-model-call exit — success AND
  * output-safety/grounding blocks — or the reservation leaks. Metering is
  * skipped when no request id is available (e.g. audit-write failure).
+ *
+ * ⚠ BILLING MODEL (product decision): this both debits the prepaid wallet
+ * (settleCredits) AND records a Stripe meter event. If an operator wires
+ * `stripe.meter_event_name` to a PRICED Stripe meter while also using credits,
+ * the same usage is billed twice (credit burn-down + metered invoice). Until
+ * that model is decided, treat the meter as usage-visibility only, or do not
+ * enable a priced meter alongside credits. See the billing PR discussion.
  */
 export async function settleBillingCredits(
   billing: BillingService | undefined,

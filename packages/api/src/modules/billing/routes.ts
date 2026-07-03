@@ -3,7 +3,7 @@ import type { FastifyInstance, FastifyRequest } from "fastify";
 import type { Pool } from "pg";
 import { z } from "zod";
 import { sendError } from "../../errors";
-import { checkUserIdAllowed } from "../authz/scope";
+import { checkUserIdAllowed, checkUserTypeAllowedIfPresent } from "../authz/scope";
 import type { BillingService } from "./service";
 
 const topUpBodySchema = z.object({
@@ -62,6 +62,14 @@ export function registerBillingRoutes(
         detail: parsed.error.issues.map((i) => i.message).join("; "),
       });
     }
+    // Same user/userType scope enforcement as the balance read: a billing:write
+    // key restricted with allowedUserIds/allowedUserTypes must not mint credits
+    // for arbitrary users in the tenant (the write path is more dangerous than
+    // the read, so it must be at least as tightly scoped).
+    const userDenial = checkUserIdAllowed(request.ctx, parsed.data.userId);
+    if (userDenial) return sendError(reply, userDenial.status, userDenial.code, {}, userDenial.message);
+    const typeDenial = checkUserTypeAllowedIfPresent(request.ctx, parsed.data.userType);
+    if (typeDenial) return sendError(reply, typeDenial.status, typeDenial.code, {}, typeDenial.message);
     await billing.adminTopUp({
       tenantId: request.ctx.tenantId ?? "",
       ...parsed.data,

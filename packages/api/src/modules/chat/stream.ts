@@ -56,16 +56,24 @@ export async function settleStream(
     log?.error({ err }, "stream cost settlement failed; leaving lease for sweep");
   }
 
-  const requestId = await logRequest(pool, {
-    ...baseLog(aiRequest, decision, deps.policyMeta),
-    resolvedModel: final.model,
-    status: "ok",
-    actualCostUsd,
-    inputTokens: final.inputTokens,
-    outputTokens: final.outputTokens,
-    piiMasked: ctx.piiMasked,
-    injectionBlocked: ctx.injectionBlocked,
-  });
+  // The audit write must not gate credit settlement: if logRequest throws, the
+  // route's `finished` guard skips the partial-settle fallback, so without this
+  // the credit reservation would leak (no wallet reconciliation sweep exists).
+  let requestId = "";
+  try {
+    requestId = await logRequest(pool, {
+      ...baseLog(aiRequest, decision, deps.policyMeta),
+      resolvedModel: final.model,
+      status: "ok",
+      actualCostUsd,
+      inputTokens: final.inputTokens,
+      outputTokens: final.outputTokens,
+      piiMasked: ctx.piiMasked,
+      injectionBlocked: ctx.injectionBlocked,
+    });
+  } catch (err) {
+    log?.error({ err }, "stream success audit write failed; settling credits regardless");
+  }
   observability.recordChat({
     ...baseObs(aiRequest, decision),
     status: "ok",
