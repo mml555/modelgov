@@ -15,7 +15,7 @@ Reference run on a **single VM**, Docker Compose, Postgres 16, Redis enabled, No
 
 | Field | Value |
 | --- | --- |
-| Modelgov version | `v1.0.0` |
+| Modelgov version | `v1.0.1` |
 | API replicas | 1 |
 | API CPU / memory | 2 vCPU / 512 MiB limit |
 | Postgres | 16 (compose), `DB_POOL_MAX=10` |

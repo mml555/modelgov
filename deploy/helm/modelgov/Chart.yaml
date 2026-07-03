@@ -3,8 +3,8 @@ name: modelgov
 description: Self-hosted AI policy gateway — budgets, model access, safety, routing, and usage logs.
 type: application
 # Chart version (bump on chart changes); appVersion tracks the API image.
-version: 1.0.0
-appVersion: "1.0.0"
+version: 1.0.1
+appVersion: "1.0.1"
 home: https://github.com/mml555/modelgov
 sources:
   - https://github.com/mml555/modelgov

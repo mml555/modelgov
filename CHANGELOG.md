@@ -15,6 +15,16 @@ guarantees in `docs/versioning.md` apply.
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-07-03
+
+### Fixed
+- **`create-modelgov` was unrunnable via `npx`**: the built `dist/index.js` was
+  missing its `#!/usr/bin/env node` shebang, so the `create-modelgov` bin was
+  executed as a shell script (`syntax error near '\n'`) instead of by Node. Added
+  the shebang to the source (tsup preserves it). No other package was affected
+  (`@modelgov/cli` already had one). `create-modelgov@1.0.0` should be treated as
+  broken — use `1.0.1`.
+
 ## [1.0.0] - 2026-07-02
 
 First stable, public release under the MIT license. From this version the
@@ -253,7 +263,8 @@ proceed against a known baseline. Full notes:
 - Request correlation IDs (`requestId` on success, `auditRequestId` on blocks)
   and host metadata in audit logs.
 
-[Unreleased]: https://github.com/mml555/modelgov/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/mml555/modelgov/compare/v1.0.1...HEAD
+[1.0.1]: https://github.com/mml555/modelgov/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/mml555/modelgov/releases/tag/v1.0.0
 [0.6.0]: https://github.com/mml555/modelgov/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/mml555/modelgov/compare/v0.0.0...v0.5.0
