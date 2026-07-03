@@ -20,7 +20,7 @@ dependencies = [
 dev = ["pytest", "respx"]
 
 [project.urls]
-Homepage = "https://github.com/ai-guard/ai-guard"
+Homepage = "https://github.com/mml555/Ai-Guard"
 
 [tool.hatch.build.targets.wheel]
 packages = ["ai_guard"]

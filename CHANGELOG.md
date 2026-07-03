@@ -241,4 +241,3 @@ proceed against a known baseline. Full notes:
 [0.0.0]: https://github.com/mml555/Ai-Guard/releases/tag/v0.0.0
 [0.6.0]: https://github.com/mml555/Ai-Guard/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/mml555/Ai-Guard/compare/v0.0.0...v0.5.0
-[0.0.0]: https://github.com/ai-guard/ai-guard/releases/tag/v0.0.0

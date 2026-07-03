@@ -12,7 +12,7 @@
 
 Report security issues privately:
 
-1. **GitHub (preferred):** open a [private security advisory](https://github.com/ai-guard/ai-guard/security/advisories/new) on this repository.
+1. **GitHub (preferred):** open a [private security advisory](https://github.com/mml555/Ai-Guard/security/advisories/new) on this repository.
 2. **Email:** `security@ai-guard.dev` (PGP key available on request).
 
 Include:

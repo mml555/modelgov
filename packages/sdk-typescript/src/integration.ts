@@ -21,6 +21,6 @@ export function warnUntrustedUserId(userId: string, field = "userId"): void {
   }
   if (!looksLikeSessionToken(userId)) return;
   console.warn(
-    `[ai-guard] ${field} looks like a session or OAuth token — pass your app's stable internal user id after authenticating the user. Ai-Guard does not verify app-level auth. See https://github.com/ai-guard/ai-guard/blob/main/docs/mental-model.md`,
+    `[ai-guard] ${field} looks like a session or OAuth token — pass your app's stable internal user id after authenticating the user. Ai-Guard does not verify app-level auth. See https://github.com/mml555/Ai-Guard/blob/main/docs/mental-model.md`,
   );
 }

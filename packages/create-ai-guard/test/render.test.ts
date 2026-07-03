@@ -66,7 +66,7 @@ describe("renderEnv", () => {
     const env = renderEnv(base);
     expect(env).toContain("OPENAI_API_KEY=");
     expect(env).toContain("AI_GUARD_API_KEY=sk-ai-guard-api-local");
-    expect(env).toContain("AI_GUARD_API_IMAGE=ghcr.io/ai-guard/ai-guard-api:latest");
+    expect(env).toContain("AI_GUARD_API_IMAGE=ghcr.io/mml555/ai-guard/ai-guard-api:latest");
     expect(env).toContain("PRESIDIO_ANALYZER_URL=");
   });
   it("omits provider keys for the local template", () => {
@@ -130,7 +130,7 @@ describe("buildScaffold", () => {
 
   it("docker-compose uses AI_GUARD_API_IMAGE with a sensible default", () => {
     const compose = buildScaffold(opts).get("docker-compose.yml")!;
-    expect(compose).toContain("${AI_GUARD_API_IMAGE:-ghcr.io/ai-guard/ai-guard-api:latest}");
+    expect(compose).toContain("${AI_GUARD_API_IMAGE:-ghcr.io/mml555/ai-guard/ai-guard-api:latest}");
   });
 });
 

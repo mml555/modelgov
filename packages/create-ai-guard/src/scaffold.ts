@@ -26,7 +26,7 @@ const LITELLM_MAP: Record<string, { model: string; keyEnv?: string; apiBase?: st
 };
 
 // Pin to a digest in production; override via AI_GUARD_API_IMAGE in .env.
-const DEFAULT_API_IMAGE = "ghcr.io/ai-guard/ai-guard-api:latest";
+const DEFAULT_API_IMAGE = "ghcr.io/mml555/ai-guard/ai-guard-api:latest";
 
 /** LiteLLM params for a model string — derives provider wiring from the prefix. */
 function litellmParamsFor(m: string): string[] {
