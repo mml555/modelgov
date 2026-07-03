@@ -14,6 +14,7 @@ export const KNOWN_PERMISSIONS = [
   "policy:write",
   "audit:read",
   "data:erase",
+  "billing:write",
 ] as const;
 
 export type Permission = (typeof KNOWN_PERMISSIONS)[number];
@@ -23,7 +24,7 @@ export const ROLE_PERMISSIONS: Record<string, Permission[]> = {
   viewer: ["usage:read", "requests:read"],
   // FinOps: spend + audit visibility (same reads today; a distinct role so
   // policy can diverge later and so audit shows intent).
-  finops: ["usage:read", "requests:read", "audit:read"],
+  finops: ["usage:read", "requests:read", "audit:read", "billing:write"],
   // Manage API keys, with the reads needed to see their effect.
   "key-admin": ["keys:admin", "usage:read", "requests:read", "audit:read"],
   // Author policy without touching keys.

@@ -221,7 +221,7 @@ describe("dependency failure semantics", () => {
       headers: { authorization: "Bearer secret" },
       payload: {
         ...payload,
-        metadata: { app: "jewgo", eventDraftId: "draft_1" },
+        metadata: { app: "my_app", recordId: "draft_1" },
       },
     });
     expect(res.statusCode).toBe(200);

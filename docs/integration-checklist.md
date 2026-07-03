@@ -132,7 +132,7 @@ MODELGOV_API_KEY=sk-... modelgov explain --userType paid_user --feature support_
 | [`support_chat`](../examples/support_chat) | Chat, PII, injection, daily budget |
 | [`saas_tiers`](../examples/saas_tiers) | Free vs paid model access |
 | [`document_extraction`](../examples/document_extraction) | Non-chat workflow, daily cap |
-| [`event_intake_app`](../examples/event_intake_app) | Full Jewgo-style integration pattern |
+| [`document_extraction`](../examples/document_extraction) | Full non-chat integration pattern |
 
 For a complete production embedding guide (auth → Modelgov → correlation logging),
 see [Real app pattern](./integrations/real-app-pattern.md).

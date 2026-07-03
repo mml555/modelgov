@@ -15,6 +15,7 @@ export function inferReasonCode(
     if (scope === "user_daily") return "daily_budget_exceeded";
     if (scope === "feature_monthly") return "feature_monthly_budget_exceeded";
     if (scope === "global_monthly") return "global_monthly_budget_exceeded";
+    if (scope === "global_daily") return "global_daily_budget_exceeded";
     return "daily_budget_exceeded";
   }
   if (lower.includes("not permitted")) return "model_class_not_permitted";
@@ -22,6 +23,8 @@ export function inferReasonCode(
   if (lower.includes("user daily budget")) return "daily_budget_exceeded";
   if (lower.includes("feature monthly budget")) return "feature_monthly_budget_exceeded";
   if (lower.includes("global monthly budget")) return "global_monthly_budget_exceeded";
+  if (lower.includes("global daily budget")) return "global_daily_budget_exceeded";
+  if (lower.includes("insufficient credits")) return "insufficient_credits";
   if (lower.includes("degraded")) return "global_budget_degraded";
   if (lower.includes("prompt injection") || lower.includes("injection")) {
     return "prompt_injection_blocked";

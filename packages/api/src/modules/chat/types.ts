@@ -8,6 +8,7 @@ import type { Observability } from "../../services/observability";
 import type { SafetyGuard } from "../../services/safety";
 import type { ChatMessage } from "../../types";
 import type { BudgetAlertWebhookConfig } from "../usage/budgetAlerts";
+import type { BillingService } from "../billing/service";
 
 export interface ChatServiceDeps {
   config: ModelgovConfig;
@@ -22,6 +23,7 @@ export interface ChatServiceDeps {
     warn(obj: unknown, msg: string): void;
     error(obj: unknown, msg: string): void;
   };
+  billing?: BillingService;
 }
 
 export interface ChatInput {

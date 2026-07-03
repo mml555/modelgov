@@ -15,6 +15,7 @@ import { resolveBudgetNodeId, useHierarchicalBudgets } from "./routing";
 import { prepareStream, releaseStream, settleStream, settleStreamPartial } from "./stream";
 import type { ChatInput, ChatResult, ChatServiceDeps } from "./types";
 import type { TenantPolicyResolver } from "../policy/tenantResolver";
+import type { BillingService } from "../billing/service";
 import type { FastifyReply, FastifyRequest } from "fastify";
 
 function withRequestPolicyMeta(
@@ -55,6 +56,7 @@ export interface ChatRouteDeps {
    * active policy version instead of the boot config. Absent = single boot config.
    */
   tenantPolicy?: TenantPolicyResolver;
+  billing?: BillingService;
 }
 
 export function registerChatRoute(

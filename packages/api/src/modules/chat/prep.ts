@@ -174,6 +174,65 @@ export async function reserveFlatBudgetOrReject(
   },
 ): Promise<FlatReserveResult> {
   const { aiRequest, decision, safetyCostUsd, now, rejection, incurSafety } = params;
+  const totalEstimate = decision.estimatedCostUsd + safetyCostUsd;
+  const tenantId = deps.policyMeta?.tenantId ?? "";
+  const billing = deps.billing;
+  const skipInternalReserve = billing?.enabled && billing.mode === "credits_only";
+
+  if (billing?.usesCredits()) {
+    const creditCheck = await billing.checkCredits(tenantId, aiRequest.userId, totalEstimate);
+    if (!creditCheck.ok) {
+      await bookSafetyIfAny(incurSafety, safetyCostUsd);
+      return {
+        ok: false,
+        failure: await recordRejection(
+          rejection,
+          {
+            ...baseLog(aiRequest, decision, deps.policyMeta),
+            status: "failed",
+            error: "insufficient_credits",
+            reasonCode: "insufficient_credits",
+            ...(safetyCostUsd > 0 ? { actualCostUsd: safetyCostUsd } : {}),
+          },
+          baseObs(aiRequest, decision),
+          fail(402, "insufficient_credits", {
+            reasonCode: "insufficient_credits",
+            creditsAvailableUsd: creditCheck.availableUsd,
+            estimatedCostUsd: totalEstimate,
+          }, "Insufficient credits"),
+        ),
+      };
+    }
+  }
+
+  let reservedCredits = 0;
+  if (billing?.usesCredits()) {
+    const ok = await billing.reserveCredits(tenantId, aiRequest.userId, totalEstimate);
+    if (!ok) {
+      await bookSafetyIfAny(incurSafety, safetyCostUsd);
+      return {
+        ok: false,
+        failure: await recordRejection(
+          rejection,
+          {
+            ...baseLog(aiRequest, decision, deps.policyMeta),
+            status: "failed",
+            error: "insufficient_credits",
+            reasonCode: "insufficient_credits",
+            ...(safetyCostUsd > 0 ? { actualCostUsd: safetyCostUsd } : {}),
+          },
+          baseObs(aiRequest, decision),
+          fail(402, "insufficient_credits", { reasonCode: "insufficient_credits" }, "Insufficient credits"),
+        ),
+      };
+    }
+    reservedCredits = totalEstimate;
+  }
+
+  if (skipInternalReserve) {
+    return { ok: true, reservedUsd: reservedCredits };
+  }
+
   const reservation = await reserveBudget(deps.pool, {
     projectId: aiRequest.projectId,
     userId: aiRequest.userId,
@@ -185,6 +244,9 @@ export async function reserveFlatBudgetOrReject(
     tenantId: deps.policyMeta?.tenantId,
   });
   if (!reservation.ok) {
+    if (reservedCredits > 0 && billing) {
+      await billing.releaseCredits(tenantId, aiRequest.userId, reservedCredits);
+    }
     await bookSafetyIfAny(incurSafety, safetyCostUsd);
     const reason = `budget_exceeded:${reservation.failedScope}`;
     const policy = budgetErrorContext(
@@ -226,6 +288,6 @@ export async function reserveFlatBudgetOrReject(
   return {
     ok: true,
     leaseId: reservation.leaseId,
-    reservedUsd: decision.estimatedCostUsd + safetyCostUsd,
+    reservedUsd: skipInternalReserve ? reservedCredits : decision.estimatedCostUsd + safetyCostUsd,
   };
 }

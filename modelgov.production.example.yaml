@@ -19,6 +19,7 @@ providers:
 budgets:
   global:
     monthly_usd: 1000 # set to your org cap; 0 disables the global monthly cap
+    daily_usd: 50     # optional daily runaway guard (0/absent = no daily cap)
     alert_at_percent: 80
     hard_stop_at_percent: 100
   by_user_type:
@@ -49,6 +50,11 @@ features:
 
 routing:
   degrade_at_percent: 80 # downgrade one model class once global spend crosses this
+  retry:
+    max_attempts: 3
+    backoff_ms: [500, 2000, 8000]
+    retry_on: [429, 502, 503]
+    respect_retry_after: true
 
 model_classes:
   cheap:
@@ -70,3 +76,14 @@ safety:
 
 observability:
   provider: none # set OBSERVABILITY_PROVIDER=langfuse in .env.production to override
+
+# Optional Stripe-backed credit wallet (hybrid = min(internal budget, credits)):
+# billing:
+#   provider: stripe
+#   mode: hybrid
+#   stripe:
+#     secret_key: env/STRIPE_SECRET_KEY
+#     webhook_secret: env/STRIPE_WEBHOOK_SECRET
+#     plan_map:
+#       price_pro_monthly: paid_user
+#     meter_event_name: ai_tokens

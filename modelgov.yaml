@@ -43,6 +43,11 @@ features:
 
 routing:
   degrade_at_percent: 80 # downgrade one model class once global spend crosses this
+  retry:
+    max_attempts: 3
+    backoff_ms: [500, 2000, 8000]
+    retry_on: [429, 502, 503]
+    respect_retry_after: true
 
 model_classes:
   cheap:

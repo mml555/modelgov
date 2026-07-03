@@ -31,6 +31,12 @@ vi.mock("../src/db/advisoryLock", () => ({
   }),
 }));
 
+vi.mock("../src/services/webhookOutbox", () => ({
+  claimPendingWebhooks: vi.fn(async () => []),
+  markWebhookDelivered: vi.fn(),
+  markWebhookFailed: vi.fn(),
+}));
+
 import {
   cleanupCompletedIdempotencyKeys,
   cleanupStaleIdempotencyKeys,

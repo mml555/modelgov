@@ -104,7 +104,7 @@ or any LiteLLM-supported provider.
 | --- | --- |
 | [`support_chat`](./examples/support_chat) | Chat, PII masking, injection block, daily budget |
 | [`saas_tiers`](./examples/saas_tiers) | Free vs paid model access |
-| [`event_intake_app`](./examples/event_intake_app) | Jewgo-style flyer extraction — real integration pattern |
+| [`document_extraction`](./examples/document_extraction) | Structured extraction — real integration pattern |
 | [`nextjs_support_chat`](./examples/nextjs_support_chat) | Next.js API route — app auth → Modelgov SDK |
 
 ```bash
@@ -133,7 +133,7 @@ MODELGOV_API_KEY=sk-modelgov-api-local \
 | `make up-prod` | Small self-hosted production (**not HA**) |
 | **Helm** | [Enterprise production](./docs/production-deploy.md) — recommended |
 
-**Current release:** `v1.0.1` — pin `ghcr.io/<org>/modelgov-api:v1.0.1` in production.
+**Current release:** `v1.1.0` — pin `ghcr.io/<org>/modelgov-api:v1.1.0` in production.
 
 | Command | Stack |
 | --- | --- |

@@ -25,7 +25,7 @@ class ReservationRejected extends Error {
 // user_daily + feature_monthly counters are scoped by project_id.
 // global_monthly is deployment-wide (project_id = '').
 
-type Scope = "user_daily" | "feature_monthly" | "global_monthly";
+type Scope = "user_daily" | "feature_monthly" | "global_monthly" | "global_daily";
 
 export type BudgetScope = Scope;
 
@@ -115,6 +115,21 @@ function dimensionsFor(
       reqDelta: 0,
       tokenCap: caps.globalMonthlyTokens ?? null,
     },
+    ...(caps.globalDailyUsd != null
+      ? [
+          {
+            tenantId,
+            scope: "global_daily" as Scope,
+            projectId: GLOBAL_PROJECT_ID,
+            key: "global",
+            windowStart: day,
+            usdCap: caps.globalDailyUsd,
+            reqCap: null,
+            reqDelta: 0,
+            tokenCap: null,
+          },
+        ]
+      : []),
   ];
 }
 
@@ -125,6 +140,7 @@ const SNAPSHOT_SQL = `
         (scope = 'user_daily'      AND project_id = $1 AND key = $2 AND window_start = $3)
      OR (scope = 'feature_monthly' AND project_id = $1 AND key = $4 AND window_start = $5)
      OR (scope = 'global_monthly'  AND project_id = ''  AND key = 'global' AND window_start = $5)
+     OR (scope = 'global_daily'    AND project_id = ''  AND key = 'global' AND window_start = $3)
   )
 `;
 
@@ -158,6 +174,8 @@ export async function loadUsageSnapshot(
     featureMonthlyTokensReserved: 0,
     globalMonthlyTokensUsed: 0,
     globalMonthlyTokensReserved: 0,
+    globalDailyUsdUsed: 0,
+    globalDailyUsdReserved: 0,
   };
 
   for (const row of rows as Array<{
@@ -183,6 +201,9 @@ export async function loadUsageSnapshot(
       snapshot.featureMonthlyUsdReserved = reserved;
       snapshot.featureMonthlyTokensUsed = usedTokens;
       snapshot.featureMonthlyTokensReserved = reservedTokens;
+    } else if (row.scope === "global_daily") {
+      snapshot.globalDailyUsdUsed = used;
+      snapshot.globalDailyUsdReserved = reserved;
     } else {
       snapshot.globalMonthlyUsdUsed = used;
       snapshot.globalMonthlyUsdReserved = reserved;

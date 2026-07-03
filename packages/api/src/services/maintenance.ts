@@ -8,6 +8,13 @@ import {
 import { cleanupCompletedIdempotencyKeys, cleanupStaleIdempotencyKeys } from "../modules/idempotency/repo";
 import { cleanupStaleReservationLeases } from "../modules/usage/reservationLeases";
 import { cleanupStaleNodeLeases } from "../modules/budgets/repo";
+import type { BillingService } from "../modules/billing/service";
+import {
+  claimPendingWebhooks,
+  markWebhookDelivered,
+  markWebhookFailed,
+} from "./webhookOutbox";
+import { deliverOutboxWebhook } from "../modules/billing/routes";
 
 const INTERVAL_MS = 60_000;
 // Distinct from the migration advisory lock key.
@@ -21,6 +28,7 @@ export interface MaintenanceOptions {
   requestLogRetentionMs: number;
   /** Optional per-feature retention overrides (days), applied after the global sweep. */
   featureRetentionDays?: Record<string, number>;
+  billing?: BillingService;
   log?: FastifyBaseLogger;
 }
 
@@ -100,6 +108,31 @@ export async function runMaintenanceSweep(opts: MaintenanceOptions): Promise<voi
     );
     if (removed > 0) {
       opts.log?.info({ feature, removed }, "pruned request_logs for feature retention");
+    }
+  }
+
+  // Webhook outbox delivery runs unconditionally: budget alerts (a non-billing
+  // feature) also enqueue here, so gating on billing would strand their webhooks.
+  const pending = await claimPendingWebhooks(opts.pool);
+  for (const entry of pending) {
+    try {
+      await deliverOutboxWebhook(entry);
+      await markWebhookDelivered(opts.pool, entry.id);
+    } catch (err) {
+      await markWebhookFailed(
+        opts.pool,
+        entry.id,
+        err instanceof Error ? err.message : String(err),
+        entry.attempts,
+      );
+    }
+  }
+
+  // Stripe meter flush is billing-specific.
+  if (opts.billing?.enabled) {
+    const reported = await opts.billing.flushPendingMeters(opts.log);
+    if (reported > 0) {
+      opts.log?.info({ reported }, "flushed pending stripe meter events");
     }
   }
 }

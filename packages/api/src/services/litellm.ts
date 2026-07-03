@@ -113,6 +113,13 @@ export interface LiteLLMClientOptions {
   fetchImpl?: typeof fetch;
   /** Custom per-model prices (from modelgov.yaml `pricing:`) for the cost fallback. */
   priceOverrides?: Record<string, ModelPrice>;
+  /** Retry transient provider errors before surfacing ProviderError. */
+  retry?: {
+    maxAttempts: number;
+    backoffMs: number[];
+    retryOn: number[];
+    respectRetryAfter: boolean;
+  };
 }
 
 /**
@@ -162,81 +169,121 @@ function extractCost(
   return null;
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function retryDelayMs(
+  retry: NonNullable<LiteLLMClientOptions["retry"]>,
+  attempt: number,
+  res?: Response,
+): number {
+  let delay = retry.backoffMs[Math.min(attempt, retry.backoffMs.length - 1)] ?? 1000;
+  if (res && retry.respectRetryAfter) {
+    const header = res.headers.get("retry-after");
+    if (header) {
+      const sec = Number(header);
+      if (Number.isFinite(sec) && sec > 0) delay = sec * 1000;
+    }
+  }
+  return delay;
+}
+
 export function createLiteLLMClient(
   options: LiteLLMClientOptions,
 ): LiteLLMClient {
   const doFetch = options.fetchImpl ?? fetch;
   const baseUrl = options.baseUrl.replace(/\/$/, "");
   const timeoutMs = options.timeoutMs ?? 60_000;
+  const retry = options.retry;
 
   return {
     async chat(params) {
-      const controller = new AbortController();
-      const timer = setTimeout(
-        () => controller.abort(),
-        params.timeoutMs ?? timeoutMs,
-      );
-      let res: Response;
-      try {
-        res = await doFetch(`${baseUrl}/chat/completions`, {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-            ...(options.apiKey
-              ? { authorization: `Bearer ${options.apiKey}` }
-              : {}),
-          },
-          body: JSON.stringify({
-            model: params.model,
-            messages: params.messages,
-            max_tokens: params.maxTokens,
-            temperature: params.temperature,
-          }),
-          signal: controller.signal,
-        });
-      } catch (err) {
-        // Network failure / abort -> provider failure (fallback-eligible).
-        throw new ProviderError(
-          `LiteLLM request failed for model '${params.model}'`,
-          undefined,
-          { cause: err },
-        );
-      } finally {
-        clearTimeout(timer);
-      }
+      const maxAttempts = retry?.maxAttempts ?? 1;
+      let lastProviderError: ProviderError | undefined;
 
-      if (!res.ok) {
-        const body = await res.text().catch(() => "");
-        if (res.status >= 500 || res.status === 429) {
-          throw new ProviderError(
-            `LiteLLM returned ${res.status} for model '${params.model}': ${body}`,
+      for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        const controller = new AbortController();
+        const timer = setTimeout(
+          () => controller.abort(),
+          params.timeoutMs ?? timeoutMs,
+        );
+        let res: Response;
+        try {
+          res = await doFetch(`${baseUrl}/chat/completions`, {
+            method: "POST",
+            headers: {
+              "content-type": "application/json",
+              ...(options.apiKey
+                ? { authorization: `Bearer ${options.apiKey}` }
+                : {}),
+            },
+            body: JSON.stringify({
+              model: params.model,
+              messages: params.messages,
+              max_tokens: params.maxTokens,
+              temperature: params.temperature,
+            }),
+            signal: controller.signal,
+          });
+        } catch (err) {
+          lastProviderError = new ProviderError(
+            `LiteLLM request failed for model '${params.model}'`,
+            undefined,
+            { cause: err },
+          );
+          if (retry && attempt < maxAttempts - 1) {
+            await sleep(retryDelayMs(retry, attempt));
+            continue;
+          }
+          throw lastProviderError;
+        } finally {
+          clearTimeout(timer);
+        }
+
+        if (!res.ok) {
+          const body = await res.text().catch(() => "");
+          if (res.status >= 500 || res.status === 429) {
+            lastProviderError = new ProviderError(
+              `LiteLLM returned ${res.status} for model '${params.model}': ${body}`,
+              res.status,
+            );
+            if (retry?.retryOn.includes(res.status) && attempt < maxAttempts - 1) {
+              await sleep(retryDelayMs(retry, attempt, res));
+              continue;
+            }
+            throw lastProviderError;
+          }
+          throw new LiteLLMClientError(
+            `LiteLLM rejected request (${res.status})`,
             res.status,
+            body,
           );
         }
-        throw new LiteLLMClientError(
-          `LiteLLM rejected request (${res.status})`,
-          res.status,
-          body,
-        );
+
+        const json = (await res.json()) as Record<string, unknown>;
+        const choices = json["choices"] as
+          | Array<{ message?: { content?: string } }>
+          | undefined;
+        const content = choices?.[0]?.message?.content ?? "";
+        const usage = json["usage"] as
+          | { prompt_tokens?: number; completion_tokens?: number }
+          | undefined;
+
+        return {
+          content,
+          model: (json["model"] as string) ?? params.model,
+          actualCostUsd: extractCost(res.headers, json, params.model, options.priceOverrides),
+          inputTokens: usage?.prompt_tokens,
+          outputTokens: usage?.completion_tokens,
+          raw: json,
+        };
       }
 
-      const json = (await res.json()) as Record<string, unknown>;
-      const choices = json["choices"] as
-        | Array<{ message?: { content?: string } }>
-        | undefined;
-      const content = choices?.[0]?.message?.content ?? "";
-      const usage = json["usage"] as
-        | { prompt_tokens?: number; completion_tokens?: number }
-        | undefined;
-
-      return {
-        content,
-        model: (json["model"] as string) ?? params.model,
-        actualCostUsd: extractCost(res.headers, json, params.model, options.priceOverrides),
-        inputTokens: usage?.prompt_tokens,
-        outputTokens: usage?.completion_tokens,
-        raw: json,
-      };
+      throw (
+        lastProviderError ??
+        new ProviderError(`LiteLLM request failed for model '${params.model}'`)
+      );
     },
 
     async *chatStream(params) {

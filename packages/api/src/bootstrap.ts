@@ -11,6 +11,7 @@ import { createLiteLLMClient, type LiteLLMClient } from "./services/litellm";
 import { createObservability, type Observability } from "./services/observability";
 import { createSafetyGuard, type SafetyGuard } from "./services/safety";
 import { startMaintenance } from "./services/maintenance";
+import type { BillingService } from "./modules/billing/service";
 import {
   connectRateLimitRedis,
   createRateLimitRedis,
@@ -204,6 +205,7 @@ export function createRuntimeServices(env: Env, config: ModelgovConfig): Runtime
     apiKey: env.LITELLM_MASTER_KEY,
     timeoutMs: env.LITELLM_TIMEOUT_MS,
     priceOverrides: config.pricing,
+    retry: config.routing.retry,
   });
 
   // Safety backends are wired only when configured; otherwise the guard is a
@@ -326,6 +328,7 @@ export function startBackgroundJobs(
   config: ModelgovConfig,
   pool: Pool,
   log: FastifyInstance["log"],
+  billing?: BillingService,
 ): NodeJS.Timeout | undefined {
   if (env.MAINTENANCE_ENABLED !== "true") return undefined;
   // The stale-lease sweep must outlive the longest a live request can legitimately
@@ -353,6 +356,7 @@ export function startBackgroundJobs(
     reservationStaleMs: env.RESERVATION_STALE_MS,
     requestLogRetentionMs: env.REQUEST_LOG_RETENTION_MS,
     featureRetentionDays,
+    billing,
     log,
   });
 }

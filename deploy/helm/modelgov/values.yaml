@@ -23,7 +23,7 @@ image:
   # Matches the image published by .github/workflows/docker.yml
   # (ghcr.io/<owner>/<repo>/modelgov-api). Override for a mirror/private registry.
   repository: ghcr.io/mml555/modelgov/modelgov-api
-  tag: v1.0.1
+  tag: v1.1.0
   pullPolicy: IfNotPresent
 
 api:

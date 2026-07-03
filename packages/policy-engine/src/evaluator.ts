@@ -218,6 +218,19 @@ export function evaluateAiRequest(input: EvaluateInput): PolicyDecision {
     }
   }
 
+  const globalDailyCap = global.dailyUsd ?? null;
+  const globalDailySpend =
+    (usage.globalDailyUsdUsed ?? 0) + (usage.globalDailyUsdReserved ?? 0);
+  if (globalDailyCap !== null && globalDailyCap > 0 && globalDailySpend + estimate > globalDailyCap) {
+    return buildDecision(ctx, {
+      decision: "block",
+      reasonCode: "global_daily_budget_exceeded",
+      reason: `global daily budget exceeded (cap $${globalDailyCap})`,
+      effectiveClass,
+      useFallback: false,
+    });
+  }
+
   // ── Token gates (block on any breach) ──────────────────────────────────────
   // Worst-case token estimate reserved just like cost; enforced only where a
   // token cap is configured.
@@ -338,6 +351,8 @@ function buildDecision(ctx: BuildCtx, args: BuildArgs): PolicyDecision {
     global.monthlyUsd > 0
       ? global.monthlyUsd * (global.hardStopAtPercent / 100)
       : null;
+  const globalDailyCap =
+    global.dailyUsd != null && global.dailyUsd > 0 ? global.dailyUsd : null;
   const featureCap = feature.budget?.monthlyUsd ?? null;
 
   const userDailySpend = usage.userDailyUsdUsed + usage.userDailyUsdReserved;
@@ -345,6 +360,8 @@ function buildDecision(ctx: BuildCtx, args: BuildArgs): PolicyDecision {
     usage.featureMonthlyUsdUsed + usage.featureMonthlyUsdReserved;
   const globalSpend =
     usage.globalMonthlyUsdUsed + usage.globalMonthlyUsdReserved;
+  const globalDailySpend =
+    (usage.globalDailyUsdUsed ?? 0) + (usage.globalDailyUsdReserved ?? 0);
 
   const userTokenCap = userBudget.dailyTokens ?? null;
   const featureTokenCap = feature.budget?.monthlyTokens ?? null;
@@ -358,6 +375,7 @@ function buildDecision(ctx: BuildCtx, args: BuildArgs): PolicyDecision {
     featureMonthlyUsd:
       featureCap !== null ? roundUsd(featureCap - featureSpend) : null,
     globalMonthlyUsd: globalCap !== null ? roundUsd(globalCap - globalSpend) : null,
+    globalDailyUsd: globalDailyCap !== null ? roundUsd(globalDailyCap - globalDailySpend) : null,
     userDailyTokens: userTokenCap !== null ? userTokenCap - userTokens : null,
     featureMonthlyTokens: featureTokenCap !== null ? featureTokenCap - featureTokens : null,
     globalMonthlyTokens: globalTokenCap !== null ? globalTokenCap - globalTokens : null,
@@ -368,6 +386,7 @@ function buildDecision(ctx: BuildCtx, args: BuildArgs): PolicyDecision {
     userDailyRequests: userBudget.dailyRequests,
     featureMonthlyUsd: featureCap,
     globalMonthlyUsd: globalCap,
+    globalDailyUsd: globalDailyCap,
     userDailyTokens: userTokenCap,
     featureMonthlyTokens: featureTokenCap,
     globalMonthlyTokens: globalTokenCap,

@@ -110,7 +110,7 @@ export const TEMPLATES: Record<TemplateId, Template> = {
   },
   event_intake: {
     id: "event_intake",
-    label: "Event intake — structured extraction from flyers (Jewgo-style)",
+    label: "Event intake — structured extraction from flyers",
     description: "Extract structured event data from user-submitted flyers. Standard model, monthly cap.",
     features: {
       event_extraction: { modelClass: "standard", maxTokens: 1200, safety: "balanced", budgetMonthlyUsd: 100 },

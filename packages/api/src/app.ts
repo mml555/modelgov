@@ -13,6 +13,8 @@ import { registerRequestsRoute } from "./modules/requests/routes";
 import { registerAuth, type ApiKeyPrincipal, type ResolvedPrincipal } from "./plugins/auth";
 import { registerKeysRoutes } from "./modules/keys/routes";
 import { registerAuditRoutes } from "./modules/audit/routes";
+import { registerBillingRoutes } from "./modules/billing/routes";
+import { registerEmergencyRoutes } from "./modules/emergency/routes";
 import { registerGovernanceRoutes } from "./modules/governance/routes";
 import { registerPolicyRoutes } from "./modules/policy/routes";
 import { registerMetrics } from "./plugins/metrics";
@@ -31,7 +33,6 @@ export interface RateLimitOptions {
 }
 
 export interface BuildServerOptions extends ChatRouteDeps {
-  /** Fastify logging. Defaults to true; tests pass false. */
   logger?: boolean;
   /** pino log level (LOG_LEVEL env). Default "info". */
   logLevel?: string;
@@ -212,6 +213,8 @@ export function buildServer(opts: BuildServerOptions): FastifyInstance {
     });
     registerUsageRoute(scope, opts.pool, { defaultProjectId: opts.config.project.name });
     registerRequestsRoute(scope, opts.pool, { defaultProjectId: opts.config.project.name });
+    registerBillingRoutes(scope, opts.pool, opts.billing);
+    registerEmergencyRoutes(scope, opts.pool);
     if (opts.keyResolver) {
       // Clearing the resolver cache on any mutation makes revoke/rotate effective
       // immediately rather than after the cache TTL.
@@ -242,6 +245,7 @@ export function buildServer(opts: BuildServerOptions): FastifyInstance {
       hierarchicalBudgets: opts.hierarchicalBudgets,
       policyMeta: opts.policyMeta,
       tenantPolicy: opts.tenantPolicy,
+      billing: opts.billing,
     });
     registerEmbeddingsRoute(scope, {
       config: opts.config,
@@ -251,6 +255,7 @@ export function buildServer(opts: BuildServerOptions): FastifyInstance {
       hierarchicalBudgets: opts.hierarchicalBudgets,
       policyMeta: opts.policyMeta,
       tenantPolicy: opts.tenantPolicy,
+      idempotencyCaptureContent: opts.idempotencyCaptureContent,
     });
   });
 

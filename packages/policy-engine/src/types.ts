@@ -32,7 +32,9 @@ export type PolicyReasonCode =
   | "data_sensitivity_not_permitted"
   | "daily_token_limit_reached"
   | "feature_monthly_token_limit_reached"
-  | "global_monthly_token_limit_reached";
+  | "global_monthly_token_limit_reached"
+  | "global_daily_budget_exceeded"
+  | "insufficient_credits";
 
 // ── Parsed config (modelgov.yaml) ───────────────────────────────────────────
 
@@ -52,6 +54,8 @@ export interface GlobalBudget {
   hardStopAtPercent: number;
   /** Optional global monthly token cap (null/absent = no token limit). */
   monthlyTokens?: number;
+  /** Optional global daily USD cap (0/absent = no daily cap). */
+  dailyUsd?: number;
 }
 
 export interface UserTypeBudget {
@@ -118,6 +122,13 @@ export interface ModelClassConfig {
   fallback?: string;
 }
 
+export interface ProviderRetryConfig {
+  maxAttempts: number;
+  backoffMs: number[];
+  retryOn: number[];
+  respectRetryAfter: boolean;
+}
+
 export interface RoutingConfig {
   degradeAtPercent: number;
   /**
@@ -126,6 +137,28 @@ export interface RoutingConfig {
    * `cheap → standard → premium` when omitted.
    */
   classOrder?: string[];
+  /** Retry transient provider errors on the same model before falling back. */
+  retry?: ProviderRetryConfig;
+}
+
+export type BillingMode = "internal_only" | "hybrid" | "credits_only";
+export type BillingProviderName = "none" | "stripe" | "custom";
+
+export interface StripeBillingConfig {
+  secretKey?: string;
+  webhookSecret?: string;
+  /** Map Stripe price ids → Modelgov user_type names. */
+  planMap?: Record<string, string>;
+  /** USD value of one credit unit when using prepaid credits. */
+  usdPerCredit?: number;
+  /** Stripe Billing Meter event name for post-settle reporting. */
+  meterEventName?: string;
+}
+
+export interface BillingConfig {
+  provider: BillingProviderName;
+  mode: BillingMode;
+  stripe?: StripeBillingConfig;
 }
 
 export interface ModelgovConfig {
@@ -148,6 +181,8 @@ export interface ModelgovConfig {
    * budget models the table doesn't know (OpenRouter, Azure deployments, etc.).
    */
   pricing?: Record<string, { inputPer1k: number; outputPer1k: number }>;
+  /** Optional external billing / credit wallet integration. */
+  billing?: BillingConfig;
 }
 
 // ── Evaluator input ─────────────────────────────────────────────────────────
@@ -192,6 +227,8 @@ export interface UsageSnapshot {
   featureMonthlyTokensReserved?: number;
   globalMonthlyTokensUsed?: number;
   globalMonthlyTokensReserved?: number;
+  globalDailyUsdUsed?: number;
+  globalDailyUsdReserved?: number;
 }
 
 export interface EvaluateInput {
@@ -225,6 +262,7 @@ export interface BudgetRemaining {
   userDailyTokens?: number | null;
   featureMonthlyTokens?: number | null;
   globalMonthlyTokens?: number | null;
+  globalDailyUsd?: number | null;
 }
 
 export interface TraceTags {
@@ -248,6 +286,7 @@ export interface ReservationCaps {
   userDailyTokens?: number | null;
   featureMonthlyTokens?: number | null;
   globalMonthlyTokens?: number | null;
+  globalDailyUsd?: number | null;
 }
 
 export interface PolicyDecision {

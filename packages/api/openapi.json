@@ -2,7 +2,7 @@
   "openapi": "3.0.3",
   "info": {
     "title": "Modelgov API",
-    "version": "1.0.1",
+    "version": "1.1.0",
     "description": "Self-hosted AI policy gateway. Every completion is checked against budget, token, model-access, and safety policy before a provider is called."
   },
   "components": {
@@ -779,6 +779,82 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/v1/users/{userId}/balance": {
+      "get": {
+        "tags": [
+          "billing"
+        ],
+        "description": "Credit wallet balance for a user (when billing integration is enabled).",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "userId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/v1/admin/billing/top-up": {
+      "post": {
+        "tags": [
+          "admin",
+          "billing"
+        ],
+        "description": "Add credits to a user wallet. Requires billing:write.",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/v1/admin/emergency/status": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "description": "Current emergency pause state for AI requests.",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/v1/admin/emergency/pause": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "description": "Block all new AI requests until resumed. Requires policy:write.",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/v1/admin/emergency/resume": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "description": "Resume AI requests after an emergency pause. Requires policy:write.",
+        "responses": {
+          "200": {
+            "description": "Default Response"
           }
         }
       }

@@ -2,8 +2,8 @@
 
 This document shows how to embed Modelgov in a **real product flow** — not a
 generic chat demo. The reference implementation is
-[`examples/event_intake_app`](../../examples/event_intake_app): Jewgo-style event
-flyer extraction.
+[`examples/document_extraction`](../examples/document_extraction): structured
+document extraction with budgets and audit.
 
 ## Boundary (read this first)
 
@@ -21,13 +21,13 @@ app has already decided the user may attempt the action.
 ## End-to-end flow
 
 ```text
-1. User action (upload flyer)
-2. App auth check (admin can create drafts)
+1. User action (upload document)
+2. App auth check (user may run extraction)
 3. App selects feature + model class from product context
 4. App calls Modelgov POST /v1/chat (or SDK ai.chat)
 5. Modelgov evaluates policy → allow | block | degrade | fallback
 6. On allow: LiteLLM runs; structured result returns to app
-7. App persists domain object (event draft) + logs correlation ids
+7. App persists domain object + logs correlation ids
 ```
 
 ## Step-by-step
@@ -37,7 +37,7 @@ app has already decided the user may attempt the action.
 Verify business permissions **before** calling Modelgov:
 
 ```ts
-const session = requireAdmin(req.headers.authorization);
+const session = requireUser(req.headers.authorization);
 if (!session) return res.status(401).json({ error: "unauthorized" });
 ```
 
@@ -50,8 +50,8 @@ Every call must declare a `feature` defined in `modelgov.yaml`:
 
 ```yaml
 features:
-  event_flyer_extraction:
-    safety: balanced
+  document_extraction:
+    safety: strict
     model_class: standard
     max_tokens: 1500
 ```
@@ -64,7 +64,7 @@ feature for unrelated workflows.
 Pick the model tier in application code based on product rules:
 
 ```ts
-modelClass: "standard"   // admin extraction
+modelClass: "standard"   // production extraction
 modelClass: "cheap"      // low-stakes preview
 ```
 
@@ -76,18 +76,17 @@ budget allows it.
 ```ts
 const result = await ai.chat({
   userId: session.userId,
-  userType: "admin",
-  feature: "event_flyer_extraction",
+  userType: "workflow",
+  feature: "document_extraction",
   modelClass: "standard",
   inputTokensEstimate: 1200,
   metadata: {
-    app: "jewgo",
-    eventDraftId: draftId,
-    city: "miami",
+    app: "my_app",
+    jobId: jobId,
   },
   messages: [
     { role: "system", content: "Extract JSON only." },
-    { role: "user", content: flyerText },
+    { role: "user", content: documentText },
   ],
 });
 ```
@@ -124,7 +123,7 @@ Every successful chat response includes `requestId` (`req_<n>`):
 
 ```ts
 console.log(
-  `jewgo_event_draft=${draftId} modelgov_request_id=${result.requestId}`,
+  `job_id=${jobId} modelgov_request_id=${result.requestId}`,
 );
 ```
 
@@ -151,7 +150,7 @@ Use explain in CI or admin tools to preview decisions without spend:
 
 ```bash
 modelgov explain --local \
-  --userType admin --feature event_flyer_extraction --modelClass standard
+  --userType workflow --feature document_extraction --modelClass standard
 ```
 
 ## Checklist
@@ -170,9 +169,9 @@ modelgov explain --local \
 
 | Example | Pattern |
 | --- | --- |
-| [`event_intake_app`](../../examples/event_intake_app) | Non-chat workflow, admin auth, extraction |
-| [`nextjs_support_chat`](../../examples/nextjs_support_chat) | Next.js API route, support chat |
-| [`document_extraction`](../../examples/document_extraction) | Batch extraction with caps |
+| [`document_extraction`](../examples/document_extraction) | Non-chat workflow, structured extraction |
+| [`nextjs_support_chat`](../examples/nextjs_support_chat) | Next.js API route, support chat |
+| [`ocr_pipeline`](../../examples/ocr_pipeline) | Batch OCR + embeddings |
 
 ## Related
 

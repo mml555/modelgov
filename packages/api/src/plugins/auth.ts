@@ -67,6 +67,7 @@ export function registerAuth(
   app.addHook("onRequest", async (request, reply) => {
     const path = request.url.split("?", 1)[0];
     if (path === "/health" || path === "/ready") return;
+    if (path === "/v1/webhooks/stripe") return;
 
     if (path === "/metrics") {
       const token = options?.metricsAuthToken;

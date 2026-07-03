@@ -18,6 +18,77 @@ import { logRequest, type RequestLogRow } from "../usage/auditLogRepo";
 import { budgetErrorContext, policyErrorFromDecision, policyErrorMessage } from "../../policyErrors";
 import type { BudgetScope } from "../usage/repo";
 import type { ChatMessage } from "../../types";
+import type { BillingService } from "../billing/service";
+
+type SettleLog = { error(obj: unknown, msg: string): void } | undefined;
+
+/**
+ * Settle a credit reservation once the model call has run: book the actual
+ * spend against the wallet (releasing the full reservation) and record the
+ * Stripe meter event. No-op unless billing uses credits (hybrid/credits_only).
+ * Must be called on EVERY post-model-call exit — success AND
+ * output-safety/grounding blocks — or the reservation leaks. Metering is
+ * skipped when no request id is available (e.g. audit-write failure).
+ *
+ * ⚠ BILLING MODEL (product decision): this both debits the prepaid wallet
+ * (settleCredits) AND records a Stripe meter event. If an operator wires
+ * `stripe.meter_event_name` to a PRICED Stripe meter while also using credits,
+ * the same usage is billed twice (credit burn-down + metered invoice). Until
+ * that model is decided, treat the meter as usage-visibility only, or do not
+ * enable a priced meter alongside credits. See the billing PR discussion.
+ */
+export async function settleBillingCredits(
+  billing: BillingService | undefined,
+  log: SettleLog,
+  params: {
+    tenantId: string;
+    userId: string;
+    feature: string;
+    reservedUsd: number;
+    actualCostUsd: number;
+    requestId: string;
+  },
+): Promise<void> {
+  if (!billing?.usesCredits()) return;
+  try {
+    await billing.settleCredits(params.tenantId, params.userId, params.reservedUsd, params.actualCostUsd);
+    if (params.requestId) {
+      await billing.recordMeter({
+        requestId: params.requestId,
+        tenantId: params.tenantId,
+        userId: params.userId,
+        feature: params.feature,
+        costUsd: params.actualCostUsd,
+      });
+    }
+  } catch (err) {
+    log?.error({ err, requestId: params.requestId }, "billing credit settlement failed");
+  }
+}
+
+/**
+ * Release a credit reservation when the model call did not run. If safety /
+ * prompt-injection spend was already incurred (`incurredUsd`), that portion is
+ * booked from the wallet and only the remainder is released — a full refund
+ * would give back credits for classifier work that was actually paid for.
+ */
+export async function releaseBillingCredits(
+  billing: BillingService | undefined,
+  log: SettleLog,
+  params: { tenantId: string; userId: string; reservedUsd: number; incurredUsd?: number },
+): Promise<void> {
+  if (!billing?.usesCredits()) return;
+  try {
+    const incurred = params.incurredUsd ?? 0;
+    if (incurred > 0) {
+      await billing.settleCredits(params.tenantId, params.userId, params.reservedUsd, incurred);
+    } else {
+      await billing.releaseCredits(params.tenantId, params.userId, params.reservedUsd);
+    }
+  } catch (err) {
+    log?.error({ err }, "billing credit release failed");
+  }
+}
 import { auditUnavailableFailure, baseLog, baseObs, fail, type PolicyMeta } from "./mapper";
 import type { ChatFailure } from "./types";
 
@@ -40,6 +111,8 @@ export interface ReserveOutcome {
 export interface TopUpOutcome {
   ok: boolean;
   failedScope?: BudgetScope;
+  /** The pricier fallback exceeded the user's remaining credit wallet. */
+  insufficientCredits?: boolean;
 }
 
 /**
@@ -284,6 +357,32 @@ export async function rejectTopUpBudgetExceeded(
   );
 }
 
+/** 402 insufficient_credits when a pricier fallback exceeds the credit wallet. */
+export async function rejectInsufficientCredits(
+  ctx: RejectionCtx,
+  decision: PolicyDecision,
+  safetyCostUsd: number,
+): Promise<ChatFailure> {
+  return recordRejection(
+    ctx,
+    {
+      ...baseLog(ctx.aiRequest, decision, ctx.policyMeta),
+      status: "failed",
+      error: "insufficient_credits",
+      reasonCode: "insufficient_credits",
+      ...(safetyCostUsd > 0 ? { actualCostUsd: safetyCostUsd } : {}),
+    },
+    { ...baseObs(ctx.aiRequest, decision), status: "blocked", reason: "insufficient_credits" },
+    fail(
+      402,
+      "insufficient_credits",
+      { reasonCode: "insufficient_credits" },
+      "Insufficient credits for the selected fallback model",
+    ),
+    { auditFailureRetryable: safetyCostUsd <= 0 },
+  );
+}
+
 /** Standard 502 provider failure after releaseWithSafety. */
 export async function rejectProviderFailure(
   ctx: RejectionCtx,
@@ -386,10 +485,12 @@ export async function executeProviderWithFallback(
           const topUp = await budget.topUp(fbReserve - budget.getReservedUsd());
           if (!topUp.ok) {
             await releaseWithSafety(budget.incur, budget.release, ctx.safetyCostUsd);
-            const failure = await rejectTopUpBudgetExceeded(ctx.rejection, ctx.decision, {
-              failedScope: topUp.failedScope!,
-              safetyCostUsd: ctx.safetyCostUsd,
-            });
+            const failure = topUp.insufficientCredits
+              ? await rejectInsufficientCredits(ctx.rejection, ctx.decision, ctx.safetyCostUsd)
+              : await rejectTopUpBudgetExceeded(ctx.rejection, ctx.decision, {
+                  failedScope: topUp.failedScope!,
+                  safetyCostUsd: ctx.safetyCostUsd,
+                });
             return { ok: false, failure };
           }
           budget.setReservedUsd(fbReserve);

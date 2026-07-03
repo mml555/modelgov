@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import type { Pool } from "pg";
 import { stableStringify } from "../../util/stableStringify";
 import { fail } from "../chat/mapper";
-import type { ChatResult } from "../chat/types";
+import type { ChatFailure } from "../chat/types";
 import { claimKey, completeKey, releaseKey } from "./repo";
 
 /** Stable fingerprint of a request body, to detect key reuse with a different payload. */
@@ -10,8 +10,14 @@ export function requestHash(body: unknown): string {
   return createHash("sha256").update(stableStringify(body)).digest("hex");
 }
 
-export interface IdempotentOutcome {
-  result: ChatResult;
+export interface IdempotentHttpResult {
+  ok: boolean;
+  status?: number;
+  retryable?: boolean;
+}
+
+export interface IdempotentOutcome<T extends IdempotentHttpResult = IdempotentHttpResult> {
+  result: T;
   replayed: boolean;
 }
 
@@ -29,11 +35,11 @@ export interface IdempotentOutcome {
  * content out of the idempotency store at rest (a replay then returns the
  * envelope with empty content).
  */
-export async function withIdempotency(
+export async function withIdempotency<T extends IdempotentHttpResult>(
   pool: Pool,
   params: { key: string; userId: string; hash: string; captureContent: boolean; tenantId?: string },
-  produce: () => Promise<ChatResult>,
-): Promise<IdempotentOutcome> {
+  produce: () => Promise<T>,
+): Promise<IdempotentOutcome<T | ChatFailure>> {
   const claim = await claimKey(pool, {
     key: params.key,
     userId: params.userId,
@@ -66,11 +72,11 @@ export async function withIdempotency(
       };
     }
     // completed — replay the stored result verbatim.
-    return { result: existing.responseBody as ChatResult, replayed: true };
+    return { result: existing.responseBody as T, replayed: true };
   }
 
   // We own the key. Produce the result, then cache or release.
-  let result: ChatResult;
+  let result: T;
   try {
     result = await produce();
   } catch (err) {
@@ -78,7 +84,7 @@ export async function withIdempotency(
     throw err;
   }
 
-  const httpStatus = result.ok ? 200 : result.status;
+  const httpStatus = result.ok ? 200 : (result.status ?? 500);
   // A 5xx normally releases the key so the client can safely retry. But a
   // failure flagged `retryable: false` happened AFTER the model call ran and its
   // cost was booked — releasing would let the retry re-run the flow and
@@ -103,13 +109,23 @@ export async function withIdempotency(
  * content capture is disabled. The live caller still gets the real content; only
  * the stored (replay) copy is redacted.
  */
-function redactForStorage(result: ChatResult): ChatResult {
+function redactForStorage<T extends IdempotentHttpResult>(result: T): T {
   if (!result.ok) return result;
-  return {
-    ...result,
-    body: {
-      ...result.body,
-      message: { ...result.body.message, content: "" },
-    },
-  };
+  if (!("body" in result)) return result;
+  const body = (result as { body: Record<string, unknown> }).body;
+  if (!body || typeof body !== "object") return result;
+  const next: Record<string, unknown> = { ...body };
+  let changed = false;
+  // Chat: drop the completion text.
+  if ("message" in next) {
+    next.message = { ...(next.message as object), content: "" };
+    changed = true;
+  }
+  // Embeddings: drop the generated vectors (the produced content for that route).
+  if ("embeddings" in next) {
+    next.embeddings = [];
+    changed = true;
+  }
+  if (!changed) return result;
+  return { ...result, body: next } as T;
 }

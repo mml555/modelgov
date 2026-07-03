@@ -42,7 +42,7 @@ const sampleRow = {
   injection_blocked: false,
   error: "model_class 'standard' is not permitted for user_type 'logged_in'",
   reason_code: "model_class_not_permitted",
-  host_metadata: { app: "jewgo", eventDraftId: "draft_1" },
+  host_metadata: { app: "my_app", recordId: "draft_1" },
   config_hash: "abc123",
   policy_version: "file",
 };
@@ -108,7 +108,7 @@ describe("request visibility", () => {
     expect(record.reasonCode).toBe("model_class_not_permitted");
     expect(record.requestedModelClass).toBe("standard");
     expect(record.provider).toBe("openai");
-    expect(record.metadata).toEqual({ app: "jewgo", eventDraftId: "draft_1" });
+    expect(record.metadata).toEqual({ app: "my_app", recordId: "draft_1" });
   });
 
   it("infers legacy reason codes from error text", () => {

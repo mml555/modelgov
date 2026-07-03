@@ -18,6 +18,7 @@ import {
   startBackgroundJobs,
   warnMissingSafetyBackends,
 } from "./bootstrap";
+import { createBillingService } from "./modules/billing/service";
 
 /**
  * Composition root: assemble each dependency via the focused `bootstrap`
@@ -40,6 +41,11 @@ async function main(): Promise<void> {
     createRuntimeServices(env, config);
   const redis = await connectRedisIfConfigured(env);
   const budgetAlert = resolveBudgetAlert(env);
+  const billing = createBillingService(pool, {
+    billing: config.billing,
+    stripeSecretKey: env.STRIPE_SECRET_KEY,
+    stripeWebhookSecret: env.STRIPE_WEBHOOK_SECRET,
+  });
   const { keyResolver, jwtVerifier } = createAuthProviders(env, pool);
 
   const app = buildServer({
@@ -76,13 +82,14 @@ async function main(): Promise<void> {
       presidioAnonymizerUrl: env.PRESIDIO_ANONYMIZER_URL,
     },
     budgetAlert,
+    billing,
   });
 
   if (redis) app.log.info("rate limiting backed by Redis");
   warnUnpricedModels(config, app.log);
   warnMissingSafetyBackends(config, app.log, { hasPresidio, hasInjection });
 
-  const maintenanceTimer = startBackgroundJobs(env, config, pool, app.log);
+  const maintenanceTimer = startBackgroundJobs(env, config, pool, app.log, billing);
   installLifecycle({ app, pool, redis, maintenanceTimer });
 
   await app.listen({ port: env.PORT, host: env.HOST });

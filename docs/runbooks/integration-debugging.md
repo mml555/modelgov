@@ -42,7 +42,7 @@ From the user or your app logs, collect:
 Search application logs for the correlation line your integration should emit:
 
 ```text
-jewgo_event_draft=draft_evt_456 modelgov_request_id=req_123 decision=allow
+job_id=job_456 modelgov_request_id=req_123 decision=allow
 ```
 
 If `modelgov_request_id` is missing, the app may have failed before calling

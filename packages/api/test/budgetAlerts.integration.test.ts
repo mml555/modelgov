@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { applySchema } from "../src/db/init";
 import { createPool, type Pool } from "../src/db/pool";
 import { handleGlobalBudgetAlert } from "../src/modules/usage/budgetAlerts";
@@ -16,15 +16,15 @@ describe.skipIf(!DATABASE_URL)("budget alert webhooks (integration)", () => {
     await pool.end();
   });
   beforeEach(async () => {
-    await pool.query("TRUNCATE budget_alert_sent");
+    await pool.query("TRUNCATE budget_alert_sent, webhook_outbox");
   });
 
-  it("POSTs webhook once per month window", async () => {
-    const fetchImpl = vi.fn(async () => new Response("ok", { status: 200 }));
+  it("enqueues the budget-alert webhook once per month window", async () => {
+    // Delivery is via the webhook outbox now (the maintenance sweep POSTs it),
+    // so handleGlobalBudgetAlert enqueues rather than firing HTTP directly.
     const webhook = {
       url: "https://hooks.example.com/budget",
       secret: "test-secret",
-      fetchImpl: fetchImpl as typeof fetch,
     };
     const payload = {
       globalSpendUsd: 85,
@@ -37,16 +37,13 @@ describe.skipIf(!DATABASE_URL)("budget alert webhooks (integration)", () => {
     await handleGlobalBudgetAlert(pool, webhook, payload);
     await handleGlobalBudgetAlert(pool, webhook, payload);
 
-    expect(fetchImpl).toHaveBeenCalledTimes(1);
-    const call = fetchImpl.mock.calls[0] as unknown as [string, RequestInit];
-    const [url, init] = call;
-    expect(url).toBe("https://hooks.example.com/budget");
-    expect(init.method).toBe("POST");
-    expect(init.headers).toMatchObject({
-      "content-type": "application/json",
-      "x-modelgov-signature": expect.stringMatching(/^sha256=/),
-    });
-    const body = JSON.parse(String(init.body));
+    // Deduped by budget_alert_sent → enqueued exactly once for the window.
+    const { rows } = await pool.query(
+      "SELECT event_type, destination_url, payload FROM webhook_outbox WHERE event_type = 'budget.alert'",
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].destination_url).toBe("https://hooks.example.com/budget");
+    const body = rows[0].payload as Record<string, unknown>;
     expect(body.event).toBe("budget.alert");
     expect(body.scope).toBe("global_monthly");
     expect(body.windowStart).toBe("2026-06-01");

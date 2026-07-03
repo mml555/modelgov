@@ -4,7 +4,7 @@ Modelgov is a **self-hosted AI control plane**. You run it in your infrastructur
 your applications call it to enforce cost, safety, and routing policy before any
 model request reaches a provider.
 
-**Current release:** `v1.0.1` — install pinned artifacts; do not deploy from `main` in production.
+**Current release:** `v1.1.0` — install pinned artifacts; do not deploy from `main` in production.
 
 ---
 
@@ -80,7 +80,7 @@ model request reaches a provider.
 
 ## Quick links
 
-- Example apps: [`event_intake_app`](../examples/event_intake_app), [`support_chat`](../examples/support_chat)
+- Example apps: [`document_extraction`](../examples/document_extraction), [`support_chat`](../examples/support_chat)
 - Production policy: [`modelgov.production.example.yaml`](../modelgov.production.example.yaml)
 - Production env: [`.env.production.example`](../.env.production.example)
-- OpenAPI: `GET /openapi.json` or release asset `openapi-v1.0.1.json`
+- OpenAPI: `GET /openapi.json` or release asset `openapi-v1.1.0.json`

@@ -2,6 +2,7 @@ import { createHmac } from "node:crypto";
 import type { Pool } from "pg";
 import { monthWindowStart } from "../../services/windows";
 import { claimGlobalMonthlyBudgetAlert } from "./budgetAlertRepo";
+import { enqueueWebhook } from "../../services/webhookOutbox";
 
 export interface BudgetAlertPayload {
   globalSpendUsd: number;
@@ -60,7 +61,17 @@ export async function handleGlobalBudgetAlert(
     sentAt: now.toISOString(),
   };
 
-  void deliverWebhook(webhook, body, log);
+  try {
+    await enqueueWebhook(pool, {
+      eventType: "budget.alert",
+      payload: body,
+      destinationUrl: webhook.url,
+      secret: webhook.secret,
+    });
+  } catch (err) {
+    log?.error?.({ err, url: webhook.url }, "budget alert outbox enqueue failed");
+    void deliverWebhook(webhook, body, log);
+  }
 }
 
 async function deliverWebhook(

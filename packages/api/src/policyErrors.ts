@@ -34,6 +34,7 @@ const SCOPE_REASON_CODES: Record<BudgetScope, PolicyReasonCode> = {
   user_daily: "daily_budget_exceeded",
   feature_monthly: "feature_monthly_budget_exceeded",
   global_monthly: "global_monthly_budget_exceeded",
+  global_daily: "global_daily_budget_exceeded",
 };
 
 export function budgetErrorContext(

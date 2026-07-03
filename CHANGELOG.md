@@ -15,6 +15,23 @@ guarantees in `docs/versioning.md` apply.
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-07-03
+
+### Added
+- **Stripe billing (optional)**: a credit-wallet billing mode with `credits_only`
+  and hybrid (`min(internal budget, credits)`) settlement. In `credits_only`
+  mode the chat pipeline skips the internal budget ledger and settles spend via
+  Stripe credits + meter reporting. Off unless configured.
+- **Emergency pause**: a global kill-switch that blocks AI requests.
+- **Durable webhook outbox** (migration `0023`): reliable, retried webhook
+  delivery. Budget alerts now enqueue to the outbox and the maintenance sweep
+  delivers them; the Stripe meter flush runs in the same sweep when billing is
+  enabled.
+
+### Changed
+- Idempotency helper generalised to `IdempotentOutcome<T | ChatFailure>` so it
+  can wrap responses beyond chat.
+
 ## [1.0.1] - 2026-07-03
 
 ### Fixed
@@ -263,7 +280,8 @@ proceed against a known baseline. Full notes:
 - Request correlation IDs (`requestId` on success, `auditRequestId` on blocks)
   and host metadata in audit logs.
 
-[Unreleased]: https://github.com/mml555/modelgov/compare/v1.0.1...HEAD
+[Unreleased]: https://github.com/mml555/modelgov/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/mml555/modelgov/compare/v1.0.1...v1.1.0
 [1.0.1]: https://github.com/mml555/modelgov/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/mml555/modelgov/releases/tag/v1.0.0
 [0.6.0]: https://github.com/mml555/modelgov/compare/v0.5.0...v0.6.0

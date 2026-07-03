@@ -43,6 +43,7 @@ const globalBudgetSchema = z
     alert_at_percent: z.number().min(0).max(100).default(80),
     hard_stop_at_percent: z.number().min(0).max(1000).default(100),
     monthly_tokens: z.number().int().positive().optional(),
+    daily_usd: z.number().nonnegative().optional(),
   })
   .strict()
   .transform((g) => ({
@@ -50,6 +51,7 @@ const globalBudgetSchema = z
     alertAtPercent: g.alert_at_percent,
     hardStopAtPercent: g.hard_stop_at_percent,
     monthlyTokens: g.monthly_tokens,
+    dailyUsd: g.daily_usd,
   }));
 
 const userTypeBudgetSchema = z
@@ -126,8 +128,58 @@ const routingSchema = z
   .object({
     degrade_at_percent: z.number().min(0).max(100).default(80),
     class_order: z.array(z.string().min(1)).min(1).optional(),
+    retry: z
+      .object({
+        max_attempts: z.number().int().positive().max(10).default(3),
+        backoff_ms: z.array(z.number().int().nonnegative()).min(1).default([500, 2000, 8000]),
+        retry_on: z.array(z.number().int().positive()).default([429, 502, 503]),
+        respect_retry_after: z.boolean().default(true),
+      })
+      .strict()
+      .optional(),
   })
-  .transform((r) => ({ degradeAtPercent: r.degrade_at_percent, classOrder: r.class_order }));
+  .transform((r) => ({
+    degradeAtPercent: r.degrade_at_percent,
+    classOrder: r.class_order,
+    retry: r.retry
+      ? {
+          maxAttempts: r.retry.max_attempts,
+          backoffMs: r.retry.backoff_ms,
+          retryOn: r.retry.retry_on,
+          respectRetryAfter: r.retry.respect_retry_after,
+        }
+      : undefined,
+  }));
+
+const billingSchema = z
+  .object({
+    provider: z.enum(["none", "stripe", "custom"]).default("none"),
+    mode: z.enum(["internal_only", "hybrid", "credits_only"]).default("internal_only"),
+    stripe: z
+      .object({
+        secret_key: z.string().optional(),
+        webhook_secret: z.string().optional(),
+        plan_map: z.record(z.string(), z.string()).optional(),
+        usd_per_credit: z.number().positive().optional(),
+        meter_event_name: z.string().optional(),
+      })
+      .strict()
+      .optional(),
+  })
+  .strict()
+  .transform((b) => ({
+    provider: b.provider,
+    mode: b.mode,
+    stripe: b.stripe
+      ? {
+          secretKey: b.stripe.secret_key,
+          webhookSecret: b.stripe.webhook_secret,
+          planMap: b.stripe.plan_map,
+          usdPerCredit: b.stripe.usd_per_credit,
+          meterEventName: b.stripe.meter_event_name,
+        }
+      : undefined,
+  }));
 
 const safetySchema = z
   .object({
@@ -174,6 +226,7 @@ const configSchema = z
     observability: observabilitySchema.optional(),
     data_classes: z.record(z.string(), dataClassSchema).optional(),
     pricing: pricingSchema.optional(),
+    billing: billingSchema.optional(),
   })
   .strict()
   .transform((c) => ({
@@ -192,6 +245,7 @@ const configSchema = z
     observability: c.observability ?? { provider: "none" as const },
     dataClasses: c.data_classes,
     pricing: c.pricing,
+    billing: c.billing,
   }));
 
 function normalizeFeatureSafety(

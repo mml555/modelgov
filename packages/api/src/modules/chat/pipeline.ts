@@ -7,6 +7,7 @@ import {
   executeProviderWithFallback,
   recordRejection,
   rejectPolicyBlock,
+  settleBillingCredits,
   type RejectionCtx,
 } from "./lifecycle";
 import { createFlatProviderBudget, createHierarchicalProviderBudget } from "./providerBudget";
@@ -30,6 +31,7 @@ import {
 import { auditUnavailableFailure, baseLog, baseObs, chatSuccessBody, fail } from "./mapper";
 import { buildGroundedMessages, verifyGrounding } from "./grounding";
 import type { ChatFailure, ChatInput, ChatResult, ChatServiceDeps } from "./types";
+import { assertAiRequestsNotPaused } from "../emergency/routes";
 import type { ChatMessage } from "../../types";
 
 export type BudgetHold =
@@ -173,6 +175,16 @@ async function prepareFlatCall(
   body: ChatInput,
   stream: boolean,
 ): Promise<ChatFailure | { ok: true; prepared: PreparedCall }> {
+  const pause = await assertAiRequestsNotPaused(deps.pool);
+  if (pause.paused) {
+    return fail(
+      503,
+      "ai_requests_paused",
+      { reason: pause.reason ?? "emergency pause" },
+      "AI requests are temporarily paused",
+    );
+  }
+
   const evaluated = await evaluateFlatPolicy(deps, body);
   if (!evaluated.ok) return evaluated.failure;
   const { aiRequest, decision, usage, now } = evaluated;
@@ -249,6 +261,16 @@ async function prepareHierarchicalCall(
   leafNodeId: string,
   stream: boolean,
 ): Promise<ChatFailure | { ok: true; prepared: PreparedCall }> {
+  const pause = await assertAiRequestsNotPaused(deps.pool);
+  if (pause.paused) {
+    return fail(
+      503,
+      "ai_requests_paused",
+      { reason: pause.reason ?? "emergency pause" },
+      "AI requests are temporarily paused",
+    );
+  }
+
   const evaluated = await evaluateHierarchicalPolicy(deps, body);
   if (!evaluated.ok) return evaluated.failure;
   const { aiRequest, decision, now } = evaluated;
@@ -350,6 +372,10 @@ export async function executeSyncChat(
           leaseId: hold.leaseId,
           initialReservedUsd: hold.reservedUsd,
           tenantId: deps.policyMeta?.tenantId,
+          billing: deps.billing,
+          skipInternalBudget:
+            deps.billing?.enabled === true && deps.billing.mode === "credits_only",
+          safetyCostUsd,
         })
       : createHierarchicalProviderBudget({
           pool,
@@ -381,7 +407,13 @@ export async function executeSyncChat(
   const actualCostUsd = (llm.actualCostUsd ?? costBasis) + safetyCostUsd;
   const actualTokens = (llm.inputTokens ?? 0) + (llm.outputTokens ?? 0);
 
-  if (hold.mode === "flat") {
+  const skipInternalBudget =
+    deps.billing?.enabled === true && deps.billing.mode === "credits_only";
+
+  if (skipInternalBudget) {
+    // credits_only billing: skip the internal budget ledger entirely — billing
+    // settles the spend via credits below (settleCredits / recordMeter).
+  } else if (hold.mode === "flat") {
     try {
       await recordActualCost(pool, {
         projectId: aiRequest.projectId,
@@ -455,7 +487,7 @@ export async function executeSyncChat(
   try {
     const outputSafety = await safety.inspectOutput(content, decision.safetyPlan);
     if (outputSafety.action === "block") {
-      return recordRejection(
+      const blocked = await recordRejection(
         { pool, observability },
         {
           ...baseLog(aiRequest, decision, deps.policyMeta),
@@ -486,6 +518,17 @@ export async function executeSyncChat(
         }),
         { auditFailureRetryable: false },
       );
+      // The model call ran and its cost is real — settle the credit reservation
+      // (and meter it) even though the response is blocked, or the hold leaks.
+      await settleBillingCredits(deps.billing, log, {
+        tenantId: deps.policyMeta?.tenantId ?? "",
+        userId: aiRequest.userId,
+        feature: aiRequest.feature,
+        reservedUsd: settledReservedUsd,
+        actualCostUsd,
+        requestId: blocked.auditRequestId ?? "",
+      });
+      return blocked;
     }
     content = outputSafety.content;
     if (outputSafety.piiMasked) piiMasked = true;
@@ -512,8 +555,29 @@ export async function executeSyncChat(
           piiMasked,
           injectionBlocked,
         });
+        // The model ran (spend is real) but the audit write failed — settle the
+        // credit reservation anyway so it isn't stranded forever (there is no
+        // wallet reconciliation sweep); no audit id, so metering is skipped.
+        await settleBillingCredits(deps.billing, log, {
+          tenantId: deps.policyMeta?.tenantId ?? "",
+          userId: aiRequest.userId,
+          feature: aiRequest.feature,
+          reservedUsd: settledReservedUsd,
+          actualCostUsd,
+          requestId: "",
+        });
         return auditUnavailableFailure(false);
       }
+      // Model call ran (spend is real) but output safety is down: settle the
+      // credit reservation so it isn't held forever (meter skipped — no audit id).
+      await settleBillingCredits(deps.billing, log, {
+        tenantId: deps.policyMeta?.tenantId ?? "",
+        userId: aiRequest.userId,
+        feature: aiRequest.feature,
+        reservedUsd: settledReservedUsd,
+        actualCostUsd,
+        requestId: "",
+      });
       return {
         ...fail(503, "safety_unavailable", {}, "Safety service unavailable"),
         retryable: false,
@@ -550,8 +614,29 @@ export async function executeSyncChat(
       piiMasked,
       injectionBlocked,
     });
+    // The model ran (spend is real) but the final audit write failed — settle
+    // the credit reservation anyway so it isn't stranded (no wallet sweep
+    // reconciles it); no audit id, so metering is skipped.
+    await settleBillingCredits(deps.billing, log, {
+      tenantId: deps.policyMeta?.tenantId ?? "",
+      userId: aiRequest.userId,
+      feature: aiRequest.feature,
+      reservedUsd: settledReservedUsd,
+      actualCostUsd,
+      requestId: "",
+    });
     return auditUnavailableFailure(false);
   }
+
+  await settleBillingCredits(deps.billing, log, {
+    tenantId: deps.policyMeta?.tenantId ?? "",
+    userId: aiRequest.userId,
+    feature: aiRequest.feature,
+    reservedUsd: settledReservedUsd,
+    actualCostUsd,
+    requestId: auditRequestId,
+  });
+
   // For grounded requests the gateway prepended a system message carrying the
   // (deliberately un-masked) retrieved context; don't ship that to the
   // observability provider — log only the caller's messages.

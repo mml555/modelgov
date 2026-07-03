@@ -112,6 +112,8 @@ const baseEnvSchema = z.object({
   // Allow the budget-alert webhook to point at a private/link-local host. Default
   // false blocks SSRF-adjacent internal targets (169.254.*, 10.*, 127.*, ...).
   BUDGET_ALERT_WEBHOOK_ALLOW_PRIVATE: z.enum(["true", "false"]).default("false"),
+  STRIPE_SECRET_KEY: z.string().min(1).optional(),
+  STRIPE_WEBHOOK_SECRET: z.string().min(1).optional(),
 });
 
 const envSchema = baseEnvSchema.refine((env) => Boolean(env.MODELGOV_API_KEY) || Boolean(env.MODELGOV_API_KEYS), {
@@ -169,6 +171,8 @@ const OPTIONAL_ENV_KEYS = [
   "OIDC_ROLE_MAP",
   "OTEL_EXPORTER_OTLP_ENDPOINT",
   "MODELGOV_DEPLOY_PROFILE",
+  "STRIPE_SECRET_KEY",
+  "STRIPE_WEBHOOK_SECRET",
 ] as const;
 
 function normalizeOptionalEmptyStrings(

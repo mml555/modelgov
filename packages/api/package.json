@@ -1,6 +1,6 @@
 {
   "name": "@modelgov/api",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "license": "MIT",
   "description": "Modelgov API: stateful control plane (Postgres + LiteLLM + Safety).",
   "type": "module",

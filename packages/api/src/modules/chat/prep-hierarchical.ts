@@ -129,6 +129,31 @@ export async function reserveHierarchicalOrReject(
   },
 ): Promise<HierarchicalReserveResult> {
   const { aiRequest, decision, nodes, safetyCostUsd, now, shardKey, rejection, incurSafety } = params;
+  // Prepaid credits + hierarchical (node-tree) budgets is unsupported: the
+  // hierarchical path never checks or reserves the wallet, so allowing it would
+  // let requests bypass credit enforcement (settlement just clamps at zero).
+  // Reject clearly — like embeddings rejects hierarchical — rather than
+  // silently under-enforce.
+  if (deps.billing?.usesCredits()) {
+    await bookSafetyIfAny(incurSafety, safetyCostUsd);
+    const reason = "credit billing is not supported with hierarchical (node-tree) budgets";
+    return {
+      ok: false,
+      failure: await recordRejection(
+        rejection,
+        {
+          ...baseLog(aiRequest, decision, deps.policyMeta),
+          status: "failed",
+          error: "billing_hierarchical_unsupported",
+          reasonCode: "billing_hierarchical_unsupported",
+          ...(safetyCostUsd > 0 ? { actualCostUsd: safetyCostUsd } : {}),
+        },
+        { ...baseObs(aiRequest, decision), status: "blocked", reason },
+        fail(501, "not_implemented", { reason }, reason),
+        { auditFailureRetryable: safetyCostUsd <= 0 },
+      ),
+    };
+  }
   const reservation = await reservePath(deps.pool, {
     nodes,
     estimatedCostUsd: decision.estimatedCostUsd + safetyCostUsd,
