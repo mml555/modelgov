@@ -4,6 +4,7 @@ import type { Pool } from "pg";
 import { z } from "zod";
 import { sendError } from "../../errors";
 import { checkUserIdAllowed, checkUserTypeAllowedIfPresent } from "../authz/scope";
+import { isPrivateHttpHost } from "../../util/httpUrlGuard";
 import type { BillingService } from "./service";
 
 const topUpBodySchema = z.object({
@@ -107,6 +108,7 @@ export function registerBillingRoutes(
           await billing.handleStripeWebhook(
             raw,
             typeof signature === "string" ? signature : undefined,
+            request.log,
           );
           return reply.send({ received: true });
         } catch (err) {
@@ -133,7 +135,30 @@ export async function deliverOutboxWebhook(
     attempts: number;
   },
   fetchImpl: typeof fetch = fetch,
+  opts: { allowPrivateHosts?: boolean } = {},
 ): Promise<void> {
+  // Re-apply the SSRF host guard at the delivery sink. The only enqueue path
+  // today (budget alerts) validates the URL at boot, but the sink must not trust
+  // that: a future enqueue path, a tampered row, or a config change could put a
+  // private/link-local destination in the outbox. Throwing here marks the row
+  // failed (retried, then dead-lettered) instead of POSTing to an internal host.
+  // allowPrivateHosts mirrors BUDGET_ALERT_WEBHOOK_ALLOW_PRIVATE so an operator
+  // who deliberately points alerts at a private host is not blocked.
+  let target: URL;
+  try {
+    target = new URL(entry.destinationUrl);
+  } catch {
+    throw new Error(`invalid outbox destination URL: ${entry.destinationUrl}`);
+  }
+  if (target.protocol !== "https:" && target.protocol !== "http:") {
+    throw new Error(`outbox destination URL must be http(s): ${entry.destinationUrl}`);
+  }
+  if (!opts.allowPrivateHosts && isPrivateHttpHost(target.hostname)) {
+    throw new Error(
+      `refusing to deliver webhook to private/link-local host '${target.hostname.toLowerCase()}' (SSRF guard)`,
+    );
+  }
+
   const json = JSON.stringify(entry.payload);
   const headers: Record<string, string> = {
     "content-type": "application/json",

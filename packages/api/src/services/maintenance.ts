@@ -29,6 +29,8 @@ export interface MaintenanceOptions {
   /** Optional per-feature retention overrides (days), applied after the global sweep. */
   featureRetentionDays?: Record<string, number>;
   billing?: BillingService;
+  /** Allow outbox delivery to private/link-local hosts (mirrors BUDGET_ALERT_WEBHOOK_ALLOW_PRIVATE). */
+  allowPrivateWebhookHosts?: boolean;
   log?: FastifyBaseLogger;
 }
 
@@ -116,7 +118,9 @@ export async function runMaintenanceSweep(opts: MaintenanceOptions): Promise<voi
   const pending = await claimPendingWebhooks(opts.pool);
   for (const entry of pending) {
     try {
-      await deliverOutboxWebhook(entry);
+      await deliverOutboxWebhook(entry, fetch, {
+        allowPrivateHosts: opts.allowPrivateWebhookHosts,
+      });
       await markWebhookDelivered(opts.pool, entry.id);
     } catch (err) {
       await markWebhookFailed(

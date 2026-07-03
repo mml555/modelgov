@@ -30,12 +30,12 @@ type SettleLog = { error(obj: unknown, msg: string): void } | undefined;
  * output-safety/grounding blocks — or the reservation leaks. Metering is
  * skipped when no request id is available (e.g. audit-write failure).
  *
- * ⚠ BILLING MODEL (product decision): this both debits the prepaid wallet
- * (settleCredits) AND records a Stripe meter event. If an operator wires
- * `stripe.meter_event_name` to a PRICED Stripe meter while also using credits,
- * the same usage is billed twice (credit burn-down + metered invoice). Until
- * that model is decided, treat the meter as usage-visibility only, or do not
- * enable a priced meter alongside credits. See the billing PR discussion.
+ * Billing model: prepaid credits are the single source of truth for usage
+ * billing — the wallet debit here IS the charge. The recorded meter event is
+ * only forwarded to Stripe when `stripe.meter_event_name` is set, and config
+ * validation forbids setting that alongside a credits mode (it would bill the
+ * same usage twice). So under prepaid credits `recordMeter` writes only the
+ * local usage row; nothing reaches a priced Stripe meter.
  */
 export async function settleBillingCredits(
   billing: BillingService | undefined,

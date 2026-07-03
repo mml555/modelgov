@@ -77,7 +77,15 @@ safety:
 observability:
   provider: none # set OBSERVABILITY_PROVIDER=langfuse in .env.production to override
 
-# Optional Stripe-backed credit wallet (hybrid = min(internal budget, credits)):
+# Optional Stripe-backed prepaid credit wallet (hybrid = min(internal budget,
+# credits); credits_only = the wallet is the only ledger). Usage is billed by
+# debiting the wallet; Stripe is used only to SELL credits (Checkout -> webhook
+# tops up the wallet). Prepaid credits are the billing model.
+#
+# Do NOT set stripe.meter_event_name here: a Stripe usage meter would invoice the
+# same usage that the wallet is already charging, so config validation rejects
+# meter_event_name in a credits mode (hybrid / credits_only) to prevent
+# double-billing.
 # billing:
 #   provider: stripe
 #   mode: hybrid
@@ -86,4 +94,3 @@ observability:
 #     webhook_secret: env/STRIPE_WEBHOOK_SECRET
 #     plan_map:
 #       price_pro_monthly: paid_user
-#     meter_event_name: ai_tokens

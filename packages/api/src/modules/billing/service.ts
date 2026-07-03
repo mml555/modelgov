@@ -43,7 +43,11 @@ export interface BillingService {
     },
   ): Promise<void>;
   flushPendingMeters(log?: { error(obj: unknown, msg: string): void }): Promise<number>;
-  handleStripeWebhook(rawBody: Buffer, signature: string | undefined): Promise<void>;
+  handleStripeWebhook(
+    rawBody: Buffer,
+    signature: string | undefined,
+    log?: { warn(obj: unknown, msg: string): void },
+  ): Promise<void>;
   adminTopUp(params: {
     tenantId: string;
     userId: string;
@@ -67,6 +71,18 @@ export function createBillingService(
   const planMap = billing.stripe?.planMap ?? {};
   const usdPerCredit = billing.stripe?.usdPerCredit ?? 0.01;
   const meterEventName = billing.stripe?.meterEventName;
+
+  // Defense in depth (config validation already enforces this): reaching here
+  // means mode is hybrid|credits_only, i.e. usage is billed via prepaid credits.
+  // A Stripe usage meter would invoice that same usage a second time, so refuse
+  // to construct a service that would double-bill.
+  if (meterEventName) {
+    throw new Error(
+      `billing.mode "${billing.mode}" bills usage by debiting the prepaid credit wallet ` +
+        "and cannot be combined with a Stripe usage meter (stripe.meterEventName) — the " +
+        "same usage would be invoiced a second time. Remove stripe.meterEventName.",
+    );
+  }
 
   return {
     enabled: true,
@@ -147,7 +163,7 @@ export function createBillingService(
       return reported;
     },
 
-    async handleStripeWebhook(rawBody, signature) {
+    async handleStripeWebhook(rawBody, signature, log) {
       if (!stripeWebhookSecret) {
         throw new Error("Stripe webhook secret is not configured");
       }
@@ -156,7 +172,7 @@ export function createBillingService(
       }
 
       const event = JSON.parse(rawBody.toString("utf8")) as StripeEvent;
-      await applyStripeEvent(pool, event, { planMap, usdPerCredit });
+      await applyStripeEvent(pool, event, { planMap, usdPerCredit, log });
     },
 
     async adminTopUp(params) {
@@ -168,7 +184,11 @@ export function createBillingService(
 async function applyStripeEvent(
   pool: Pool,
   event: StripeEvent,
-  opts: { planMap: Record<string, string>; usdPerCredit: number },
+  opts: {
+    planMap: Record<string, string>;
+    usdPerCredit: number;
+    log?: { warn(obj: unknown, msg: string): void };
+  },
 ): Promise<void> {
   const obj = event.data.object;
 
@@ -180,8 +200,27 @@ async function applyStripeEvent(
         amount_total?: number;
       };
       const userId = session.metadata?.user_id ?? session.metadata?.userId;
-      const tenantId = session.metadata?.tenant_id ?? session.metadata?.tenantId ?? "";
       if (!userId) return;
+      const customerId = typeof session.customer === "string" ? session.customer : undefined;
+      // Resolve which tenant the credits belong to. Prefer explicit metadata
+      // (an empty string is a valid single-tenant value and is respected as-is).
+      // If tenant_id is absent, fall back to the tenant of the customer's
+      // existing billing account (a returning buyer). Only if neither resolves
+      // do we credit the default "" tenant — and we warn, because in a
+      // multi-tenant deployment that silently strands a paid top-up in the wrong
+      // tenant (the buyer's wallet lives under their real tenant).
+      let tenantId = session.metadata?.tenant_id ?? session.metadata?.tenantId;
+      if (tenantId == null && customerId) {
+        const existing = await findAccountByStripeCustomer(pool, customerId);
+        if (existing) tenantId = existing.tenantId;
+      }
+      if (tenantId == null) {
+        opts.log?.warn(
+          { customerId, userId, eventId: event.id },
+          "checkout.session.completed has no tenant_id metadata and no existing account for the customer; crediting the default tenant. Set metadata.tenant_id on the Checkout Session for multi-tenant deployments.",
+        );
+        tenantId = "";
+      }
       const creditsUsd =
         Number(session.metadata?.credits_usd ?? 0) > 0
           ? Number(session.metadata?.credits_usd)
@@ -193,7 +232,7 @@ async function applyStripeEvent(
           tenantId,
           userId,
           creditsUsd,
-          stripeCustomerId: typeof session.customer === "string" ? session.customer : undefined,
+          stripeCustomerId: customerId,
           userType: session.metadata?.user_type,
           // Replay-safe: the same event id grants credits at most once.
           stripeEventId: event.id,
