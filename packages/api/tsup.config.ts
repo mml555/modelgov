@@ -7,8 +7,9 @@ import { defineConfig } from "tsup";
 //
 // tsup already auto-externalizes everything in package.json `dependencies`, so
 // this list is belt-and-suspenders; keep it in sync with package.json. The
-// runtime image installs exactly these (derived from package.json by
-// scripts/gen-runtime-pkg.mjs), so the real contract is package.json.
+// runtime image carries exactly these externals (installed by `pnpm deploy`
+// from packages/api/package.json, resolved via the frozen lockfile — see
+// packages/api/Dockerfile), so the real contract is package.json.
 export default defineConfig({
   entry: ["src/index.ts", "src/migrate.ts", "src/openapiExport.ts"],
   format: ["esm"],
