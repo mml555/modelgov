@@ -167,6 +167,25 @@ const billingSchema = z
       .optional(),
   })
   .strict()
+  .superRefine((b, ctx) => {
+    // Prepaid credits and Stripe metered billing are mutually exclusive: both
+    // charge for the same usage (a credit-wallet debit AND a metered invoice),
+    // so enabling both double-bills the customer. Reject at config load rather
+    // than silently double-charge. Prepaid credits still use Stripe for
+    // top-ups (Checkout webhooks) — only the usage meter is disallowed here.
+    const usesCredits = b.mode === "hybrid" || b.mode === "credits_only";
+    if (usesCredits && b.stripe?.meter_event_name) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["stripe", "meter_event_name"],
+        message:
+          `billing.mode "${b.mode}" bills usage by debiting the prepaid credit wallet, ` +
+          "so billing.stripe.meter_event_name (a Stripe usage meter) must not be set — " +
+          "it would invoice the same usage a second time. Remove meter_event_name; Stripe " +
+          "is still used to sell credits (plan_map / Checkout webhooks).",
+      });
+    }
+  })
   .transform((b) => ({
     provider: b.provider,
     mode: b.mode,

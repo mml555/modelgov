@@ -33,7 +33,9 @@ const RAW_CONFIG = {
   billing: {
     provider: "stripe",
     mode: "hybrid",
-    stripe: { meter_event_name: "ai_tokens" },
+    // Prepaid credits: no Stripe usage meter (meter_event_name alongside a credits
+    // mode is rejected by config validation — it would double-bill). recordMeter
+    // still writes local usage rows; they're just never reported to a Stripe meter.
   },
 };
 

@@ -68,6 +68,18 @@ export function createBillingService(
   const usdPerCredit = billing.stripe?.usdPerCredit ?? 0.01;
   const meterEventName = billing.stripe?.meterEventName;
 
+  // Defense in depth (config validation already enforces this): reaching here
+  // means mode is hybrid|credits_only, i.e. usage is billed via prepaid credits.
+  // A Stripe usage meter would invoice that same usage a second time, so refuse
+  // to construct a service that would double-bill.
+  if (meterEventName) {
+    throw new Error(
+      `billing.mode "${billing.mode}" bills usage by debiting the prepaid credit wallet ` +
+        "and cannot be combined with a Stripe usage meter (stripe.meterEventName) — the " +
+        "same usage would be invoiced a second time. Remove stripe.meterEventName.",
+    );
+  }
+
   return {
     enabled: true,
     mode: billing.mode,

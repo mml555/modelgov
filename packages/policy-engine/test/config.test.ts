@@ -158,4 +158,54 @@ model_classes:
     );
     expect(cfg.modelClasses.cheap?.primary).toBe("ollama/llama3");
   });
+
+  const withBilling = (billing: unknown) => ({
+    project: { name: "x" },
+    budgets: {
+      global: { monthly_usd: 1 },
+      by_user_type: { logged_in: { daily_usd: 1, daily_requests: 1, models: ["cheap"] } },
+    },
+    features: { f: { model_class: "cheap", max_tokens: 10 } },
+    model_classes: { cheap: { primary: "openai/gpt-4o-mini" } },
+    billing,
+  });
+
+  it("rejects prepaid credits combined with a Stripe usage meter (would double-bill)", () => {
+    // credits mode debits the wallet AND a meter event would invoice the same
+    // usage — the config must fail closed rather than charge twice.
+    for (const mode of ["credits_only", "hybrid"]) {
+      expect(() =>
+        parseConfigObject(
+          withBilling({
+            provider: "stripe",
+            mode,
+            stripe: { meter_event_name: "modelgov_usage" },
+          }),
+        ),
+      ).toThrow(PolicyConfigError);
+    }
+  });
+
+  it("allows prepaid credits with Stripe used only for top-ups (no usage meter)", () => {
+    const cfg = parseConfigObject(
+      withBilling({
+        provider: "stripe",
+        mode: "credits_only",
+        stripe: { secret_key: "sk_test", webhook_secret: "whsec", usd_per_credit: 0.01 },
+      }),
+    );
+    expect(cfg.billing?.mode).toBe("credits_only");
+    expect(cfg.billing?.stripe?.meterEventName).toBeUndefined();
+  });
+
+  it("allows a Stripe usage meter when not using prepaid credits (internal_only)", () => {
+    const cfg = parseConfigObject(
+      withBilling({
+        provider: "stripe",
+        mode: "internal_only",
+        stripe: { meter_event_name: "modelgov_usage" },
+      }),
+    );
+    expect(cfg.billing?.stripe?.meterEventName).toBe("modelgov_usage");
+  });
 });

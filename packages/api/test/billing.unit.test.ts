@@ -21,9 +21,11 @@ describe("billing service", () => {
       billing: {
         provider: "stripe",
         mode: "hybrid",
+        // Prepaid credits use Stripe only for top-ups (plan_map), never a usage
+        // meter — meter_event_name alongside a credits mode is rejected by config
+        // validation (it would double-bill). See config.test.ts.
         stripe: {
           plan_map: { price_pro: "paid_user" },
-          meter_event_name: "ai_tokens",
         },
       },
     });
