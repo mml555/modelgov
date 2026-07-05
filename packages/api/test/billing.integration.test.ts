@@ -74,12 +74,6 @@ describe.skipIf(!DATABASE_URL)("billing + emergency (integration)", () => {
   });
 
   afterAll(async () => {
-    // The tenant-scoped emergency test leaves a tenant pause in system_flags
-    // (it never resumes tenant "alpha"). beforeEach only clears it for THIS
-    // file's tests; without a reset here that row bleeds into whatever file the
-    // sequencer runs next — chat/embeddings files read system_flags on every
-    // request and don't truncate it, so a leftover pause makes them flaky.
-    await pool.query("TRUNCATE system_flags");
     await pool.end();
   });
 

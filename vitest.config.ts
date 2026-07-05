@@ -22,12 +22,15 @@ export default defineConfig({
     // Integration tests share one Postgres and TRUNCATE between cases; running
     // test files in parallel would let them stomp on each other's rows.
     fileParallelism: false,
-    // Every integration file's beforeAll runs applySchema (all 24 migrations
-    // under an advisory lock); whichever file the sequencer runs first bears the
-    // full cold-migration cost. Against a shared Docker Postgres that can exceed
-    // vitest's default 5s test / 10s hook timeouts under load — producing
-    // non-deterministic timeouts and whole-file skips. Match the DB
-    // statement_timeout (30s) so a slow-but-completing op isn't killed early.
+    // Apply the schema once for the whole run (not per file — see globalSetup),
+    // and give every file a clean-slate DB before it runs (setup.ts), so state
+    // can't bleed across files under the sequencer's run-to-run reordering. Both
+    // no-op without DATABASE_URL (unit-only runs).
+    globalSetup: ["packages/api/test/globalSetup.ts"],
+    setupFiles: ["packages/api/test/setup.ts"],
+    // migration-upgrade.test.ts migrates a throwaway DB inside the test (~seconds);
+    // 30s matches the DB statement_timeout so a slow-but-completing op on the
+    // shared Docker Postgres isn't killed by vitest's tight 5s/10s defaults.
     testTimeout: 30_000,
     hookTimeout: 30_000,
     coverage: {
