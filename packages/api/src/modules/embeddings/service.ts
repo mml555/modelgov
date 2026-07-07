@@ -473,6 +473,10 @@ export async function handleEmbeddings(
       status: "ok",
       actualCostUsd,
       inputTokens: result.inputTokens,
+      // Persist that input PII was masked so a masked request is distinguishable
+      // from a clean one in the audit trail (parity with the chat success row).
+      piiMasked: safetyResult.piiMasked,
+      ...(safetyResult.findings.length > 0 ? { safetyFindings: safetyResult.findings } : {}),
     });
   } catch {
     // The provider ran (spend is real) but the audit write failed — settle the
@@ -490,6 +494,7 @@ export async function handleEmbeddings(
     model,
     inputTokens: result.inputTokens,
     actualCostUsd,
+    piiMasked: safetyResult.piiMasked,
     reason: usedFallback
       ? "provider failure on primary — routed to fallback model"
       : decision.reason,

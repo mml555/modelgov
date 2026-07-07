@@ -323,6 +323,11 @@ describe.skipIf(!DATABASE_URL)("POST /v1/embeddings (integration)", () => {
       expect(res.statusCode).toBe(200);
       // The provider must never see the raw SSN.
       expect(seen()).toEqual(["my ssn is [REDACTED]", "no pii here"]);
+      // The success audit row records that masking occurred (parity with chat).
+      const log = await pool.query(
+        "SELECT pii_masked FROM request_logs WHERE user_id='svc_pii'",
+      );
+      expect(log.rows[0].pii_masked).toBe(true);
     });
 
     it("blocks the request with 403 and makes no provider call when PII must be blocked", async () => {
