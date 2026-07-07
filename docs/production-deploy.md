@@ -89,7 +89,7 @@ See [`.env.production.example`](../.env.production.example) for the full list. M
 | --- | --- |
 | `MODELGOV_PRODUCTION` | Must be `true` — enables fail-closed boot checks |
 | `DATABASE_URL` | Managed Postgres connection string |
-| `DATABASE_SSL` | `require` or `verify-full` (never `disable` for remote DB) |
+| `DATABASE_SSL` | `verify-full` for a remote/managed DB (`require` refuses to boot against a remote host since 1.2.0 — it encrypts but does not verify the server cert; set `DATABASE_SSL_CA` if the CA isn't in the system trust store, or `DATABASE_SSL_NO_VERIFY_ALLOWED=true` only on a trusted private network). Never `disable` for a remote DB. |
 | `MODELGOV_API_KEY` or `MODELGOV_API_KEYS` | Strong random secret; bootstrap admin key only with `ALLOW_BOOTSTRAP_ADMIN_KEY=true` |
 | `MODELGOV_CONFIG` | Path to production `modelgov.yaml` (or enable policy store) |
 | `LITELLM_BASE_URL` | In-cluster or sidecar LiteLLM |

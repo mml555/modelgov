@@ -46,12 +46,19 @@ so a single build/image serves any deployment — no rebuild per environment. Th
 
 | Route | API | Permission |
 | --- | --- | --- |
-| `/overview` | `GET /v1/usage/summary` | `usage:read` |
+| `/overview` | `GET /v1/usage/summary` + `GET /v1/usage` (live dashboard, polls every 15s) | `usage:read` |
 | `/requests` | `GET /v1/requests` | `requests:read` |
 | `/usage` | `GET /v1/usage/summary` | `usage:read` |
 | `/keys` | `/v1/admin/keys*` | `keys:admin` |
-| `/policy` | `/v1/admin/policy/*` | `policy:read` |
+| `/policy` | `/v1/admin/policy/*` (validate, diff, save, approve/reject, activate/rollback, version history) | `policy:read` |
+| `/audit` | `GET /v1/admin/audit` + `/verify` (hash-chain integrity) | `audit:read` |
+| `/privacy` | `POST /v1/admin/erasure` (DSAR / GDPR erasure) | `data:erase` |
+| `/metrics` | Prometheus `/metrics` (own `METRICS_AUTH_TOKEN`, not RBAC) | none |
 | `/health` | `/health`, `/ready` | none |
+
+A **tenant switcher** in the header re-scopes every page for platform (unbound)
+operators; tenant-bound keys are locked to their own tenant. Nav items are
+permission-aware via `GET /v1/admin/whoami`.
 
 ## Privacy
 

@@ -7,11 +7,20 @@ OpenAPI spec: **`GET /openapi.json`** (when server is running).
 Authentication: **`Authorization: Bearer <API_KEY>`** on all routes except
 `/health` and `/ready`.
 
-**Tenant selection (platform operators):** a non-tenant-bound key may add
-**`X-Modelgov-Tenant: <tenantId>`** to scope a request to one tenant — it sets
-the effective tenant for every tenant-partitioned read and write. A
-tenant-**bound** key ignores this header (it is locked to its own tenant), so it
-can never be used to reach another tenant's data.
+**Tenant selection (platform operators):** a non-tenant-bound key holding the
+**`tenant:switch`** permission may add **`X-Modelgov-Tenant: <tenantId>`** to
+scope a request to one tenant — it sets the effective tenant for every
+tenant-partitioned read and write. A tenant-**bound** key ignores this header
+(it is locked to its own tenant), so it can never be used to reach another
+tenant's data.
+
+> **⚠ Changed in 1.2.0 (breaking):** switching now requires the `tenant:switch`
+> permission (granted to the `owner` role only by default). Previously any
+> unbound principal — including any OIDC-authenticated operator, which is always
+> unbound — could switch tenants via this header. A static platform key that
+> switches tenants must add `"tenant:switch"` to its permissions; OIDC operators
+> can instead be bound to a tenant with `OIDC_TENANT_CLAIM` (see
+> [operations.md](./operations.md)). Tenant-bound keys are unaffected.
 
 ## Endpoints
 
@@ -21,7 +30,7 @@ can never be used to reach another tenant's data.
 | `GET` | `/ready` | — | Readiness (database-gated; dependencies reported) |
 | `GET` | `/openapi.json` | — | OpenAPI 3 document |
 | `POST` | `/v1/chat` | `chat:create` | Guarded chat completion |
-| `POST` | `/v1/embeddings` | `chat:create` | Guarded embeddings (same policy/budget/billing spine as chat) |
+| `POST` | `/v1/embeddings` | `chat:create` | Guarded embeddings (same policy/budget/billing spine as chat; input PII is masked/blocked before the provider call per the feature's safety plan, fail-closed — no injection classifier) |
 | `POST` | `/v1/explain` | `chat:create` or `policy:explain` | Dry-run policy (no model call) |
 | `GET` | `/v1/usage` | `usage:read` | Budget snapshots and recent stats (`globalMonthly` includes `capUsd`, the configured global monthly cap) |
 | `GET` | `/v1/usage/summary` | `usage:read` | Aggregated cost/request summary |
