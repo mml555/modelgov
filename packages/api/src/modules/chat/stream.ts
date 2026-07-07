@@ -27,12 +27,32 @@ export async function settleStream(
   deps: ChatServiceDeps,
   ctx: StreamContext,
   final: LiteLLMStreamFinal,
+  outputChars = 0,
 ): Promise<string> {
   const { pool, observability, log } = deps;
   const { aiRequest, decision, hold, now, safetyCostUsd } = ctx;
   const reservedUsd = hold.reservedUsd;
+  // Prefer the provider-reported cost. If the upstream proxy didn't return usage
+  // (some LiteLLM versions omit it unless stream_options.include_usage is honored),
+  // do NOT fall back to the full worst-case reservation — that systematically
+  // overcharges (e.g. billing 1000 output tokens for a 30-token reply). Estimate
+  // from provider token counts when present, otherwise from the input floor and
+  // the characters actually streamed to the client, capped at the reservation.
+  const model = final.model || decision.resolvedModel;
   const actualCostUsd =
-    final.actualCostUsd != null ? final.actualCostUsd + safetyCostUsd : reservedUsd;
+    final.actualCostUsd != null
+      ? final.actualCostUsd + safetyCostUsd
+      : Math.min(
+          roundUsd(
+            estimateCostUsd(
+              model,
+              final.inputTokens ?? aiRequest.inputTokensEstimate,
+              final.outputTokens ?? Math.ceil(Math.max(0, outputChars) / CHARS_PER_TOKEN),
+              deps.config.pricing,
+            ) + safetyCostUsd,
+          ),
+          reservedUsd,
+        );
   // credits_only: the wallet is the sole ledger; the internal reserve was skipped
   // so there is no lease to settle — touching budget_counters here would UPSERT a
   // spurious row. settleBillingCredits below debits the wallet. (Parity with

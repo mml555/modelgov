@@ -5,7 +5,13 @@ const MAX_REQUEST_ID_LENGTH = 128;
 
 export interface RequestContext {
   readonly requestId: string;
-  readonly apiKeyName?: string;
+  /**
+   * Display name of the authenticated principal — the API key's `name` or the
+   * OIDC subject. Used as the audit `actor`. NOT a credential (the secret is
+   * never carried past verification); named `principalName`, not `apiKeyName`,
+   * so it reads accurately for OIDC operators too.
+   */
+  readonly principalName?: string;
   readonly projectId?: string;
   readonly environment?: string;
   readonly allowedUserTypes?: readonly string[];

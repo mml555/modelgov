@@ -134,6 +134,25 @@ describe("OIDC verifier", () => {
     const principal = await verifier().verify(token);
     expect(principal?.permissions).toEqual([]);
   });
+
+  it("binds the principal to a tenant when the tenant claim is present", async () => {
+    const token = await mint({ roles: ["viewer"], tenant_id: "acme" });
+    const principal = await verifier({ tenantClaim: "tenant_id" }).verify(token);
+    expect(principal?.tenantId).toBe("acme");
+  });
+
+  it("leaves the principal unbound when no tenant claim is configured", async () => {
+    const token = await mint({ roles: ["viewer"], tenant_id: "acme" });
+    const principal = await verifier().verify(token);
+    expect(principal?.tenantId).toBeUndefined();
+  });
+
+  it("grants tenant:switch only to owner (not to a limited role)", async () => {
+    const owner = await verifier().verify(await mint({ roles: ["owner"] }));
+    expect(owner?.permissions).toContain("tenant:switch");
+    const viewer = await verifier().verify(await mint({ roles: ["viewer"] }));
+    expect(viewer?.permissions ?? []).not.toContain("tenant:switch");
+  });
 });
 
 describe("operator SSO integration", () => {

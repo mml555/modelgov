@@ -56,10 +56,10 @@ describe.skipIf(!DATABASE_URL)("api key lifecycle (integration)", () => {
         projectId: "proj-1",
       });
       expect(issued.secret).toMatch(/^sk-modelgov-/);
-      expect(issued.keyPrefix).toBe(issued.secret.slice(0, issued.keyPrefix.length));
+      expect(issued.record.keyPrefix).toBe(issued.secret.slice(0, issued.record.keyPrefix.length));
 
       // The raw secret must never be stored.
-      const raw = await pool.query("SELECT key_hash FROM api_keys WHERE id = $1", [issued.id]);
+      const raw = await pool.query("SELECT key_hash FROM api_keys WHERE id = $1", [issued.record.id]);
       expect(raw.rows[0].key_hash).not.toContain(issued.secret);
 
       const active = await findActiveApiKeyByToken(pool, issued.secret);
@@ -70,10 +70,10 @@ describe.skipIf(!DATABASE_URL)("api key lifecycle (integration)", () => {
 
     it("does not resolve revoked keys", async () => {
       const issued = await createApiKey(pool, { name: "svc-b" });
-      expect(await revokeApiKey(pool, issued.id)).toBe(true);
+      expect(await revokeApiKey(pool, issued.record.id)).toBe(true);
       expect(await findActiveApiKeyByToken(pool, issued.secret)).toBeNull();
       // Revoke is idempotent and still reports success for a known id.
-      expect(await revokeApiKey(pool, issued.id)).toBe(true);
+      expect(await revokeApiKey(pool, issued.record.id)).toBe(true);
     });
 
     it("does not resolve expired keys", async () => {
@@ -86,19 +86,19 @@ describe.skipIf(!DATABASE_URL)("api key lifecycle (integration)", () => {
 
     it("rotate mints a new secret and invalidates the old one", async () => {
       const issued = await createApiKey(pool, { name: "svc-rot" });
-      const rotated = await rotateApiKey(pool, issued.id);
+      const rotated = await rotateApiKey(pool, issued.record.id);
       expect(rotated).not.toBeNull();
       expect(rotated!.secret).not.toBe(issued.secret);
-      expect(rotated!.id).toBe(issued.id);
+      expect(rotated!.record.id).toBe(issued.record.id);
       expect(await findActiveApiKeyByToken(pool, issued.secret)).toBeNull();
-      expect((await findActiveApiKeyByToken(pool, rotated!.secret))?.id).toBe(issued.id);
+      expect((await findActiveApiKeyByToken(pool, rotated!.secret))?.id).toBe(issued.record.id);
     });
 
     it("list hides revoked keys by default", async () => {
       const a = await createApiKey(pool, { name: "keep" });
       const b = await createApiKey(pool, { name: "drop" });
-      await revokeApiKey(pool, b.id);
-      expect((await listApiKeys(pool)).map((k) => k.id)).toEqual([a.id]);
+      await revokeApiKey(pool, b.record.id);
+      expect((await listApiKeys(pool)).map((k) => k.id)).toEqual([a.record.id]);
       expect((await listApiKeys(pool, { includeRevoked: true })).length).toBe(2);
     });
 
@@ -297,13 +297,13 @@ describe.skipIf(!DATABASE_URL)("api key lifecycle (integration)", () => {
       });
       const get = await server.inject({
         method: "GET",
-        url: `/v1/admin/keys/${bKey.id}`,
+        url: `/v1/admin/keys/${bKey.record.id}`,
         headers: { authorization: `Bearer ${aAdmin}` },
       });
       expect(get.statusCode).toBe(404);
       const revoke = await server.inject({
         method: "POST",
-        url: `/v1/admin/keys/${bKey.id}/revoke`,
+        url: `/v1/admin/keys/${bKey.record.id}/revoke`,
         headers: { authorization: `Bearer ${aAdmin}` },
       });
       expect(revoke.statusCode).toBe(404);

@@ -133,6 +133,22 @@ Verify artifacts after release:
 scripts/verify-release-artifacts.sh v1.1.0 your-org/Modelgov
 ```
 
+### Image architecture
+
+The published `modelgov-api` image is **`linux/amd64` only**. On `arm64` hosts
+(AWS Graviton, Apple Silicon, Ampere) a plain `docker pull` either fails with
+`exec format error` or silently runs under QEMU emulation with multi-second
+per-request latency. On arm64, **build the image natively** instead of pulling:
+
+```bash
+# on the arm64 host / build machine
+BUILD_LOCAL_IMAGE=true MODELGOV_API_IMAGE=modelgov-api:local make up-prod
+# or explicitly:
+docker build -t modelgov-api:local -f packages/api/Dockerfile .
+```
+
+(A native multi-arch image is planned; until then amd64 is the only published arch.)
+
 ---
 
 ## Postgres requirements

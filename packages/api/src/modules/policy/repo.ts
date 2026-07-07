@@ -50,6 +50,38 @@ export function setConfigVersionsRls(enabled: boolean): void {
   rlsEnabled = enabled;
 }
 
+// Process-wide STRICT_PRICING, set once at boot. The file loader passes this to
+// parseConfig; the store path must too, or a version adding an unpriced model
+// slips past the very guard STRICT_PRICING exists to enforce and its spend is
+// estimated at DEFAULT_PRICE.
+let strictPricing = false;
+export function setConfigVersionsStrictPricing(enabled: boolean): void {
+  strictPricing = enabled;
+}
+function parseOptions(): { strictPricing?: boolean } {
+  return { strictPricing };
+}
+
+/**
+ * Fingerprint of the config fields that are applied at BOOT and are NOT hot-
+ * reloadable: provider pricing and routing.retry (baked into the LiteLLM client),
+ * the injection classifier model (baked into the safety guard), and the billing
+ * mode / meter (baked into the billing service). Hot-activating a version that
+ * changes any of these would half-apply — the evaluator would use the new value
+ * while cost settlement, safety, and billing stayed on the boot value (e.g.
+ * reserve and settle would disagree on price within one request). Activation
+ * compares this against the boot config and refuses when hot reload is on.
+ */
+export function frozenPolicyFieldsFingerprint(config: ModelgovConfig): string {
+  return JSON.stringify({
+    pricing: config.pricing ?? null,
+    retry: config.routing?.retry ?? null,
+    injectionModel: config.safety?.injectionModel ?? null,
+    billingMode: config.billing?.mode ?? null,
+    meterEventName: config.billing?.stripe?.meterEventName ?? null,
+  });
+}
+
 /**
  * Run a config_versions statement, transparently wrapping it in the RLS tenant
  * context when enabled. Centralizing it here keeps the repo the single place
@@ -102,7 +134,7 @@ export async function saveConfigVersion(
   },
   audit?: (record: ConfigVersionRecord) => AuditEvent,
 ): Promise<ConfigVersionRecord> {
-  parseConfig(input.yaml); // throws on invalid config
+  parseConfig(input.yaml, parseOptions()); // throws on invalid config
   const checksum = createHash("sha256").update(input.yaml).digest("hex");
   const tenantId = input.tenantId ?? DEFAULT_TENANT;
   const status: PolicyVersionStatus = input.approvalRequired ? "proposed" : "approved";
@@ -170,14 +202,17 @@ export async function getActiveConfigVersion(
   );
   const row = rows[0];
   if (!row || !row.yaml_text) return null;
-  return { record: rowToRecord(row), config: parseConfig(row.yaml_text), yaml: row.yaml_text };
+  return { record: rowToRecord(row), config: parseConfig(row.yaml_text, parseOptions()), yaml: row.yaml_text };
 }
 
-/** Discriminated outcome so the route can map `not_approved` to 409 (distinct
- *  from a 404 for an unknown/foreign id). */
+/** Discriminated outcome so the route can map each failure to the right status
+ *  (404 for unknown/foreign id; 409 for the state-machine and hot-reload cases). */
 export type ActivateResult =
   | { ok: true; record: ConfigVersionRecord }
-  | { ok: false; reason: "not_found" | "not_approved" };
+  | {
+      ok: false;
+      reason: "not_found" | "not_approved" | "not_reviewed" | "conflict" | "requires_restart";
+    };
 
 /**
  * Activate a stored version (this is also how rollback works — activate a prior
@@ -186,12 +221,20 @@ export type ActivateResult =
  * in the `approved` state (the two-person rule — no effect when approval is off,
  * since saves are then born `approved`). Atomic: deactivate-all then
  * activate-one inside one transaction so the single-active invariant holds.
+ *
+ * `opts.requireReviewed` (set when POLICY_APPROVAL_REQUIRED is on) additionally
+ * rejects versions that carry the `approved` status WITHOUT an actual review
+ * (reviewed_by null) — i.e. versions born `approved` before approval was enabled.
+ * Otherwise the two-person rule is trivially bypassable by activating any such
+ * pre-existing draft. `opts.frozenGuard` refuses (with hot reload on) a version
+ * that changes a boot-only field, so it can't half-apply.
  */
 export async function activateConfigVersion(
   pool: Pool,
   id: string,
   expectedTenantId?: string,
   audit?: (record: ConfigVersionRecord) => AuditEvent,
+  opts?: { requireReviewed?: boolean; frozenGuard?: { bootFingerprint: string } },
 ): Promise<ActivateResult> {
   const client = await pool.connect();
   try {
@@ -203,13 +246,19 @@ export async function activateConfigVersion(
         expectedTenantId ?? DEFAULT_TENANT,
       ]);
     }
-    const target = await client.query<{ yaml_text: string; tenant_id: string; status: PolicyVersionStatus }>(
-      "SELECT yaml_text, tenant_id, status FROM config_versions WHERE id = $1 FOR UPDATE",
+    const target = await client.query<{
+      yaml_text: string;
+      tenant_id: string;
+      status: PolicyVersionStatus;
+      reviewed_by: string | null;
+    }>(
+      "SELECT yaml_text, tenant_id, status, reviewed_by FROM config_versions WHERE id = $1 FOR UPDATE",
       [id],
     );
     const yaml = target.rows[0]?.yaml_text;
     const tenantId = target.rows[0]?.tenant_id;
     const status = target.rows[0]?.status;
+    const reviewedBy = target.rows[0]?.reviewed_by;
     // Tenant isolation: a caller may only activate versions in its own tenant.
     if (!yaml || !tenantId || (expectedTenantId != null && tenantId !== expectedTenantId)) {
       await client.query("ROLLBACK");
@@ -220,7 +269,22 @@ export async function activateConfigVersion(
       await client.query("ROLLBACK");
       return { ok: false, reason: "not_approved" };
     }
-    parseConfig(yaml); // never activate an unparseable version
+    // When approval is required, an `approved` status alone is not enough: a
+    // version born `approved` before the rule was enabled (or backfilled by the
+    // approval migration) never had a second operator sign off. Require an actual
+    // review, or the rule is bypassable via any pre-existing draft.
+    if (opts?.requireReviewed && !reviewedBy) {
+      await client.query("ROLLBACK");
+      return { ok: false, reason: "not_reviewed" };
+    }
+    const config = parseConfig(yaml, parseOptions()); // never activate an unparseable version
+    // Hot-reload safety: a version that changes a boot-only field (pricing, retry,
+    // injection model, billing mode) cannot be applied without a restart. Refuse
+    // rather than half-apply it (see frozenPolicyFieldsFingerprint).
+    if (opts?.frozenGuard && frozenPolicyFieldsFingerprint(config) !== opts.frozenGuard.bootFingerprint) {
+      await client.query("ROLLBACK");
+      return { ok: false, reason: "requires_restart" };
+    }
     // Deactivate only this tenant's currently-active version.
     await client.query("UPDATE config_versions SET active = false WHERE active AND tenant_id = $1", [tenantId]);
     const { rows } = await client.query<ConfigVersionDbRow>(
@@ -245,6 +309,13 @@ export async function activateConfigVersion(
     return { ok: true, record };
   } catch (err) {
     await client.query("ROLLBACK").catch(() => {});
+    // Two concurrent activations of different versions can both pass their
+    // FOR UPDATE lookups (they lock different rows) and then collide on the
+    // per-tenant single-active partial unique index. Surface that as a 409 the
+    // caller can retry, not a raw 500.
+    if (err && typeof err === "object" && (err as { code?: string }).code === "23505") {
+      return { ok: false, reason: "conflict" };
+    }
     throw err;
   } finally {
     client.release();

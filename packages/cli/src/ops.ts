@@ -1,6 +1,7 @@
 import { copyFileSync, existsSync, readFileSync, unlinkSync } from "node:fs";
 import { basename, resolve } from "node:path";
 import { spawn } from "node:child_process";
+import { resolveUserPath } from "./paths.js";
 
 export type OpsCommand =
   | "doctor"
@@ -27,7 +28,11 @@ interface ModeConfig {
   envFile?: string;
 }
 
-const ROOT = resolve(import.meta.dirname, "../../..");
+// Ops commands act on the user's Modelgov project (compose files, .env, scripts),
+// NOT on the installed CLI package. Resolve everything relative to the invocation
+// cwd (INIT_CWD when run via a package manager, else process.cwd()). In the
+// monorepo dev case cwd IS the repo root, so this keeps working there too.
+const ROOT = resolveUserPath(".");
 const LOCAL_API_KEY = "sk-modelgov-api-local";
 
 const KNOWN_DEV_API_KEYS = new Set(["sk-modelgov-api-local", "smoke-test-key"]);
@@ -152,6 +157,11 @@ function isMode(value: string): value is Mode {
 
 async function up(flags: OpsFlags, opts: { strictSmoke: boolean }): Promise<void> {
   if (flags.mode === "prod") {
+    if (!existsSync(resolve(ROOT, "scripts/up-prod.sh"))) {
+      throw new Error(
+        `Could not find scripts/up-prod.sh in ${ROOT}. Run this from your Modelgov project directory.`,
+      );
+    }
     await run("bash", ["scripts/up-prod.sh"]);
     return;
   }
@@ -306,12 +316,30 @@ async function reset(flags: OpsFlags): Promise<void> {
 
 async function dockerCompose(mode: Mode, command: string[]): Promise<void> {
   const config = modeConfig(mode);
+  assertComposeFilesExist(config.composeArgs);
   const args = [
     ...(config.envFile ? ["--env-file", config.envFile] : []),
     ...config.composeArgs,
     ...command,
   ];
   await run("docker", ["compose", ...args]);
+}
+
+/**
+ * Compose files are resolved relative to ROOT (the invocation cwd). If one is
+ * missing, the user is almost certainly running the CLI outside their Modelgov
+ * project directory — surface that instead of docker's opaque ENOENT.
+ */
+function assertComposeFilesExist(composeArgs: string[]): void {
+  for (let i = 0; i < composeArgs.length; i++) {
+    if (composeArgs[i] !== "-f") continue;
+    const file = composeArgs[i + 1];
+    if (!file || existsSync(resolve(ROOT, file))) continue;
+    throw new Error(
+      `Could not find ${file} in ${ROOT}. Run this from your Modelgov project directory ` +
+        `(the folder that holds your docker-compose files), or scaffold one with \`modelgov init\`.`,
+    );
+  }
 }
 
 export function modeConfig(mode: Mode): ModeConfig {

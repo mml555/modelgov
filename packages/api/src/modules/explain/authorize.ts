@@ -29,8 +29,11 @@ export function authorizeExplainInput(
   ctx: RequestContext,
   body: ExplainInput,
 ): ExplainAuthResult {
+  // The `ctx.principalName` guard is the unauthenticated-mode bypass (see
+  // chat/authorize) — in production auth always sets a name, so an authenticated
+  // principal is always subject to this check.
   const perms = ctx.permissions ?? ["chat:create"];
-  if (ctx.apiKeyName && !perms.includes("chat:create") && !perms.includes("policy:explain")) {
+  if (ctx.principalName && !perms.includes("chat:create") && !perms.includes("policy:explain")) {
     return deny(403, "forbidden", "API key is not permitted to explain policy");
   }
 

@@ -57,6 +57,11 @@ export interface ChatRouteDeps {
    */
   tenantPolicy?: TenantPolicyResolver;
   billing?: BillingService;
+  /**
+   * Hard wall-clock cap on a single stream (ms), bounded below RESERVATION_STALE_MS
+   * so a long stream can't outlive its reservation and be swept mid-flight.
+   */
+  streamMaxDurationMs?: number;
 }
 
 export function registerChatRoute(
@@ -211,13 +216,23 @@ async function streamChat(
   const ctx = prep.ctx;
 
   const controller = new AbortController();
+  // Single-winner guard for the terminal action (full settle, partial settle, or
+  // release). JS is single-threaded, so this check-and-set is atomic between
+  // awaits — whichever of the close handler, the duration cap, and the read loop
+  // reaches it first owns settlement; the others no-op. Without it the success
+  // path could settle a stream the close handler already partial-settled (double
+  // audit row + double Stripe meter event).
   let finished = false;
+  const claim = (): boolean => {
+    if (finished) return false;
+    finished = true;
+    return true;
+  };
   // Total characters streamed to the client so far — used to bill the tokens
   // actually produced if the stream is cut short (see settleStreamPartial).
   let outputChars = 0;
   const releaseOnce = async (): Promise<void> => {
-    if (finished) return;
-    finished = true;
+    if (!claim()) return;
     await releaseStream(deps, ctx);
   };
   // A stream cut short after the first byte has real, provider-billed output.
@@ -225,8 +240,7 @@ async function streamChat(
   const settlePartialOnce = async (
     outcome: "client_disconnect" | "stream_interrupted",
   ): Promise<void> => {
-    if (finished) return;
-    finished = true;
+    if (!claim()) return;
     await settleStreamPartial(deps, ctx, outputChars, outcome);
   };
 
@@ -269,6 +283,23 @@ async function streamChat(
   };
   request.raw.on("close", onClose);
 
+  // Hard wall-clock cap. A stream that runs longer than its reservation TTL would
+  // be swept mid-flight (lease refunded) and then settle to a no-op — served free.
+  // Aborting here makes the read loop throw into the catch below, which partial-
+  // settles for what was produced before the reservation can go stale.
+  const maxMs = deps.streamMaxDurationMs;
+  const durationTimer =
+    maxMs && maxMs > 0
+      ? setTimeout(() => {
+          if (finished) return;
+          request.log.warn({ maxMs }, "stream exceeded max duration; aborting and settling");
+          controller.abort();
+        }, maxMs)
+      : undefined;
+  const clearDurationTimer = (): void => {
+    if (durationTimer) clearTimeout(durationTimer);
+  };
+
   try {
     let next = first;
     while (!next.done) {
@@ -277,9 +308,12 @@ async function streamChat(
       next = await gen.next();
     }
     const final = next.value;
-    finished = true; // settled below owns the reservation now
     request.raw.off("close", onClose);
-    const requestId = await settleStream(deps, ctx, final);
+    clearDurationTimer();
+    // If the close handler or the duration cap already claimed settlement, don't
+    // settle again — that stream was cut short and is being partial-settled.
+    if (!claim()) return;
+    const requestId = await settleStream(deps, ctx, final, outputChars);
     raw.write(
       `data: ${JSON.stringify({
         done: true,
@@ -292,6 +326,7 @@ async function streamChat(
     raw.end();
   } catch (err) {
     request.raw.off("close", onClose);
+    clearDurationTimer();
     await settlePartialOnce("stream_interrupted");
     request.log.error({ err }, "stream failed after first token");
     if (!raw.writableEnded) {

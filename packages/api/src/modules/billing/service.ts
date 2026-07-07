@@ -1,11 +1,20 @@
 import type { BillingMode } from "@modelgov/policy-engine";
+import { roundUsd } from "@modelgov/policy-engine";
 import type { Pool } from "pg";
+
+// Par sell rate: at usd_per_credit === PAR, $1 of real money paid grants $1 of
+// wallet credit (1:1, the default and the pre-existing behavior). A higher
+// usd_per_credit sells each credit for more real money, so the same payment
+// funds proportionally less wallet credit — that spread is the operator's markup.
+const PAR_USD_PER_CREDIT = 0.01;
 import {
   findAccountByStripeCustomer,
   getBillingAccount,
   listPendingMeterEvents,
   markMeterReported,
+  MAX_METER_ATTEMPTS,
   recordMeterEvent,
+  recordMeterFailure,
   releaseCredits,
   reserveCredits,
   settleCredits,
@@ -64,7 +73,10 @@ export interface BillingService {
       costUsd: number;
     },
   ): Promise<void>;
-  flushPendingMeters(log?: { error(obj: unknown, msg: string): void }): Promise<number>;
+  flushPendingMeters(log?: {
+    error(obj: unknown, msg: string): void;
+    warn(obj: unknown, msg: string): void;
+  }): Promise<number>;
   handleStripeWebhook(
     rawBody: Buffer,
     signature: string | undefined,
@@ -76,6 +88,8 @@ export interface BillingService {
     creditsUsd: number;
     stripeCustomerId?: string;
     userType?: string;
+    /** When set, the grant is applied at most once for this key (replay-safe). */
+    idempotencyKey?: string;
   }): Promise<void>;
 }
 
@@ -188,43 +202,74 @@ export function createBillingService(
 
     async recordMeter(params) {
       if (params.costUsd <= 0) return;
-      const client = await pool.connect();
-      try {
-        await recordMeterEvent(client, params);
-      } finally {
-        client.release();
+      // The meter_events row IS the billing record for metered mode, so a failed
+      // insert here loses billable usage (there is no upstream retry). Retry a
+      // transient failure a few times before surfacing it to the caller (which
+      // logs). ON CONFLICT (request_id) DO NOTHING keeps retries idempotent.
+      let lastErr: unknown;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const client = await pool.connect();
+        try {
+          await recordMeterEvent(client, params);
+          return;
+        } catch (err) {
+          lastErr = err;
+        } finally {
+          client.release();
+        }
+        await new Promise((resolve) => setTimeout(resolve, 50 * (attempt + 1)));
       }
+      throw lastErr;
     },
 
     async flushPendingMeters(log) {
       if (!stripeSecret || !meterEventName) return 0;
-      // The repo query only returns rows whose billing account has a Stripe
-      // customer id: a row without one can never be reported, and with the
-      // batch's ORDER BY created_at LIMIT it would otherwise permanently occupy
-      // batch slots and starve newer events. Customer-less rows are left
-      // pending for the retention sweep to prune.
+      // The repo query only returns rows that are reportable NOW: an account with
+      // a Stripe customer, backoff elapsed, and under the retry ceiling. Rows
+      // without a customer, still in backoff, or poison (past the ceiling) are
+      // skipped so a handful of permanently-failing events can never occupy the
+      // batch head and starve newer usage — the retention sweep prunes them.
       const pending = await listPendingMeterEvents(pool);
       // Independent, idempotent POSTs (keyed by requestId) — report them with
       // bounded concurrency so a large backlog drains within a tick instead of
       // serializing up to `limit` round trips at hundreds of ms each.
       const outcomes = await mapWithConcurrency(pending, 8, async (event) => {
+        let result;
         try {
-          const id = await createStripeMeterEvent(
+          result = await createStripeMeterEvent(
             stripeSecret,
             {
               eventName: meterEventName,
               stripeCustomerId: event.stripeCustomerId,
               value: event.costUsd,
               identifier: event.requestId,
+              // Bill the usage in the period it occurred, not when the flush ran.
+              timestamp: Math.floor(event.createdAtMs / 1000),
             },
             fetchImpl,
           );
-          if (id) {
-            await markMeterReported(pool, event.requestId, id);
-            return true;
-          }
         } catch (err) {
-          log?.error({ err, requestId: event.requestId }, "stripe meter report failed");
+          // Should not happen (createStripeMeterEvent maps network errors to a
+          // retryable result), but never let one row abort the batch.
+          result = { ok: false as const, retryable: true, error: err instanceof Error ? err.message : String(err) };
+        }
+        if (result.ok) {
+          await markMeterReported(pool, event.requestId, result.id);
+          return true;
+        }
+        await recordMeterFailure(pool, event.requestId, result.error, {
+          permanent: !result.retryable,
+          attempts: event.attempts,
+        });
+        // Loudly surface rows that just became poison so their (unbilled) usage
+        // is visible in logs before the retention sweep drops it.
+        if (!result.retryable || event.attempts + 1 >= MAX_METER_ATTEMPTS) {
+          log?.warn(
+            { requestId: event.requestId, status: result.status, error: result.error, costUsd: event.costUsd },
+            "stripe meter event permanently unreportable — this usage will not be invoiced",
+          );
+        } else {
+          log?.error({ requestId: event.requestId, error: result.error }, "stripe meter report failed; will retry");
         }
         return false;
       });
@@ -249,7 +294,13 @@ export function createBillingService(
     },
 
     async adminTopUp(params) {
-      await topUpCreditsInTransaction(pool, params);
+      const { idempotencyKey, ...rest } = params;
+      await topUpCreditsInTransaction(pool, {
+        ...rest,
+        // Namespaced so an admin key can't collide with a real Stripe event id in
+        // the shared stripe_processed_events dedup table.
+        stripeEventId: idempotencyKey ? `admin-topup:${idempotencyKey}` : undefined,
+      });
     },
   };
 }
@@ -294,15 +345,32 @@ async function applyStripeEvent(
       }
       // metadata.credits_usd is integrator-set free text: only honor a finite,
       // positive number (guards against NaN / Infinity, e.g. "1e309", which the
-      // numeric column would reject and 500 the webhook). Otherwise fall back to
-      // the Stripe-authoritative amount_total.
+      // numeric column would reject and 500 the webhook). It is an explicit
+      // wallet-USD grant and is honored verbatim (no markup/FX). Otherwise fall
+      // back to the Stripe-authoritative amount_total, converted at the sell rate.
       const metaCredits = Number(session.metadata?.credits_usd);
-      const creditsUsd =
-        Number.isFinite(metaCredits) && metaCredits > 0
-          ? metaCredits
-          : session.amount_total != null
-            ? session.amount_total / 100
-            : 0;
+      let creditsUsd = 0;
+      if (Number.isFinite(metaCredits) && metaCredits > 0) {
+        creditsUsd = metaCredits;
+      } else if (session.amount_total != null) {
+        const currency = session.currency?.toLowerCase();
+        if (currency && currency !== "usd") {
+          // The wallet is USD-denominated; granting amount_total/100 as USD for a
+          // EUR/GBP/JPY checkout would credit the wrong FX (and JPY is zero-decimal,
+          // so /100 is 100× off). Skip and tell the integrator to be explicit.
+          opts.log?.warn(
+            { customerId, userId, eventId: event.id, currency },
+            "checkout.session.completed is not in USD but the credit wallet is USD-denominated; skipping the grant to avoid a wrong-currency credit — set metadata.credits_usd (in USD) for non-USD checkouts.",
+          );
+        } else {
+          // amount_total is in the minor unit (cents for USD). usd_per_credit is
+          // the operator's sell rate (see PAR_USD_PER_CREDIT); a higher rate grants
+          // proportionally less wallet credit per dollar paid (markup). Guard a
+          // non-positive rate (schema enforces positive, but be defensive) as par.
+          const rate = opts.usdPerCredit > 0 ? PAR_USD_PER_CREDIT / opts.usdPerCredit : 1;
+          creditsUsd = roundUsd((session.amount_total / 100) * rate);
+        }
+      }
       if (creditsUsd > 0 && Number.isFinite(creditsUsd)) {
         await topUpCreditsInTransaction(pool, {
           tenantId,
@@ -316,6 +384,7 @@ async function applyStripeEvent(
       }
       break;
     }
+    case "customer.subscription.deleted":
     case "customer.subscription.updated":
     case "customer.subscription.created": {
       const sub = obj as StripeSubscription;
@@ -323,8 +392,25 @@ async function applyStripeEvent(
       if (!customerId) return;
       const account = await findAccountByStripeCustomer(pool, customerId);
       if (!account) return;
-      const priceId = sub.items?.data?.[0]?.price?.id;
-      const userType = priceId ? opts.planMap[priceId] : undefined;
+      const deleted = event.type === "customer.subscription.deleted";
+      const status = sub.status?.toLowerCase();
+      // Only an active/trialing subscription grants the paid user_type. A
+      // deletion, or any non-active status (canceled, unpaid, past_due,
+      // incomplete, incomplete_expired, paused) downgrades. This stops an
+      // `incomplete` subscription (initial payment not yet cleared) from granting
+      // paid access, and makes a clean cancellation actually downgrade — a
+      // `...deleted` event fires with no matching payment_failed. Status absent
+      // (Stripe always sends it) is treated as active to avoid spurious
+      // downgrades on an unexpected payload shape.
+      const ACTIVE_STATUSES = new Set(["active", "trialing"]);
+      const isActive = status ? ACTIVE_STATUSES.has(status) : true;
+      let userType: string | undefined;
+      if (deleted || !isActive) {
+        userType = opts.downgradeUserType;
+      } else {
+        const priceId = sub.items?.data?.[0]?.price?.id;
+        userType = priceId ? opts.planMap[priceId] : undefined;
+      }
       if (userType) {
         await upsertBillingAccount(pool, {
           tenantId: account.tenantId,

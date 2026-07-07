@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import type { Pool } from "pg";
 import type Redis from "ioredis";
-import { type ModelgovConfig, resolveSafetyPlan } from "@modelgov/policy-engine";
+import { type ModelgovConfig, PolicyConfigError, resolveSafetyPlan } from "@modelgov/policy-engine";
 import type { loadEnv } from "./config/env";
 import { loadConfigFromFile, resolveEnvRefs } from "./config/loadConfig";
 import { assertPoolReachable, createPool, resolveSsl } from "./db/pool";
@@ -113,6 +113,10 @@ export async function resolvePolicy(
 ): Promise<{ config: ModelgovConfig; policyMeta: PolicyMeta }> {
   const fileConfig = loadConfigFromFile(env.MODELGOV_CONFIG, env.envRefs, {
     strictPricing: env.STRICT_PRICING === "true",
+    onMissingEnvRef: (varName, provider) =>
+      console.warn(
+        `provider "${provider}" api_key references env/${varName}, which is unset — the provider key resolves to empty`,
+      ),
   });
 
   if (env.POLICY_STORE_ENABLED !== "true") {
@@ -127,7 +131,31 @@ export async function resolvePolicy(
     };
   }
 
-  const active = await getActiveConfigVersion(pool);
+  let active: Awaited<ReturnType<typeof getActiveConfigVersion>> = null;
+  try {
+    active = await getActiveConfigVersion(pool);
+  } catch (err) {
+    // ONLY a parse/validation failure of the stored version falls back to the
+    // file config: e.g. a version written by a newer-schema replica during a
+    // rolling upgrade reaches this older one and won't parse. Booting on the
+    // known-good file baseline beats crash-looping there. A store READ failure
+    // (DB down, connection/statement timeout) must NOT silently bypass the
+    // DB-active policy — it would strand the gateway on the file config until a
+    // restart even after the DB recovers — so those errors propagate and fail
+    // boot (the orchestrator retries).
+    if (!(err instanceof PolicyConfigError)) throw err;
+    console.error(
+      "active policy version failed to PARSE; booting on the file config (MODELGOV_CONFIG) instead. Roll back or fix the active version.",
+      err,
+    );
+    return {
+      config: fileConfig,
+      policyMeta: {
+        configHash: createHash("sha256").update(readFileSync(env.MODELGOV_CONFIG, "utf8")).digest("hex"),
+        policyVersion: "file-fallback",
+      },
+    };
+  }
   if (active) {
     console.log(`loaded active policy version ${active.record.id} from the config store`);
     return {
@@ -165,7 +193,7 @@ export function createPolicyResolver(
   env: Env,
   pool: Pool,
   fallback: { config: ModelgovConfig; policyMeta: PolicyMeta },
-  log?: { warn(obj: unknown, msg: string): void },
+  log?: { warn(obj: unknown, msg: string): void; error?(obj: unknown, msg: string): void },
 ): TenantPolicyResolver | undefined {
   const multiTenant = env.MULTI_TENANT_POLICY === "true";
   const hotReload = env.POLICY_HOT_RELOAD === "true";
@@ -199,6 +227,7 @@ export function createPolicyResolver(
     perTenant: multiTenant,
     // Resolve env/VAR provider keys on store-loaded versions, like the file path.
     resolveConfig: (config) => resolveEnvRefs(config, env.envRefs),
+    log: log?.error ? { error: (obj, msg) => log.error?.(obj, msg) } : undefined,
   });
 }
 
@@ -340,6 +369,7 @@ export function createAuthProviders(env: Env, pool: Pool): AuthProviders {
       audience: env.OIDC_AUDIENCE,
       rolesClaim: env.OIDC_ROLES_CLAIM,
       nameClaim: env.OIDC_NAME_CLAIM,
+      tenantClaim: env.OIDC_TENANT_CLAIM,
       roleMap,
     });
     if (!env.OIDC_AUDIENCE) {

@@ -26,7 +26,11 @@ function fillProductionExample(raw: Record<string, string>): Record<string, stri
   const env = { ...raw };
   env.MODELGOV_PRODUCTION = "true";
   env.MODELGOV_API_KEY = "sk-production-example-" + "x".repeat(32);
-  env.DATABASE_SSL = "require";
+  // Mirror the shipped bundled-stack default: the in-cluster `postgres` service
+  // has no TLS, so `disable` (explicitly allowed) is the config that actually
+  // boots. `require` here would pass posture but crash at connect time.
+  env.DATABASE_SSL = "disable";
+  env.DATABASE_SSL_DISABLE_ALLOWED = "true";
   env.METRICS_ENABLED = "true";
   env.METRICS_AUTH_TOKEN = "metrics-token-" + "y".repeat(32);
   env.DATABASE_URL = "postgres://postgres:secret@postgres:5432/modelgov";

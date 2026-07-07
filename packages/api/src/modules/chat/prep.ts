@@ -1,4 +1,5 @@
 import {
+  DEFAULT_INPUT_TOKENS,
   evaluateAiRequest,
   PolicyConfigError,
   type ModelgovConfig,
@@ -26,8 +27,57 @@ import { baseLog, baseObs, fail } from "./mapper";
 import type { ChatFailure, ChatInput, ChatServiceDeps } from "./types";
 import type { ChatMessage } from "../../types";
 
+// ~4 chars/token is the standard rough proxy for OpenAI-family tokenizers.
+// Image parts have no text but cost input tokens at the provider; count each at
+// a conservative floor so a vision request can't under-reserve.
+const CHARS_PER_TOKEN = 4;
+const IMAGE_INPUT_TOKENS = 1000;
+
+/**
+ * Server-side floor on input tokens, computed from the ACTUAL request content.
+ * The caller-supplied `inputTokensEstimate` is advisory and untrusted: a client
+ * could send a 100k-token prompt while declaring `inputTokensEstimate: 1`, which
+ * would size the budget reservation (and the disconnect-settle input charge) at
+ * one token and let the request run essentially free. We take the max of the
+ * declared estimate and this content-derived floor so the reservation can never
+ * be smaller than the prompt actually warrants.
+ *
+ * `context` (grounding passages) is counted too: for a `grounding: strict`
+ * feature `applyGrounding` prepends it to the provider prompt, so a large
+ * `context` with a tiny `inputTokensEstimate` would otherwise re-open the
+ * under-reservation. Counting it unconditionally is safe — the estimate only
+ * gates the budget check (worst-case by design); actual cost is settled from
+ * real provider usage.
+ */
+export function estimateInputTokensFromMessages(
+  messages: ChatInput["messages"],
+  context?: ChatInput["context"],
+): number {
+  let chars = 0;
+  let images = 0;
+  for (const message of messages) {
+    if (typeof message.content === "string") {
+      chars += message.content.length;
+    } else {
+      for (const part of message.content) {
+        if (part.type === "text") chars += part.text.length;
+        else images += 1;
+      }
+    }
+  }
+  for (const passage of context ?? []) chars += passage.length;
+  return Math.ceil(chars / CHARS_PER_TOKEN) + images * IMAGE_INPUT_TOKENS;
+}
+
 /** Map a validated chat body + config to the engine's request shape. */
 export function buildAiRequest(body: ChatInput, config: ModelgovConfig): AiRequest {
+  // Baseline is the client's declared estimate, or the conservative default when
+  // omitted (preserving the prior behavior for short prompts / token caps). The
+  // content-derived floor then raises it so a client can't UNDER-declare a large
+  // prompt (see estimateInputTokensFromMessages). Net effect: the estimate only
+  // ever moves UP from the old value, never down — no under-reservation.
+  const baseline = body.inputTokensEstimate ?? DEFAULT_INPUT_TOKENS;
+  const serverFloor = estimateInputTokensFromMessages(body.messages, body.context);
   return {
     projectId: body.projectId ?? config.project.name,
     environment: body.environment ?? config.project.environment,
@@ -35,7 +85,7 @@ export function buildAiRequest(body: ChatInput, config: ModelgovConfig): AiReque
     userType: body.userType,
     feature: body.feature,
     requestedModelClass: body.modelClass,
-    inputTokensEstimate: body.inputTokensEstimate,
+    inputTokensEstimate: Math.max(baseline, serverFloor),
     metadata: body.metadata,
   };
 }

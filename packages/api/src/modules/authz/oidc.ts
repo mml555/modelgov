@@ -25,6 +25,15 @@ export interface OidcConfig {
   /** Claim used as the principal display name. Default "sub". */
   nameClaim?: string;
   /**
+   * Claim holding the operator's tenant id. When set and present on the token,
+   * the resulting principal is BOUND to that tenant — it is locked to that
+   * tenant's data and cannot use `X-Modelgov-Tenant` to reach another (the
+   * gateway ignores the header for a bound principal). Without this, every OIDC
+   * operator is unbound (a platform operator), so a tenant-scoped IdP user would
+   * otherwise be able to switch tenants. Leave unset for platform-only SSO.
+   */
+  tenantClaim?: string;
+  /**
    * Accepted JWS signing algorithms. Defaults to the common asymmetric set — an
    * explicit allowlist is defense-in-depth so verification can never accept an
    * algorithm the IdP didn't intend (e.g. a symmetric alg the JWKS shouldn't key).
@@ -78,6 +87,7 @@ export function createOidcVerifier(
   const jwks = getKey ?? createRemoteJWKSet(new URL(config.jwksUri));
   const rolesClaim = config.rolesClaim ?? "roles";
   const nameClaim = config.nameClaim ?? "sub";
+  const tenantClaim = config.tenantClaim;
   const algorithms = config.algorithms ?? DEFAULT_JWT_ALGORITHMS;
 
   return {
@@ -97,9 +107,16 @@ export function createOidcVerifier(
       const roles = mapRoles(extractRoles(payload[rolesClaim]), config.roleMap);
       const permissions = permissionsForRoles(roles);
       const name = String(payload[nameClaim] ?? payload.sub ?? "operator");
+      // Bind the operator to a tenant when the configured claim is present, so a
+      // tenant-scoped IdP user is locked to that tenant (and can't switch). A
+      // non-string/empty claim leaves the principal unbound (platform), same as
+      // when no tenant claim is configured.
+      const tenantValue = tenantClaim ? payload[tenantClaim] : undefined;
+      const tenantId =
+        typeof tenantValue === "string" && tenantValue.trim() !== "" ? tenantValue.trim() : undefined;
       // A verified token with no mapped roles is authenticated-but-unauthorized:
       // return an empty permission set so protected routes answer 403, not 401.
-      return { name: `oidc:${name}`, permissions };
+      return { name: `oidc:${name}`, permissions, tenantId };
     },
   };
 }

@@ -39,7 +39,7 @@ export function registerEmergencyRoutes(app: FastifyInstance, pool: Pool): void 
     const state = await setEmergencyPause(pool, {
       paused: true,
       reason: parsed.data.reason,
-      pausedBy: request.ctx.apiKeyName ?? "unknown",
+      pausedBy: request.ctx.principalName ?? "unknown",
       // A tenant-bound operator pauses only their own tenant; a platform key
       // (no tenant binding) pauses everyone.
       tenantId: request.ctx.tenantId,
@@ -58,7 +58,7 @@ export function registerEmergencyRoutes(app: FastifyInstance, pool: Pool): void 
     }
     await setEmergencyPause(pool, {
       paused: false,
-      pausedBy: request.ctx.apiKeyName ?? "unknown",
+      pausedBy: request.ctx.principalName ?? "unknown",
       tenantId: request.ctx.tenantId,
     });
     // Report the EFFECTIVE state, not the write: a platform-wide pause still

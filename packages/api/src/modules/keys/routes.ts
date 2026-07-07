@@ -156,23 +156,25 @@ export function registerKeysRoutes(
     if (!authz.ok) return sendError(reply, authz.status, authz.code, {}, authz.message);
 
     const issued = await withTransaction(pool, async (client) => {
-      const created = await createApiKey(client, {
+      const { record, secret } = await createApiKey(client, {
         ...parsed.data,
         tenantId: authz.tenantId,
-        createdBy: request.ctx.apiKeyName,
+        createdBy: request.ctx.principalName,
       });
+      // Audit from `record` (metadata only) — never from an object carrying the
+      // plaintext secret, so the audit row hash can't pull in the credential.
       await appendAuditInTransaction(client, {
-        actor: request.ctx.apiKeyName ?? "unknown",
+        actor: request.ctx.principalName ?? "unknown",
         action: "key.create",
-        target: created.id,
+        target: record.id,
         tenantId: request.ctx.tenantId,
         metadata: {
-          name: created.name,
-          permissions: created.permissions,
-          projectId: created.projectId,
+          name: record.name,
+          permissions: record.permissions,
+          projectId: record.projectId,
         },
       });
-      return created;
+      return { ...record, secret };
     });
     deps.onKeysChanged?.();
     return reply.code(201).send(issued);
@@ -256,12 +258,12 @@ export function registerKeysRoutes(
       const rotated = await rotateApiKey(client, id, request.ctx.tenantId);
       if (!rotated) return null;
       await appendAuditInTransaction(client, {
-        actor: request.ctx.apiKeyName ?? "unknown",
+        actor: request.ctx.principalName ?? "unknown",
         action: "key.rotate",
         target: id,
         tenantId: request.ctx.tenantId,
       });
-      return rotated;
+      return { ...rotated.record, secret: rotated.secret };
     });
     if (!issued) return sendError(reply, 404, "not_found", {}, "Key not found or revoked");
     deps.onKeysChanged?.();
@@ -291,7 +293,7 @@ export function registerKeysRoutes(
       const revoked = await revokeApiKey(client, id, request.ctx.tenantId);
       if (!revoked) return false;
       await appendAuditInTransaction(client, {
-        actor: request.ctx.apiKeyName ?? "unknown",
+        actor: request.ctx.principalName ?? "unknown",
         action: "key.revoke",
         target: id,
         tenantId: request.ctx.tenantId,

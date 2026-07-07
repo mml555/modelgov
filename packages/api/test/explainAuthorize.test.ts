@@ -28,7 +28,7 @@ describe("authorizeExplainInput", () => {
 
   it("denies keys without chat:create or policy:explain", () => {
     const result = authorizeExplainInput(
-      { apiKeyName: "ops", permissions: ["usage:read"] } as never,
+      { principalName: "ops", permissions: ["usage:read"] } as never,
       body,
     );
     expect(result.ok).toBe(false);

@@ -241,6 +241,64 @@ describe("resolvePolicy", () => {
     expect(policyMeta.policyVersion).toBe("file");
     expect(policyMeta.configHash).toMatch(/^[0-9a-f]{64}$/);
   });
+
+  const storeEnabledEnv = () => {
+    const dir = mkdtempSync(join(tmpdir(), "modelgov-policy-"));
+    const configPath = join(dir, "modelgov.yaml");
+    writeFileSync(configPath, MINIMAL_YAML);
+    return loadEnv({
+      DATABASE_URL: "postgres://u:p@localhost/db",
+      MODELGOV_CONFIG: configPath,
+      LITELLM_BASE_URL: "http://localhost:4000",
+      MODELGOV_API_KEY: "sk-test-key-1234567890",
+      POLICY_STORE_ENABLED: "true",
+    });
+  };
+
+  const activeVersionRow = (yamlText: string) => ({
+    id: "7",
+    created_at: new Date(),
+    author: null,
+    note: null,
+    checksum: "abc",
+    active: true,
+    activated_at: new Date(),
+    status: "approved",
+    proposed_by: null,
+    reviewed_by: "reviewer",
+    reviewed_at: new Date(),
+    yaml_text: yamlText,
+  });
+
+  it("fails boot on a store READ error rather than silently using the file config", async () => {
+    // A DB/connection failure must NOT silently bypass the DB-active policy and
+    // strand the gateway on the file config until restart — it must propagate.
+    const pool = {
+      query: async (sql: string) => {
+        if (sql.includes("config_versions")) throw new Error("connection terminated unexpectedly");
+        return { rows: [], rowCount: 0 };
+      },
+      connect: async () => ({ query: async () => ({ rows: [], rowCount: 1 }), release: () => {} }),
+    };
+    await expect(resolvePolicy(storeEnabledEnv(), pool as never)).rejects.toThrow(/connection terminated/);
+  });
+
+  it("falls back to the file config on a store PARSE error", async () => {
+    // A stored version that won't parse (e.g. newer-schema version reaching an
+    // older replica mid-rollout) falls back to the known-good file baseline.
+    const pool = {
+      query: async (sql: string) => {
+        if (sql.includes("config_versions")) {
+          return { rows: [activeVersionRow("this is not a valid modelgov config")], rowCount: 1 };
+        }
+        return { rows: [], rowCount: 0 };
+      },
+      connect: async () => ({ query: async () => ({ rows: [], rowCount: 1 }), release: () => {} }),
+    };
+    const { config, policyMeta } = await resolvePolicy(storeEnabledEnv(), pool as never);
+    expect(config.project.name).toBe("bootstrap-test");
+    expect(policyMeta.policyVersion).toBe("file-fallback");
+  });
 });
 
 describe("createPolicyResolver", () => {

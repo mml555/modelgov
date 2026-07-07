@@ -1,7 +1,11 @@
 import { loadEnv } from "./config/env";
 import { assertProductionEnv } from "./config/productionGuards";
-import { warnUnpricedModels } from "./config/loadConfig";
-import { setConfigVersionsRls } from "./modules/policy/repo";
+import { setPolicyEnvRefAllowlist, warnUnpricedModels } from "./config/loadConfig";
+import {
+  frozenPolicyFieldsFingerprint,
+  setConfigVersionsRls,
+  setConfigVersionsStrictPricing,
+} from "./modules/policy/repo";
 import { buildServer } from "./app";
 import {
   connectRedisIfConfigured,
@@ -35,9 +39,18 @@ async function main(): Promise<void> {
   // Opt-in RLS: make config_versions reads/writes set the tenant context so the
   // app can run as a non-owner role under the RLS policy (no-op when off).
   setConfigVersionsRls(env.DB_RLS_ENABLED === "true");
+  // Store-path config validation must honor STRICT_PRICING too (the file loader
+  // already does), so a version adding an unpriced model is rejected, not run at
+  // DEFAULT_PRICE.
+  setConfigVersionsStrictPricing(env.STRICT_PRICING === "true");
+  // Restrict which env vars a policy `env/VAR` provider key may resolve (defense
+  // against a policy:write operator referencing a gateway secret). Must run
+  // before resolvePolicy, which resolves the file/store config's env refs.
+  setPolicyEnvRefAllowlist(parseCsv(env.MODELGOV_POLICY_ENV_ALLOWLIST) ?? []);
   const { config, policyMeta } = await resolvePolicy(env, pool);
   const tenantPolicy = createPolicyResolver(env, pool, { config, policyMeta }, {
     warn: (obj, msg) => console.warn(msg, obj),
+    error: (obj, msg) => console.error(msg, obj),
   });
   const { litellm, safety, observability, hasPresidio, hasInjection } =
     createRuntimeServices(env, config);
@@ -60,9 +73,16 @@ async function main(): Promise<void> {
     keyResolver,
     jwtVerifier,
     hierarchicalBudgets: env.HIERARCHICAL_BUDGETS === "true",
+    // Force-settle a stream before its reservation could go stale and be swept
+    // mid-flight (which would leave it unbilled). Kept a margin below
+    // RESERVATION_STALE_MS; floored so a small stale window still leaves room.
+    streamMaxDurationMs: Math.max(60_000, env.RESERVATION_STALE_MS - env.LITELLM_TIMEOUT_MS),
     policyMeta,
     tenantPolicy,
     policyApprovalRequired: env.POLICY_APPROVAL_REQUIRED === "true",
+    // Boot fingerprint of the non-hot-reloadable fields; the policy route refuses
+    // to hot-activate a version that changes them (would otherwise half-apply).
+    policyFrozenFieldsFingerprint: frozenPolicyFieldsFingerprint(config),
     idempotencyCaptureContent: env.IDEMPOTENCY_CAPTURE_CONTENT === "true",
     metrics: env.METRICS_ENABLED === "true",
     metricsAuthToken: env.METRICS_AUTH_TOKEN,

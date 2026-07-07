@@ -52,7 +52,7 @@ function authorizeEmbeddingsInput(
 ):
   | { ok: true; value: EmbeddingsInput }
   | { ok: false; status: number; code: string; message: string; details: Record<string, unknown> } {
-  if (ctx.apiKeyName && !ctx.permissions?.includes("chat:create")) {
+  if (ctx.principalName && !ctx.permissions?.includes("chat:create")) {
     return { ok: false, status: 403, code: "forbidden", message: "API key is not permitted to create embeddings", details: {} };
   }
   const denial = firstScopeDenial(

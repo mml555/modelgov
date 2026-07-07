@@ -21,8 +21,11 @@ services:
       # Turns known dev-only defaults (e.g. the dev Langfuse overlay's keys)
       # into boot errors instead of silent production footguns.
       MODELGOV_PRODUCTION: "true"
+      LOG_LEVEL: ${LOG_LEVEL:-info}
       MODELGOV_API_KEY: ${MODELGOV_API_KEY:-}
       MODELGOV_API_KEYS: ${MODELGOV_API_KEYS:-}
+      # One-time bootstrap admin key in env (then issue keys from the DB store).
+      ALLOW_BOOTSTRAP_ADMIN_KEY: ${ALLOW_BOOTSTRAP_ADMIN_KEY:-false}
       DATABASE_URL: ${DATABASE_URL:?set a production Postgres URL}
       LITELLM_BASE_URL: http://litellm:4000
       LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:?set a LiteLLM master key}
@@ -44,22 +47,63 @@ services:
       IDEMPOTENCY_CAPTURE_CONTENT: ${IDEMPOTENCY_CAPTURE_CONTENT:-false}
       STRICT_PRICING: ${STRICT_PRICING:-false}
       METRICS_AUTH_TOKEN: ${METRICS_AUTH_TOKEN:-}
+      # Explicitly allow unauthenticated /metrics on a private scrape network.
+      METRICS_ALLOW_PUBLIC: ${METRICS_ALLOW_PUBLIC:-false}
       LANGFUSE_HOST: ${LANGFUSE_HOST:-}
       LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-}
       LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-}
-      # TLS to the DB (set verify-full + DATABASE_SSL_CA for a managed Postgres).
-      DATABASE_SSL: ${DATABASE_SSL:-require}
+      OBSERVABILITY_CAPTURE_CONTENT_ALLOW: ${OBSERVABILITY_CAPTURE_CONTENT_ALLOW:-false}
+      IDEMPOTENCY_CAPTURE_CONTENT_ALLOW: ${IDEMPOTENCY_CAPTURE_CONTENT_ALLOW:-false}
+      # TLS to the DB. The bundled `postgres` service ships with SSL OFF, so the
+      # default is `disable` (safe on the private compose network) with the
+      # disable explicitly allowed. For MANAGED/REMOTE Postgres set
+      # DATABASE_SSL=verify-full + DATABASE_SSL_CA in .env.production — the boot
+      # guard REFUSES `disable` (and bare `require`) against a remote host.
+      DATABASE_SSL: ${DATABASE_SSL:-disable}
       DATABASE_SSL_CA: ${DATABASE_SSL_CA:-}
+      DATABASE_SSL_DISABLE_ALLOWED: ${DATABASE_SSL_DISABLE_ALLOWED:-true}
+      DATABASE_SSL_NO_VERIFY_ALLOWED: ${DATABASE_SSL_NO_VERIFY_ALLOWED:-false}
       # Trust your proxy's IP/CIDR so client IPs (and rate-limit fallback) are real.
+      MODELGOV_BEHIND_PROXY: ${MODELGOV_BEHIND_PROXY:-false}
       TRUST_PROXY: ${TRUST_PROXY:-}
       CORS_ALLOW_ORIGINS: ${CORS_ALLOW_ORIGINS:-}
       REQUEST_TIMEOUT_MS: ${REQUEST_TIMEOUT_MS:-60000}
       LITELLM_TIMEOUT_MS: ${LITELLM_TIMEOUT_MS:-60000}
       DB_POOL_MAX: ${DB_POOL_MAX:-10}
+      DB_CONNECTION_TIMEOUT_MS: ${DB_CONNECTION_TIMEOUT_MS:-5000}
+      DB_STATEMENT_TIMEOUT_MS: ${DB_STATEMENT_TIMEOUT_MS:-30000}
+      DB_IDLE_TIMEOUT_MS: ${DB_IDLE_TIMEOUT_MS:-30000}
+      DB_RLS_ENABLED: ${DB_RLS_ENABLED:-false}
       METRICS_ENABLED: ${METRICS_ENABLED:-true}
       RATE_LIMIT_FAIL_OPEN: ${RATE_LIMIT_FAIL_OPEN:-false}
       REQUEST_LOG_RETENTION_MS: ${REQUEST_LOG_RETENTION_MS:-2592000000}
       BUDGET_ALERT_WEBHOOK_ALLOW_PRIVATE: ${BUDGET_ALERT_WEBHOOK_ALLOW_PRIVATE:-false}
+      # DB-backed API key store (issue/rotate/revoke via /v1/admin/keys).
+      API_KEYS_DB_ENABLED: ${API_KEYS_DB_ENABLED:-true}
+      API_KEY_CACHE_TTL_MS: ${API_KEY_CACHE_TTL_MS:-10000}
+      # Hierarchical (node-tree) budgets.
+      HIERARCHICAL_BUDGETS: ${HIERARCHICAL_BUDGETS:-false}
+      # Dynamic policy store + hot reload + two-person approval + per-tenant policy
+      # (see docs/design/dynamic-policy.md). Without these lines the container
+      # never sees the vars, so enabling them in .env.production is a silent no-op.
+      POLICY_STORE_ENABLED: ${POLICY_STORE_ENABLED:-false}
+      POLICY_HOT_RELOAD: ${POLICY_HOT_RELOAD:-true}
+      POLICY_APPROVAL_REQUIRED: ${POLICY_APPROVAL_REQUIRED:-false}
+      MULTI_TENANT_POLICY: ${MULTI_TENANT_POLICY:-false}
+      POLICY_CACHE_TTL_MS: ${POLICY_CACHE_TTL_MS:-30000}
+      MODELGOV_POLICY_ENV_ALLOWLIST: ${MODELGOV_POLICY_ENV_ALLOWLIST:-}
+      # Operator SSO (OIDC). Set OIDC_ISSUER + OIDC_JWKS_URI + OIDC_AUDIENCE to enable.
+      OIDC_ISSUER: ${OIDC_ISSUER:-}
+      OIDC_JWKS_URI: ${OIDC_JWKS_URI:-}
+      OIDC_AUDIENCE: ${OIDC_AUDIENCE:-}
+      OIDC_AUDIENCE_OPTIONAL: ${OIDC_AUDIENCE_OPTIONAL:-false}
+      OIDC_ROLES_CLAIM: ${OIDC_ROLES_CLAIM:-roles}
+      OIDC_NAME_CLAIM: ${OIDC_NAME_CLAIM:-sub}
+      OIDC_ROLE_MAP: ${OIDC_ROLE_MAP:-}
+      OIDC_TENANT_CLAIM: ${OIDC_TENANT_CLAIM:-}
+      # OpenTelemetry OTLP/HTTP trace export (OBSERVABILITY_PROVIDER=otel).
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      OTEL_SERVICE_NAME: ${OTEL_SERVICE_NAME:-modelgov}
       # Stripe billing (modelgov.yaml `billing:` section). This env allowlist is
       # the only thing the container sees — without these lines, setting the
       # vars in .env.production silently does nothing.

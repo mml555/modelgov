@@ -38,8 +38,16 @@ export interface CreateApiKeyInput {
   createdBy?: string;
 }
 
-/** A newly minted key: the plaintext secret is returned exactly once. */
-export interface IssuedApiKey extends ApiKeyRecord {
+/**
+ * A newly minted (or rotated) key: the metadata `record` and the plaintext
+ * `secret` are kept as SEPARATE fields, never a single object with the secret
+ * spread in. This keeps the secret out of any object that callers pass to audit
+ * logging (whose row hash would otherwise pull in the credential) — the audit
+ * `actor`/`target`/`metadata` are built from `record`, and `secret` is only ever
+ * returned to the caller once, in the HTTP response.
+ */
+export interface IssuedApiKey {
+  record: ApiKeyRecord;
   /** Raw secret — shown once, never retrievable again. */
   secret: string;
 }
@@ -136,7 +144,7 @@ export async function createApiKey(
   );
   const row = rows[0];
   if (!row) throw new Error("api key insert returned no row");
-  return { ...rowToRecord(row), secret };
+  return { record: rowToRecord(row), secret };
 }
 
 export async function listApiKeys(
@@ -227,7 +235,7 @@ export async function rotateApiKey(
      RETURNING ${SELECT_FIELDS}`,
     params,
   );
-  return rows[0] ? { ...rowToRecord(rows[0]), secret } : null;
+  return rows[0] ? { record: rowToRecord(rows[0]), secret } : null;
 }
 
 /** Resolved principal for the auth layer, or null if no active key matches. */

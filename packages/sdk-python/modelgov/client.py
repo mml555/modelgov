@@ -23,12 +23,13 @@ from .errors import ModelgovError, PolicyBlockedError, SafetyBlockedError
 from .types import (
     ChatMessage,
     ChatResult,
+    ChatStreamDone,
     EmbeddingsResult,
     ExplainResult,
     UsageResult,
 )
 
-__all__ = ["ModelgovClient"]
+__all__ = ["ModelgovClient", "ChatStream"]
 
 DEFAULT_TIMEOUT = 30.0
 
@@ -194,13 +195,16 @@ class ModelgovClient:
         environment: Optional[str] = None,
         idempotency_key: Optional[str] = None,
         metadata: Optional[Mapping[str, Any]] = None,
-    ) -> Iterator[str]:
+    ) -> "ChatStream":
         """Stream a guarded chat completion as incremental text chunks.
 
         Sends the same body as :meth:`chat` plus ``"stream": true`` and yields
-        text deltas as they arrive. The generator holds the HTTP connection
-        open until it is fully consumed (or closed); use it in a ``for`` loop
-        or wrap it in ``contextlib.closing`` if you may abandon it early.
+        text deltas as they arrive. Returns a :class:`ChatStream`: iterate it in
+        a ``for`` loop (or ``list(...)`` it) to consume the text chunks, then
+        read :attr:`ChatStream.done` for the terminal metadata (final
+        ``model`` / ``usage`` / ``requestId``). The underlying HTTP connection
+        stays open until the stream is fully consumed (or closed); wrap it in
+        ``contextlib.closing`` if you may abandon it early.
 
         SSE framing assumption:
             The server responds with ``Content-Type: text/event-stream`` and
@@ -213,16 +217,21 @@ class ModelgovClient:
             * ``chunk["delta"]`` or ``chunk["content"]`` or ``chunk["text"]``
               (simpler shapes the Modelgov API may emit).
 
+            The terminal ``data: {"done": true, "model": ..., "usage": ...,
+            "requestId": ...}`` frame the server sends just before ``[DONE]`` is
+            captured on :attr:`ChatStream.done` rather than yielded as text — it
+            mirrors the metadata the TypeScript SDK exposes.
+
             If a ``data:`` payload is not valid JSON it is yielded verbatim as a
             text chunk (tolerant of a plain-text delta stream). Empty deltas are
-            skipped. This mirrors how the TypeScript SDK's streaming is expected
-            to parse SSE; adjust here if the server's framing diverges.
+            skipped.
 
         Policy/safety blocks that happen *before* streaming starts are returned
         as a normal non-2xx JSON response and raised as the usual typed errors.
 
-        Yields:
-            ``str`` chunks of assistant text, in order.
+        Returns:
+            A :class:`ChatStream` yielding ``str`` chunks of assistant text, in
+            order, exposing ``.done`` once fully consumed.
 
         Raises:
             SafetyBlockedError / PolicyBlockedError / ModelgovError: on a non-2xx
@@ -248,6 +257,12 @@ class ModelgovClient:
         if idempotency_key:
             extra["idempotency-key"] = idempotency_key
 
+        return ChatStream(self, body, extra)
+
+    def _iter_stream(
+        self, body: Dict[str, Any], extra: Dict[str, str], stream: "ChatStream"
+    ) -> Iterator[str]:
+        """Drive one SSE response, yielding text and recording the done frame."""
         with self._client.stream(
             "POST",
             f"{self.base_url}/v1/chat",
@@ -263,6 +278,9 @@ class ModelgovClient:
                 chunk = _parse_sse_line(line)
                 if chunk is _DONE:
                     break
+                if isinstance(chunk, _DoneFrame):
+                    stream._done = chunk.payload
+                    continue
                 if chunk:
                     yield chunk
 
@@ -483,6 +501,53 @@ class ModelgovClient:
         raise ModelgovError(response.status_code, code, body)
 
 
+class ChatStream:
+    """Iterable over a streamed chat completion's text chunks.
+
+    Yields assistant text deltas (``str``) in order, exactly like the previous
+    plain generator, so ``for chunk in stream:`` and ``list(stream)`` keep
+    working. After the stream is fully consumed, :attr:`done` holds the terminal
+    metadata frame (final ``model`` / ``usage`` / ``requestId``), matching the
+    value the TypeScript SDK's ``chatStream`` returns. It is ``None`` until the
+    stream finishes (or if the server sent no terminal frame).
+
+    The request is lazy: nothing is sent until iteration begins. The generator
+    is single-use.
+    """
+
+    def __init__(
+        self, client: "ModelgovClient", body: Dict[str, Any], extra: Dict[str, str]
+    ) -> None:
+        self._done: Optional[ChatStreamDone] = None
+        self._gen = client._iter_stream(body, extra, self)
+
+    def __iter__(self) -> Iterator[str]:
+        return self._gen
+
+    def __next__(self) -> str:
+        return next(self._gen)
+
+    def close(self) -> None:
+        """Close the underlying stream, releasing the HTTP response.
+
+        Safe to call more than once and after full consumption. Lets a caller
+        abandon a long stream early — the same guarantee the previous plain
+        generator gave via ``generator.close()`` / ``contextlib.closing(...)``.
+        """
+        self._gen.close()
+
+    def __enter__(self) -> "ChatStream":
+        return self
+
+    def __exit__(self, *_exc: object) -> None:
+        self.close()
+
+    @property
+    def done(self) -> Optional[ChatStreamDone]:
+        """Terminal ``{model, usage, requestId}`` metadata, once fully consumed."""
+        return self._done
+
+
 def _error_code(body: Any) -> str:
     """Extract ``error.code`` from the envelope, tolerating loose shapes."""
     if isinstance(body, dict):
@@ -500,10 +565,20 @@ def _error_code(body: Any) -> str:
 _DONE = object()
 
 
-def _parse_sse_line(line: str) -> Any:
-    """Parse one SSE line into a text chunk, ``""``, or the ``_DONE`` sentinel.
+class _DoneFrame:
+    """Wraps the ``{"done": true, ...}`` metadata frame so it isn't yielded as text."""
 
-    Returns ``_DONE`` for the ``[DONE]`` sentinel, ``""`` for lines with no
+    __slots__ = ("payload",)
+
+    def __init__(self, payload: ChatStreamDone) -> None:
+        self.payload = payload
+
+
+def _parse_sse_line(line: str) -> Any:
+    """Parse one SSE line into a text chunk, ``""``, ``_DONE``, or a ``_DoneFrame``.
+
+    Returns ``_DONE`` for the ``[DONE]`` sentinel, a :class:`_DoneFrame` for the
+    terminal ``{"done": true, ...}`` metadata frame, ``""`` for lines with no
     text delta (comments, blank lines, non-``data:`` fields, empty deltas), and
     the extracted text chunk otherwise. See :meth:`ModelgovClient.chat_stream`
     for the framing assumptions.
@@ -529,6 +604,9 @@ def _parse_sse_line(line: str) -> Any:
     except (json.JSONDecodeError, ValueError):
         # Tolerate a plain-text delta stream.
         return data
+
+    if isinstance(payload, dict) and payload.get("done") is True:
+        return _DoneFrame(payload)  # type: ignore[arg-type]
 
     return _extract_delta(payload)
 

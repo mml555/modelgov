@@ -29,6 +29,13 @@ export interface PolicyRouteDeps {
    * approved by a different operator before they can be activated.
    */
   approvalRequired?: boolean;
+  /**
+   * Fingerprint of the boot config's non-hot-reloadable fields (pricing, retry,
+   * injection model, billing). When set AND hot reload is on (onActivated
+   * defined), activating a version that changes any of these is refused so it
+   * can't half-apply. See frozenPolicyFieldsFingerprint.
+   */
+  frozenFieldsFingerprint?: string;
 }
 
 function requirePerm(ctx: RequestContext, perm: string) {
@@ -90,11 +97,11 @@ export function registerPolicyRoutes(
       record = await saveConfigVersion(pool, {
         yaml: parsed.data.yaml,
         note: parsed.data.note,
-        author: request.ctx.apiKeyName,
+        author: request.ctx.principalName,
         tenantId: request.ctx.tenantId,
         approvalRequired: deps.approvalRequired,
       }, (saved) => ({
-        actor: request.ctx.apiKeyName ?? "unknown",
+        actor: request.ctx.principalName ?? "unknown",
         action: "policy.save",
         target: saved.id,
         tenantId: request.ctx.tenantId,
@@ -186,13 +193,29 @@ export function registerPolicyRoutes(
     if (!UUID_OR_INT.test(id)) return sendError(reply, 404, "not_found", {}, "Version not found");
     let result;
     try {
-      result = await activateConfigVersion(pool, id, request.ctx.tenantId ?? "default", (activated) => ({
-        actor: request.ctx.apiKeyName ?? "unknown",
-        action: "policy.activate",
-        target: activated.id,
-        tenantId: request.ctx.tenantId,
-        metadata: { checksum: activated.checksum },
-      }));
+      result = await activateConfigVersion(
+        pool,
+        id,
+        request.ctx.tenantId ?? "default",
+        (activated) => ({
+          actor: request.ctx.principalName ?? "unknown",
+          action: "policy.activate",
+          target: activated.id,
+          tenantId: request.ctx.tenantId,
+          metadata: { checksum: activated.checksum },
+        }),
+        {
+          // Enforce a real review (not just `approved` status) when the two-person
+          // rule is on, so a pre-approval-era draft can't be activated solo.
+          requireReviewed: deps.approvalRequired,
+          // Only guard boot-only fields when hot reload is active (onActivated set):
+          // on the restart path a restart applies them, so no guard is needed.
+          frozenGuard:
+            deps.onActivated && deps.frozenFieldsFingerprint
+              ? { bootFingerprint: deps.frozenFieldsFingerprint }
+              : undefined,
+        },
+      );
     } catch (err) {
       if (err instanceof PolicyConfigError) {
         return sendError(reply, 400, "invalid_config", { detail: err.message }, err.message);
@@ -202,6 +225,27 @@ export function registerPolicyRoutes(
     if (!result.ok) {
       if (result.reason === "not_approved") {
         return sendError(reply, 409, "not_approved", {}, "Version must be approved before it can be activated");
+      }
+      if (result.reason === "not_reviewed") {
+        return sendError(
+          reply,
+          409,
+          "not_reviewed",
+          {},
+          "Approval is required: this version predates the two-person rule and was never reviewed. Re-save it as a new proposal and have a different operator approve it.",
+        );
+      }
+      if (result.reason === "conflict") {
+        return sendError(reply, 409, "activation_conflict", {}, "Another activation is in progress; retry");
+      }
+      if (result.reason === "requires_restart") {
+        return sendError(
+          reply,
+          409,
+          "requires_restart",
+          {},
+          "This version changes a boot-only field (pricing, retry, injection model, or billing) that hot reload cannot apply safely. Deploy it with a rolling restart, or disable POLICY_HOT_RELOAD, or revert those fields.",
+        );
       }
       return sendError(reply, 404, "not_found", {}, "Version not found");
     }
@@ -228,9 +272,9 @@ export function registerPolicyRoutes(
       if (!UUID_OR_INT.test(id)) return sendError(reply, 404, "not_found", {}, "Version not found");
       const result = await reviewConfigVersion(
         pool,
-        { id, decision, reviewer: request.ctx.apiKeyName ?? "unknown", tenantId: request.ctx.tenantId },
+        { id, decision, reviewer: request.ctx.principalName ?? "unknown", tenantId: request.ctx.tenantId },
         (reviewed) => ({
-          actor: request.ctx.apiKeyName ?? "unknown",
+          actor: request.ctx.principalName ?? "unknown",
           action: decision === "approved" ? "policy.approve" : "policy.reject",
           target: reviewed.id,
           tenantId: request.ctx.tenantId,

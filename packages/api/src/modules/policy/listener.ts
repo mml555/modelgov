@@ -82,12 +82,14 @@ export function startPolicyActivationListener(opts: StartListenerOptions): Polic
     }, delay);
   }
 
-  async function teardownClient(): Promise<void> {
-    const c = client;
-    client = null;
-    if (!c) return;
-    c.removeAllListeners();
-    await c.end().catch(() => {});
+  // Tear down a SPECIFIC client. Only clears the shared `client` ref when it
+  // still points at the one being torn down — otherwise a stale callback (e.g.
+  // the original connect's rejection firing after a reconnect already installed
+  // a fresh client) would tear down the healthy replacement mid-connect.
+  async function teardownClient(target: ListenClient): Promise<void> {
+    if (client === target) client = null;
+    target.removeAllListeners();
+    await target.end().catch(() => {});
   }
 
   async function connect(): Promise<void> {
@@ -102,14 +104,16 @@ export function startPolicyActivationListener(opts: StartListenerOptions): Polic
     }
     client = c;
     // A drop (error/end) after a successful LISTEN must reconnect, or this
-    // replica would silently stop hot-reloading and rely only on the TTL.
+    // replica would silently stop hot-reloading and rely only on the TTL. The
+    // `client !== c` guard makes stale handlers for a replaced client no-ops.
     c.on("error", (err) => {
+      if (client !== c) return;
       log?.warn({ err }, "policy activation listener error — reconnecting");
-      void teardownClient().then(scheduleReconnect);
+      void teardownClient(c).then(scheduleReconnect);
     });
     c.on("end", () => {
-      if (stopped) return;
-      void teardownClient().then(scheduleReconnect);
+      if (stopped || client !== c) return;
+      void teardownClient(c).then(scheduleReconnect);
     });
     c.on("notification", (msg) => {
       if (msg.channel !== POLICY_ACTIVATED_CHANNEL) return;
@@ -123,9 +127,14 @@ export function startPolicyActivationListener(opts: StartListenerOptions): Polic
       log?.info("policy activation listener connected");
     } catch (err) {
       if (stopped) return;
-      log?.warn({ err }, "policy activation listener: connect failed — retrying");
-      await teardownClient();
-      scheduleReconnect();
+      // Only reconnect if this attempt owned the active client — a stale rejection
+      // for a client already replaced by a reconnect must not spawn another loop.
+      const wasActive = client === c;
+      await teardownClient(c);
+      if (wasActive) {
+        log?.warn({ err }, "policy activation listener: connect failed — retrying");
+        scheduleReconnect();
+      }
     }
   }
 
@@ -136,7 +145,7 @@ export function startPolicyActivationListener(opts: StartListenerOptions): Polic
       stopped = true;
       pending?.cancel();
       pending = null;
-      await teardownClient();
+      if (client) await teardownClient(client);
     },
   };
 }

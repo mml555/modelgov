@@ -16,13 +16,14 @@ Example:
     >>> print(res["message"]["content"])
 """
 
-from .client import ModelgovClient
+from .client import ChatStream, ModelgovClient
 from .errors import ModelgovError, PolicyBlockedError, SafetyBlockedError
 from .types import (
     BudgetRemaining,
     ChatMessage,
     ChatResponse,
     ChatResult,
+    ChatStreamDone,
     ContentPart,
     Cost,
     EmbeddingsResponse,
@@ -50,12 +51,14 @@ __version__ = "1.1.0"
 
 __all__ = [
     "ModelgovClient",
+    "ChatStream",
     "ModelgovError",
     "PolicyBlockedError",
     "SafetyBlockedError",
     "ChatMessage",
     "ChatResponse",
     "ChatResult",
+    "ChatStreamDone",
     "TextPart",
     "ImageUrl",
     "ImagePart",

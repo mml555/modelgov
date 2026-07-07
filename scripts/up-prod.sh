@@ -45,12 +45,31 @@ docker compose --env-file "$ENV_FILE" -f docker-compose.production.yml up -d
 
 PORT="${MODELGOV_PUBLIC_PORT:-3000}"
 echo "→ Waiting for /ready..."
+ready=false
 for _ in $(seq 1 60); do
   if curl -sf "http://localhost:${PORT}/ready" >/dev/null 2>&1; then
+    ready=true
+    break
+  fi
+  # Bail out early if the api container has already exited/crash-looped instead
+  # of waiting the full ~2min only to falsely report success.
+  state="$(docker compose --env-file "$ENV_FILE" -f docker-compose.production.yml ps -a --format '{{.Service}} {{.State}}' 2>/dev/null | awk '$1=="api"{print $2}')"
+  if [ "$state" = "exited" ] || [ "$state" = "dead" ]; then
     break
   fi
   sleep 2
 done
+
+if [ "$ready" != "true" ]; then
+  echo ""
+  echo "✗ Modelgov API did not become ready on http://localhost:${PORT}/ready" >&2
+  echo "  The api container is likely crash-looping. Recent logs:" >&2
+  docker compose --env-file "$ENV_FILE" -f docker-compose.production.yml logs --tail 40 api >&2 || true
+  echo "" >&2
+  echo "  Inspect: docker compose --env-file $ENV_FILE -f docker-compose.production.yml ps" >&2
+  echo "  Stop:    make down-prod" >&2
+  exit 1
+fi
 
 echo ""
 echo "✓ Modelgov API:  http://localhost:${PORT}"

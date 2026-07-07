@@ -21,7 +21,7 @@ export function registerWhoamiRoute(app: FastifyInstance): void {
     },
   }, async (request, reply) => {
     return reply.send({
-      name: request.ctx.apiKeyName ?? null,
+      name: request.ctx.principalName ?? null,
       permissions: request.ctx.permissions ?? [],
       // The effective tenant for this request (the bound tenant, or the one
       // selected via X-Modelgov-Tenant). `tenantBound` tells the console whether

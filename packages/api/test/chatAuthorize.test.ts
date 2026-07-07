@@ -19,7 +19,7 @@ function ctx(patch: Omit<RequestContext, "requestId">): RequestContext {
 describe("authorizeChatInput", () => {
   it("allows and defaults project/environment from the key", () => {
     const context = ctx({
-      apiKeyName: "k",
+      principalName: "k",
       permissions: ["chat:create"],
       projectId: "proj_a",
       environment: "prod",
@@ -33,7 +33,7 @@ describe("authorizeChatInput", () => {
   });
 
   it("denies when the key lacks chat:create", () => {
-    const context = ctx({ apiKeyName: "k", permissions: ["usage:read"] });
+    const context = ctx({ principalName: "k", permissions: ["usage:read"] });
     const res = authorizeChatInput(context, baseInput);
     expect(res.ok).toBe(false);
     if (!res.ok) {
@@ -43,7 +43,7 @@ describe("authorizeChatInput", () => {
   });
 
   it("denies a project mismatch", () => {
-    const context = ctx({ apiKeyName: "k", permissions: ["chat:create"], projectId: "proj_a" });
+    const context = ctx({ principalName: "k", permissions: ["chat:create"], projectId: "proj_a" });
     const res = authorizeChatInput(context, { ...baseInput, projectId: "proj_b" });
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.code).toBe("project_mismatch");
@@ -51,7 +51,7 @@ describe("authorizeChatInput", () => {
 
   it("denies a user-type outside the key's allowlist", () => {
     const context = ctx({
-      apiKeyName: "k",
+      principalName: "k",
       permissions: ["chat:create"],
       allowedUserTypes: ["admin"],
     });
@@ -62,7 +62,7 @@ describe("authorizeChatInput", () => {
 
   it("denies a userId outside the key's allowlist", () => {
     const context = ctx({
-      apiKeyName: "k",
+      principalName: "k",
       permissions: ["chat:create"],
       allowedUserIds: ["user_2"],
     });

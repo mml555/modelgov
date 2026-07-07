@@ -293,6 +293,12 @@ billing:
   stripe:
     plan_map:               # Stripe price id -> user_type (subscription webhooks)
       price_pro_monthly: paid_user
+    # Sell rate for Checkout top-ups: real USD a customer pays per 1 USD of wallet
+    # credit. 0.01 is par (pay $1 → get $1 of credit, the default). Raise it to sell
+    # credits at a markup — e.g. 0.02 means $1 paid funds $0.50 of wallet credit.
+    # Only applies to the amount_total path; an explicit metadata.credits_usd on the
+    # Checkout Session is granted verbatim. (Non-USD checkouts are skipped — set
+    # metadata.credits_usd for those.)
     usd_per_credit: 0.01
     # metered mode only — the Stripe Billing Meter event name usage reports to:
     # meter_event_name: modelgov_usage

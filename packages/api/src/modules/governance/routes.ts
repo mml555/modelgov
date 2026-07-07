@@ -52,7 +52,7 @@ export function registerGovernanceRoutes(
         tenantId: request.ctx.tenantId,
       });
       await appendAuditInTransaction(client, {
-        actor: request.ctx.apiKeyName ?? "unknown",
+        actor: request.ctx.principalName ?? "unknown",
         action: "data.erasure",
         target: parsed.data.userId,
         tenantId: request.ctx.tenantId,

@@ -85,6 +85,12 @@ export interface BuildServerOptions extends ChatRouteDeps {
    * `policy:approve`) before it can be activated. Default: off.
    */
   policyApprovalRequired?: boolean;
+  /**
+   * Fingerprint of the boot config's non-hot-reloadable fields. When set and hot
+   * reload is on, activating a version that changes them is refused (would
+   * otherwise half-apply). See frozenPolicyFieldsFingerprint.
+   */
+  policyFrozenFieldsFingerprint?: string;
 }
 
 /**
@@ -267,6 +273,7 @@ export function buildServer(opts: BuildServerOptions): FastifyInstance {
           ? (tenantId) => opts.tenantPolicy?.invalidate(tenantId)
           : undefined,
         approvalRequired: opts.policyApprovalRequired,
+        frozenFieldsFingerprint: opts.policyFrozenFieldsFingerprint,
       });
     }
     registerExplainRoute(scope, {
@@ -283,6 +290,7 @@ export function buildServer(opts: BuildServerOptions): FastifyInstance {
       budgetAlert: opts.budgetAlert,
       idempotencyCaptureContent: opts.idempotencyCaptureContent,
       hierarchicalBudgets: opts.hierarchicalBudgets,
+      streamMaxDurationMs: opts.streamMaxDurationMs,
       policyMeta: opts.policyMeta,
       tenantPolicy: opts.tenantPolicy,
       billing: opts.billing,
