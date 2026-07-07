@@ -1,10 +1,11 @@
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   loadConfigFromFile,
   resolveEnvRefs,
+  setPolicyEnvRefAllowlist,
   warnUnpricedModels,
 } from "../src/config/loadConfig";
 import { parseConfigObject } from "@modelgov/policy-engine";
@@ -53,6 +54,57 @@ describe("resolveEnvRefs", () => {
     const config = parseConfigObject(minimalRaw);
     const resolved = resolveEnvRefs(config, {});
     expect(resolved.providers.openai?.apiKey).toBeUndefined();
+  });
+
+  it("invokes onMissing for a referenced-but-unset var", () => {
+    const config = parseConfigObject(minimalRaw);
+    const onMissing = vi.fn();
+    resolveEnvRefs(config, {}, onMissing);
+    expect(onMissing).toHaveBeenCalledWith("OPENAI_API_KEY", "openai");
+  });
+});
+
+describe("resolveEnvRefs allowlist (F3)", () => {
+  const withProviderKey = (apiKey: string) =>
+    parseConfigObject({
+      project: { name: "t", environment: "test" },
+      budgets: {
+        global: { monthly_usd: 1, hard_stop_at_percent: 100 },
+        by_user_type: { logged_in: { daily_usd: 1, daily_requests: 1, models: ["cheap"] } },
+      },
+      features: { f: { model_class: "cheap", max_tokens: 1, safety: "dev" } },
+      model_classes: { cheap: { primary: "openai/gpt-4o-mini" } },
+      safety: { preset: "dev" },
+      providers: { openai: { api_key: apiKey } },
+    });
+
+  afterEach(() => setPolicyEnvRefAllowlist([])); // reset the module-level allowlist
+
+  it("resolves a _KEY-suffixed provider var by default", () => {
+    const resolved = resolveEnvRefs(withProviderKey("env/MY_OPENAI_KEY"), { MY_OPENAI_KEY: "sk-x" });
+    expect(resolved.providers.openai?.apiKey).toBe("sk-x");
+  });
+
+  it("refuses a gateway secret even when the env value is present", () => {
+    const onMissing = vi.fn();
+    const resolved = resolveEnvRefs(
+      withProviderKey("env/STRIPE_SECRET_KEY"),
+      { STRIPE_SECRET_KEY: "sk_live_should_not_leak" },
+      onMissing,
+    );
+    expect(resolved.providers.openai?.apiKey).toBeUndefined();
+    expect(onMissing).toHaveBeenCalledWith("STRIPE_SECRET_KEY", "openai");
+  });
+
+  it("refuses a non-allowlisted var (does not end in _KEY)", () => {
+    const resolved = resolveEnvRefs(withProviderKey("env/MY_TOKEN"), { MY_TOKEN: "tok" });
+    expect(resolved.providers.openai?.apiKey).toBeUndefined();
+  });
+
+  it("resolves a non-_KEY var once added to the explicit allowlist", () => {
+    setPolicyEnvRefAllowlist(["MY_TOKEN"]);
+    const resolved = resolveEnvRefs(withProviderKey("env/MY_TOKEN"), { MY_TOKEN: "tok" });
+    expect(resolved.providers.openai?.apiKey).toBe("tok");
   });
 });
 

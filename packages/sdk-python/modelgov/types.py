@@ -112,6 +112,19 @@ class ChatResponse(TypedDict):
     requestId: str  # audit id ("req_<n>")
 
 
+class ChatStreamDone(TypedDict):
+    """Terminal metadata frame emitted once a streamed completion finishes.
+
+    Mirrors the TypeScript SDK's ``ChatStreamDone``: the ``data: {"done":true,...}``
+    event the server sends just before ``data: [DONE]``.
+    """
+
+    done: bool  # always True
+    model: str
+    usage: Usage
+    requestId: str  # audit id ("req_<n>")
+
+
 # --- Explain ----------------------------------------------------------------
 
 
@@ -220,6 +233,7 @@ __all__ = [
     "ResponseMessage",
     "ChatResponse",
     "ChatResult",
+    "ChatStreamDone",
     "EmbeddingsUsage",
     "EmbeddingsResponse",
     "EmbeddingsResult",

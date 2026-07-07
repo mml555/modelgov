@@ -114,6 +114,18 @@ input, textarea {
 .chip.active { background: #3b82f6; color: #fff; border-color: #3b82f6; }
 .muted { color: #6b7280; font-size: 0.8rem; }
 
+/* Persistent warning that a platform operator is scoped to a specific tenant. */
+.tenant-banner {
+  background: #2a2413;
+  border: 1px solid #fbbf24;
+  color: #fbbf24;
+  border-radius: 8px;
+  padding: 0.7rem 0.9rem;
+  margin-bottom: 1rem;
+  font-size: 0.85rem;
+}
+.tenant-banner strong { color: #fde68a; }
+
 .tenant-switcher { display: block; margin-bottom: 1.25rem; }
 .tenant-switcher select {
   width: 100%;

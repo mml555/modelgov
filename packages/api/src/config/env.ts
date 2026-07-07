@@ -61,8 +61,17 @@ const baseEnvSchema = z.object({
   OIDC_AUDIENCE_OPTIONAL: z.enum(["true", "false"]).default("false"),
   OIDC_ROLES_CLAIM: z.string().min(1).default("roles"),
   OIDC_NAME_CLAIM: z.string().min(1).default("sub"),
+  // Optional claim binding an OIDC operator to a tenant. When set and present on
+  // the token, the operator is locked to that tenant and cannot switch. Leave
+  // unset for platform-only SSO (operators are unbound; switching needs
+  // tenant:switch).
+  OIDC_TENANT_CLAIM: z.string().min(1).optional(),
   // JSON map of IdP role/group value -> Modelgov role name(s).
   OIDC_ROLE_MAP: z.string().optional(),
+  // Comma-separated extra env-var names a policy `env/VAR` provider key may
+  // reference, beyond the default (names ending in _API_KEY). Gateway secrets
+  // (DATABASE_URL, STRIPE_SECRET_KEY, ...) are always denied regardless.
+  MODELGOV_POLICY_ENV_ALLOWLIST: z.string().optional(),
   MODELGOV_CONFIG: z.string().min(1, "MODELGOV_CONFIG is required"),
   LITELLM_BASE_URL: z.string().url("LITELLM_BASE_URL must be a URL"),
   LITELLM_MASTER_KEY: z.string().optional(),
@@ -184,10 +193,18 @@ const OPTIONAL_ENV_KEYS = [
   "REDIS_URL",
   "BUDGET_ALERT_WEBHOOK_URL",
   "BUDGET_ALERT_WEBHOOK_SECRET",
+  // Compose injects `METRICS_AUTH_TOKEN: ${METRICS_AUTH_TOKEN:-}` (empty when the
+  // operator hasn't set it). Without this, the empty string reaches the
+  // `.min(1)` check and boot fails with a baffling error for a var they never
+  // set. Empty → undefined → optional; the production posture guard still
+  // requires a real token (or METRICS_ALLOW_PUBLIC) when METRICS_ENABLED=true.
+  "METRICS_AUTH_TOKEN",
   "OIDC_ISSUER",
   "OIDC_JWKS_URI",
   "OIDC_AUDIENCE",
   "OIDC_ROLE_MAP",
+  "OIDC_TENANT_CLAIM",
+  "MODELGOV_POLICY_ENV_ALLOWLIST",
   "OTEL_EXPORTER_OTLP_ENDPOINT",
   "MODELGOV_DEPLOY_PROFILE",
   "STRIPE_SECRET_KEY",

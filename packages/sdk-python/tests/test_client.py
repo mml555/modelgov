@@ -495,6 +495,8 @@ data: {"choices":[{"delta":{"content":"world"}}]}
 
 data: {"choices":[{"delta":{}}]}
 
+data: {"done":true,"model":"openai/gpt-4o-mini","usage":{"inputTokens":5,"outputTokens":3},"requestId":"req_99"}
+
 data: [DONE]
 
 """
@@ -526,6 +528,56 @@ def test_chat_stream_yields_chunks() -> None:
     sent = json.loads(route.calls.last.request.content)
     assert sent["stream"] is True
     assert route.calls.last.request.headers["accept"] == "text/event-stream"
+
+
+@respx.mock
+def test_chat_stream_exposes_terminal_done_frame() -> None:
+    respx.post(f"{BASE_URL}/v1/chat").mock(
+        return_value=httpx.Response(
+            200, headers={"content-type": "text/event-stream"}, content=SSE_STREAM
+        )
+    )
+
+    with make_client() as client:
+        stream = client.chat_stream(
+            user_id="u",
+            user_type="logged_in",
+            feature="support_chat",
+            messages=[{"role": "user", "content": "Hi"}],
+        )
+        # done is not populated until the stream is fully consumed.
+        assert stream.done is None
+        chunks = list(stream)
+
+    # The done frame is captured on `.done`, not yielded as a text chunk.
+    assert chunks == ["Hello", ", ", "world"]
+    assert stream.done is not None
+    assert stream.done["model"] == "openai/gpt-4o-mini"
+    assert stream.done["requestId"] == "req_99"
+    assert stream.done["usage"] == {"inputTokens": 5, "outputTokens": 3}
+
+
+@respx.mock
+def test_chat_stream_done_is_none_without_terminal_frame() -> None:
+    # A plain text-only stream (no {"done":true} frame) leaves .done as None.
+    stream_bytes = b'data: {"delta":"hi"}\n\ndata: [DONE]\n\n'
+    respx.post(f"{BASE_URL}/v1/chat").mock(
+        return_value=httpx.Response(
+            200, headers={"content-type": "text/event-stream"}, content=stream_bytes
+        )
+    )
+
+    with make_client() as client:
+        stream = client.chat_stream(
+            user_id="u",
+            user_type="logged_in",
+            feature="support_chat",
+            messages=[{"role": "user", "content": "Hi"}],
+        )
+        chunks = list(stream)
+
+    assert chunks == ["hi"]
+    assert stream.done is None
 
 
 @respx.mock

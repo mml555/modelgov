@@ -154,31 +154,29 @@ def ai_route(body: dict):
 `;
 }
 
-// NOTE: `@modelgov/sdk` and `modelgov` are not yet published to npm/PyPI, so
-// the `npm i` / `pip install` hints below only work once they are. Until then,
-// install from source (see docs/self-host.md) — e.g. a workspace/path dependency
-// on `packages/sdk-typescript`, or `pip install -e packages/sdk-python`.
+// The SDKs ship on npm (`@modelgov/sdk`) and PyPI (`modelgov`), so the install
+// hints below are the real commands.
 export function adapterFor(framework: Framework, template: Template): AdapterOutput {
   switch (framework) {
     case "nextjs":
       return {
         files: { "lib/modelgov.ts": tsClient(), "app/api/ai/route.ts": nextRoute(template) },
-        installHint: "npm i @modelgov/sdk (when published; until then install from source — see docs/self-host.md)",
+        installHint: "npm i @modelgov/sdk",
       };
     case "express":
       return {
         files: { "src/modelgov.ts": tsClient(), "src/routes/ai.ts": expressRoute(template) },
-        installHint: "npm i express, plus @modelgov/sdk (when published; until then install from source — see docs/self-host.md)",
+        installHint: "npm i express @modelgov/sdk",
       };
     case "fastify":
       return {
         files: { "src/modelgov.ts": tsClient(), "src/routes/ai.ts": fastifyRoute(template) },
-        installHint: "npm i fastify, plus @modelgov/sdk (when published; until then install from source — see docs/self-host.md)",
+        installHint: "npm i fastify @modelgov/sdk",
       };
     case "fastapi":
       return {
         files: { "app/routes/ai.py": fastapiRoute(template) },
-        installHint: "pip install fastapi, plus modelgov (when published; until then install from source — see docs/self-host.md)",
+        installHint: "pip install fastapi modelgov",
       };
     case "none":
       return { files: {}, installHint: "" };

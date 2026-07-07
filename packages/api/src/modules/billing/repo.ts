@@ -326,6 +326,15 @@ export async function markMeterReported(
   );
 }
 
+/**
+ * After this many failed report attempts a meter row is considered poison
+ * (permanently unreportable — deleted Stripe customer, bad meter name) and is
+ * skipped by the flush so it can't starve newer rows; the retention sweep then
+ * prunes it and logs the unbilled usage. Permanent (4xx) failures jump straight
+ * to this ceiling instead of burning through the retries.
+ */
+export const MAX_METER_ATTEMPTS = 10;
+
 export async function listPendingMeterEvents(
   pool: Pool,
   // Reported with bounded concurrency (see flushPendingMeters), so a larger batch
@@ -340,24 +349,31 @@ export async function listPendingMeterEvents(
     feature: string;
     costUsd: number;
     stripeCustomerId: string;
+    attempts: number;
+    createdAtMs: number;
   }>
 > {
   // Only rows whose account has a Stripe customer are reportable. Rows without
   // one must not be returned: they can never flush, and with this batch's
   // ORDER BY + LIMIT they would permanently occupy batch slots and starve
-  // newer events (the retention sweep prunes them instead).
+  // newer events (the retention sweep prunes them instead). Also skip rows still
+  // in backoff (next_attempt_at) and rows past the retry ceiling (poison) so a
+  // handful of permanently-failing events can never block the whole flush.
   const { rows } = await pool.query(
     `SELECT m.request_id, m.tenant_id, m.user_id, m.feature,
-            m.cost_usd::float8 AS cost_usd,
+            m.cost_usd::float8 AS cost_usd, m.attempts,
+            (extract(epoch from m.created_at) * 1000)::float8 AS created_at_ms,
             a.stripe_customer_id
      FROM meter_events m
      JOIN billing_accounts a
        ON a.tenant_id = m.tenant_id AND a.user_id = m.user_id
      WHERE m.reported_at IS NULL
        AND a.stripe_customer_id IS NOT NULL
-     ORDER BY m.created_at ASC
+       AND m.attempts < $2
+       AND m.next_attempt_at <= now()
+     ORDER BY m.next_attempt_at ASC, m.created_at ASC
      LIMIT $1`,
-    [limit],
+    [limit, MAX_METER_ATTEMPTS],
   );
   return (rows as Array<{
     request_id: string;
@@ -366,6 +382,8 @@ export async function listPendingMeterEvents(
     feature: string;
     cost_usd: number;
     stripe_customer_id: string;
+    attempts: number;
+    created_at_ms: number;
   }>).map((r) => ({
     requestId: r.request_id,
     tenantId: r.tenant_id,
@@ -373,7 +391,36 @@ export async function listPendingMeterEvents(
     feature: r.feature,
     costUsd: r.cost_usd,
     stripeCustomerId: r.stripe_customer_id,
+    attempts: r.attempts,
+    createdAtMs: r.created_at_ms,
   }));
+}
+
+/**
+ * Record a failed meter-report attempt: bump the attempt count, stash the error,
+ * and push next_attempt_at out with exponential backoff. A permanent failure
+ * (Stripe 4xx) jumps straight to the retry ceiling so the flush skips it
+ * immediately instead of retrying a request that will never succeed.
+ */
+export async function recordMeterFailure(
+  pool: Pool,
+  requestId: string,
+  errorMessage: string,
+  opts: { permanent: boolean; attempts: number },
+): Promise<void> {
+  const nextAttempts = opts.permanent ? MAX_METER_ATTEMPTS : opts.attempts + 1;
+  // 1min, 2, 4, 8, ... capped at 6h. Permanent failures don't retry.
+  const backoffMs = opts.permanent
+    ? 0
+    : Math.min(60_000 * 2 ** opts.attempts, 6 * 60 * 60 * 1000);
+  await pool.query(
+    `UPDATE meter_events
+     SET attempts = $2,
+         last_error = $3,
+         next_attempt_at = now() + ($4 || ' milliseconds')::interval
+     WHERE request_id = $1`,
+    [requestId, nextAttempts, errorMessage.slice(0, 500), String(backoffMs)],
+  );
 }
 
 /**
@@ -414,15 +461,21 @@ export async function cleanupMeterEvents(
          SELECT m.request_id FROM meter_events m
          WHERE m.reported_at IS NULL
            AND m.created_at < now() - ($1 || ' milliseconds')::interval
-           AND NOT EXISTS (
-             SELECT 1 FROM billing_accounts a
-             WHERE a.tenant_id = m.tenant_id
-               AND a.user_id = m.user_id
-               AND a.stripe_customer_id IS NOT NULL
+           AND (
+             -- never linkable to a Stripe customer, so never reportable
+             NOT EXISTS (
+               SELECT 1 FROM billing_accounts a
+               WHERE a.tenant_id = m.tenant_id
+                 AND a.user_id = m.user_id
+                 AND a.stripe_customer_id IS NOT NULL
+             )
+             -- or exhausted the retry ceiling (poison: e.g. deleted customer,
+             -- bad meter name) — Stripe keeps rejecting it, so drop it.
+             OR m.attempts >= $3
            )
          LIMIT $2
        )`,
-      [String(opts.abandonedRetentionMs), batch],
+      [String(opts.abandonedRetentionMs), batch, MAX_METER_ATTEMPTS],
     );
     const n = rowCount ?? 0;
     abandoned += n;

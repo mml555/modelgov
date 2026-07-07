@@ -24,6 +24,14 @@ export interface ChatServiceDeps {
     error(obj: unknown, msg: string): void;
   };
   billing?: BillingService;
+  /**
+   * Hard wall-clock cap on a single stream (ms). A stream that runs this long is
+   * aborted and settled for what it produced. Bounded below RESERVATION_STALE_MS
+   * so an in-flight stream can never outlive its reservation and have the
+   * stale-lease sweep refund the hold mid-flight (which would leave the request
+   * unbilled). Undefined = no cap.
+   */
+  streamMaxDurationMs?: number;
 }
 
 export interface ChatInput {

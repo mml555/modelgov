@@ -18,6 +18,12 @@ export const KNOWN_PERMISSIONS = [
   "audit:read",
   "data:erase",
   "billing:write",
+  // Platform capability: scope a request to another tenant via the
+  // `X-Modelgov-Tenant` header. Only unbound (platform) principals can switch at
+  // all, and only with this permission — without it an unbound operator (e.g. an
+  // OIDC viewer) is confined to the default partition and cannot read/write other
+  // tenants' data. Granted to `owner` only by default.
+  "tenant:switch",
 ] as const;
 
 export type Permission = (typeof KNOWN_PERMISSIONS)[number];

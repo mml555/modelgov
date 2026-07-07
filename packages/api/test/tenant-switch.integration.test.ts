@@ -56,8 +56,11 @@ describe.skipIf(!DATABASE_URL)("platform tenant switching (integration)", () => 
       observability: new NoopObservability(),
       logger: false,
       apiKeys: [
-        // Platform (unbound) operator — may switch tenants.
-        { name: "platform", key: "platform-key", permissions: ["usage:read", "requests:read"] },
+        // Platform (unbound) operator — may switch tenants (holds tenant:switch).
+        { name: "platform", key: "platform-key", permissions: ["usage:read", "requests:read", "tenant:switch"] },
+        // Unbound read-only operator WITHOUT tenant:switch — must not be able to
+        // scope to another tenant (the OIDC-viewer escape this guards against).
+        { name: "reader", key: "reader-key", permissions: ["usage:read", "requests:read"] },
         // Tenant-bound operator — locked to globex.
         { name: "bound", key: "bound-key", permissions: ["usage:read", "requests:read"], tenantId: "globex" },
         // Chat-only key — no read perms.
@@ -87,6 +90,21 @@ describe.skipIf(!DATABASE_URL)("platform tenant switching (integration)", () => 
   it("a tenant-bound key ignores the override header (locked to its tenant)", async () => {
     // bound to globex; attempts to view acme — must still see only globex (1).
     expect(await summaryRequests(app(), "bound-key", "acme")).toBe(1);
+  });
+
+  it("an unbound key WITHOUT tenant:switch is forbidden from targeting a tenant", async () => {
+    const res = await app().inject({
+      method: "GET",
+      url: "/v1/usage/summary?since=24h",
+      headers: { authorization: "Bearer reader-key", [TENANT_HEADER]: "acme" },
+    });
+    expect(res.statusCode).toBe(403);
+    expect(res.json().error.code).toBe("forbidden");
+  });
+
+  it("an unbound key without tenant:switch still sees its own (untenanted) partition", async () => {
+    // No override header → confined to the default partition, not blocked.
+    expect(await summaryRequests(app(), "reader-key")).toBe(1);
   });
 
   it("GET /v1/admin/tenants lists all tenants for a platform operator", async () => {

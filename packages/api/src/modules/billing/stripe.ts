@@ -44,6 +44,8 @@ export interface StripeCheckoutSession {
   customer?: string | null;
   metadata?: Record<string, string>;
   amount_total?: number | null;
+  /** ISO-4217 currency of amount_total (lowercase, e.g. "usd"). */
+  currency?: string | null;
 }
 
 export interface StripeSubscription {
@@ -51,6 +53,11 @@ export interface StripeSubscription {
   status?: string;
   items?: { data?: Array<{ price?: { id?: string } }> };
 }
+
+/** Outcome of a Stripe meter-event report, distinguishing retryable from permanent. */
+export type MeterEventResult =
+  | { ok: true; id: string }
+  | { ok: false; status?: number; retryable: boolean; error: string };
 
 export interface StripeInvoice {
   customer?: string | null;
@@ -69,26 +76,51 @@ export async function createStripeMeterEvent(
     stripeCustomerId: string;
     value: number;
     identifier: string;
+    /** Unix seconds the usage occurred; invoices it in the right period. */
+    timestamp?: number;
   },
   fetchImpl: typeof fetch = fetch,
-): Promise<string | null> {
+): Promise<MeterEventResult> {
   const body = new URLSearchParams({
     event_name: params.eventName,
     "payload[stripe_customer_id]": params.stripeCustomerId,
     "payload[value]": String(params.value),
     identifier: params.identifier,
   });
+  // Stamp the event with WHEN the usage happened, not when the flush ran, so a
+  // backlog (Stripe outage / flush lag) is invoiced in the correct billing period.
+  if (params.timestamp != null && Number.isFinite(params.timestamp)) {
+    body.set("timestamp", String(Math.floor(params.timestamp)));
+  }
 
-  const res = await fetchImpl("https://api.stripe.com/v1/billing/meter_events", {
-    method: "POST",
-    headers: {
-      authorization: `Bearer ${secretKey}`,
-      "content-type": "application/x-www-form-urlencoded",
-    },
-    body,
-  });
+  let res: Response;
+  try {
+    res = await fetchImpl("https://api.stripe.com/v1/billing/meter_events", {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${secretKey}`,
+        "content-type": "application/x-www-form-urlencoded",
+      },
+      body,
+    });
+  } catch (err) {
+    // Network/DNS/timeout — always worth retrying.
+    return { ok: false, retryable: true, error: err instanceof Error ? err.message : String(err) };
+  }
 
-  if (!res.ok) return null;
+  if (!res.ok) {
+    let detail = "";
+    try {
+      detail = (await res.text()).slice(0, 200);
+    } catch {
+      // ignore body read failures
+    }
+    // 4xx (bad customer/meter/params) will fail identically on every retry — treat
+    // as permanent so the row doesn't clog the batch. 429 (rate limit) and 5xx are
+    // transient and retried with backoff.
+    const retryable = res.status === 429 || res.status >= 500;
+    return { ok: false, status: res.status, retryable, error: `stripe ${res.status}: ${detail}` };
+  }
   const json = (await res.json()) as { identifier?: string };
-  return json.identifier ?? params.identifier;
+  return { ok: true, id: json.identifier ?? params.identifier };
 }

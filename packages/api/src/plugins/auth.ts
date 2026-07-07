@@ -150,14 +150,33 @@ export function registerAuth(
     }
 
     const tenantBound = isBoundTenant(principal.tenantId);
+    const permissions = principal.permissions ?? ["chat:create"];
+    // Tenant switching is a platform capability. A bound principal ignores the
+    // header (locked to its own tenant), but an UNBOUND principal targeting a
+    // tenant via the header must hold `tenant:switch` — otherwise any unbound
+    // operator (notably an OIDC-authenticated viewer, which is always unbound)
+    // could read/write an arbitrary tenant's data. Without the permission the
+    // header is rejected rather than silently honored.
+    const tenantHeader = request.headers[TENANT_HEADER];
+    const wantsSwitch =
+      !tenantBound && typeof tenantHeader === "string" && tenantHeader.trim() !== "";
+    if (wantsSwitch && !permissions.includes("tenant:switch")) {
+      return sendError(
+        reply,
+        403,
+        "forbidden",
+        {},
+        "Not permitted to scope requests to another tenant (tenant:switch required)",
+      );
+    }
     setRequestContext(request, {
       apiKeyName: principal.name,
       projectId: principal.projectId,
       environment: principal.environment,
       allowedUserTypes: principal.allowedUserTypes,
       allowedUserIds: principal.allowedUserIds,
-      permissions: principal.permissions ?? ["chat:create"],
-      tenantId: resolveEffectiveTenant(principal.tenantId, request.headers[TENANT_HEADER]),
+      permissions,
+      tenantId: resolveEffectiveTenant(principal.tenantId, tenantHeader),
       tenantBound,
       budgetNodeId: principal.budgetNodeId,
     });

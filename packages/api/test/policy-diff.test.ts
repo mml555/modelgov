@@ -1,5 +1,40 @@
 import { describe, expect, it } from "vitest";
 import { deepDiff, diffConfigYaml } from "../src/modules/policy/diff";
+import { frozenPolicyFieldsFingerprint } from "../src/modules/policy/repo";
+import { parseConfigObject } from "@modelgov/policy-engine";
+
+describe("frozenPolicyFieldsFingerprint (H1 hot-reload guard)", () => {
+  const base = {
+    project: { name: "t", environment: "test" },
+    budgets: {
+      global: { monthly_usd: 1, hard_stop_at_percent: 100 },
+      by_user_type: { logged_in: { daily_usd: 1, daily_requests: 1, models: ["cheap"] } },
+    },
+    features: { f: { model_class: "cheap", max_tokens: 1, safety: "dev" } },
+    model_classes: { cheap: { primary: "openai/gpt-4o-mini" } },
+    safety: { preset: "dev" },
+    pricing: { "openai/gpt-4o-mini": { input_per_1k: 0.001, output_per_1k: 0.002 } },
+  };
+
+  it("is stable for configs that differ only in hot-reloadable fields", () => {
+    const a = parseConfigObject(base);
+    // Change a budget cap (hot-reloadable) — the frozen fingerprint must NOT change.
+    const b = parseConfigObject({
+      ...base,
+      budgets: { ...base.budgets, global: { monthly_usd: 999, hard_stop_at_percent: 100 } },
+    });
+    expect(frozenPolicyFieldsFingerprint(a)).toBe(frozenPolicyFieldsFingerprint(b));
+  });
+
+  it("changes when a boot-only field (pricing) changes", () => {
+    const a = parseConfigObject(base);
+    const b = parseConfigObject({
+      ...base,
+      pricing: { "openai/gpt-4o-mini": { input_per_1k: 0.999, output_per_1k: 0.002 } },
+    });
+    expect(frozenPolicyFieldsFingerprint(a)).not.toBe(frozenPolicyFieldsFingerprint(b));
+  });
+});
 
 describe("deepDiff", () => {
   it("reports changed, added, and removed leaves by path", () => {

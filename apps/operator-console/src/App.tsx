@@ -26,6 +26,11 @@ function Shell({ children, tenantSwitcher }: { children: React.ReactNode; tenant
   const perms = usePermissions();
   const nav = visibleNav(perms);
 
+  // A platform operator acting under a specific (non-default) tenant gets a
+  // persistent banner so they can't mutate the wrong tenant by accident. An
+  // empty selection is the default/untenanted partition and needs no warning.
+  const activeTenant = tenantSwitcher?.selected;
+
   return (
     <div className="layout">
       <aside className="sidebar">
@@ -52,7 +57,15 @@ function Shell({ children, tenantSwitcher }: { children: React.ReactNode; tenant
         </nav>
         <p className="hint">Metadata only — no prompt content unless capture is enabled server-side.</p>
       </aside>
-      <main className="content">{children}</main>
+      <main className="content">
+        {activeTenant && (
+          <div className="tenant-banner" role="status">
+            Acting as tenant <strong>{activeTenant}</strong> — reads and writes on
+            this page apply to this tenant. Switch to “Default (untenanted)” to leave it.
+          </div>
+        )}
+        {children}
+      </main>
     </div>
   );
 }

@@ -90,73 +90,71 @@ export function startMaintenance(opts: MaintenanceOptions): NodeJS.Timeout {
  * tick runs it under its own advisory lock, released before network delivery.
  */
 export async function runReconciliationSweep(opts: MaintenanceOptions): Promise<void> {
-  const removedKeys = await cleanupStaleIdempotencyKeys(
-    opts.pool,
-    opts.idempotencyStaleMs,
-  );
-  if (removedKeys > 0) {
-    opts.log?.info({ removed: removedKeys }, "cleaned stale idempotency keys");
-  }
+  // Each step runs in isolation: the steps are independent, and the money-
+  // critical lease sweeps must not be starved by an earlier step that starts
+  // failing (e.g. an idempotency cleanup hitting a statement timeout on a bloated
+  // table). Without this, one persistently-failing step would silently block
+  // every step after it on every tick — stranding wallet reservations forever.
+  const step = async (name: string, fn: () => Promise<void>): Promise<void> => {
+    try {
+      await fn();
+    } catch (err) {
+      opts.log?.error({ err, step: name }, "maintenance reconciliation step failed");
+    }
+  };
 
-  const removedCompleted = await cleanupCompletedIdempotencyKeys(
-    opts.pool,
-    opts.idempotencyCompletedRetentionMs,
-  );
-  if (removedCompleted > 0) {
-    opts.log?.info(
-      { removed: removedCompleted },
-      "pruned completed idempotency keys past retention",
+  await step("idempotency-stale", async () => {
+    const removedKeys = await cleanupStaleIdempotencyKeys(opts.pool, opts.idempotencyStaleMs);
+    if (removedKeys > 0) opts.log?.info({ removed: removedKeys }, "cleaned stale idempotency keys");
+  });
+
+  await step("idempotency-completed", async () => {
+    const removedCompleted = await cleanupCompletedIdempotencyKeys(
+      opts.pool,
+      opts.idempotencyCompletedRetentionMs,
     );
-  }
+    if (removedCompleted > 0) {
+      opts.log?.info({ removed: removedCompleted }, "pruned completed idempotency keys past retention");
+    }
+  });
 
-  await cleanupStaleReservationLeases(
-    opts.pool,
-    opts.reservationStaleMs,
-    Date.now(),
-    opts.log,
-  );
+  await step("reservation-leases", async () => {
+    await cleanupStaleReservationLeases(opts.pool, opts.reservationStaleMs, Date.now(), opts.log);
+  });
 
   // Hierarchical-budget reservation leases (same TTL as the flat path).
-  const releasedNodeLeases = await cleanupStaleNodeLeases(
-    opts.pool,
-    opts.reservationStaleMs,
-  );
-  if (releasedNodeLeases > 0) {
-    opts.log?.info({ released: releasedNodeLeases }, "released stale budget node leases");
-  }
+  await step("node-leases", async () => {
+    const releasedNodeLeases = await cleanupStaleNodeLeases(opts.pool, opts.reservationStaleMs);
+    if (releasedNodeLeases > 0) {
+      opts.log?.info({ released: releasedNodeLeases }, "released stale budget node leases");
+    }
+  });
 
   // Prepaid-credit wallet leases (same TTL): a crash or failed settle between
   // credit reserve and settle/release would otherwise strand
   // credits_reserved_usd and shrink the user's available balance forever.
-  const releasedBillingLeases = await cleanupStaleBillingLeases(
-    opts.pool,
-    opts.reservationStaleMs,
-  );
-  if (releasedBillingLeases > 0) {
-    opts.log?.info(
-      { released: releasedBillingLeases },
-      "released stale billing credit leases",
-    );
-  }
+  await step("billing-leases", async () => {
+    const releasedBillingLeases = await cleanupStaleBillingLeases(opts.pool, opts.reservationStaleMs);
+    if (releasedBillingLeases > 0) {
+      opts.log?.info({ released: releasedBillingLeases }, "released stale billing credit leases");
+    }
+  });
 
-  const removedLogs = await cleanupOldRequestLogs(
-    opts.pool,
-    opts.requestLogRetentionMs,
-  );
-  if (removedLogs > 0) {
-    opts.log?.info({ removed: removedLogs }, "pruned old request_logs rows");
-  }
+  await step("request-log-retention", async () => {
+    const removedLogs = await cleanupOldRequestLogs(opts.pool, opts.requestLogRetentionMs);
+    if (removedLogs > 0) opts.log?.info({ removed: removedLogs }, "pruned old request_logs rows");
+  });
 
   // Per-feature retention overrides (stricter windows for sensitive features).
   for (const [feature, days] of Object.entries(opts.featureRetentionDays ?? {})) {
-    const removed = await cleanupOldRequestLogsForFeature(
-      opts.pool,
-      feature,
-      days * 24 * 60 * 60 * 1000,
-    );
-    if (removed > 0) {
-      opts.log?.info({ feature, removed }, "pruned request_logs for feature retention");
-    }
+    await step(`feature-retention:${feature}`, async () => {
+      const removed = await cleanupOldRequestLogsForFeature(
+        opts.pool,
+        feature,
+        days * 24 * 60 * 60 * 1000,
+      );
+      if (removed > 0) opts.log?.info({ feature, removed }, "pruned request_logs for feature retention");
+    });
   }
 }
 

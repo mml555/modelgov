@@ -69,9 +69,14 @@ export function registerBillingRoutes(
     if (userDenial) return sendError(reply, userDenial.status, userDenial.code, {}, userDenial.message);
     const typeDenial = checkUserTypeAllowedIfPresent(request.ctx, parsed.data.userType);
     if (typeDenial) return sendError(reply, typeDenial.status, typeDenial.code, {}, typeDenial.message);
+    // Optional idempotency: a retried top-up (network retry, double-click) with
+    // the same Idempotency-Key credits the wallet at most once.
+    const idemRaw = request.headers["idempotency-key"];
+    const idempotencyKey = (Array.isArray(idemRaw) ? idemRaw[0] : idemRaw)?.trim() || undefined;
     await billing.adminTopUp({
       tenantId: request.ctx.tenantId ?? "",
       ...parsed.data,
+      idempotencyKey,
     });
     const balance = await billing.getBalance(request.ctx.tenantId ?? "", parsed.data.userId);
     return reply.send({ ok: true, balance });

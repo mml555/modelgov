@@ -16,6 +16,59 @@ guarantees in `docs/versioning.md` apply.
 ## [Unreleased]
 
 ### ⚠ Breaking
+- **Tenant switching now requires the `tenant:switch` permission.** Previously any
+  unbound (platform) principal could scope a request to any tenant via the
+  `X-Modelgov-Tenant` header — including an OIDC-authenticated operator, which is
+  always unbound, so a tenant-scoped IdP user could read/write other tenants'
+  data. Switching now requires the new `tenant:switch` permission (granted to the
+  `owner` role only by default). A static platform key that switches tenants must
+  add `"tenant:switch"` to its permissions; OIDC operators can instead be bound to
+  a tenant with the new `OIDC_TENANT_CLAIM`. Tenant-bound keys are unaffected
+  (they already ignore the header).
+
+### Security
+- **OIDC operators can be tenant-scoped** via `OIDC_TENANT_CLAIM`: when the token
+  carries that claim the operator is bound to that tenant and cannot switch.
+- **`env/VAR` in a policy is restricted to provider credentials.** A stored/file
+  policy's provider `api_key: env/VAR` now only resolves vars ending in `_KEY`
+  (plus any in `MODELGOV_POLICY_ENV_ALLOWLIST`); gateway secrets (`DATABASE_URL`,
+  `STRIPE_SECRET_KEY`, `LITELLM_MASTER_KEY`, ...) are always denied, closing a
+  latent exfiltration channel for a `policy:write` operator.
+- **`GET /v1/admin/audit/verify` is restricted to platform operators.** The audit
+  hash chain spans all tenants, so its result (row count, tamper-point id) leaked
+  cross-tenant metadata to a tenant-bound admin; tenant-bound callers now get 403
+  (tenant-scoped reads still use `GET /v1/admin/audit`).
+- **Chat/explain permission checks are unconditional** (no longer skipped for a
+  principal without a name — defense against a fail-open edge).
+
+### Fixed
+- **`docker-compose.production.yml` now boots as documented.** Previously the
+  shipped `.env.production.example` defaulted `DATABASE_SSL=require` while the
+  bundled `postgres` service ships with TLS off (crash-loop at connect), the
+  compose injected an empty `METRICS_AUTH_TOKEN` that the env validator rejected,
+  and the SSL/metrics escape-hatch vars weren't in the compose `environment:`
+  allowlist so setting them did nothing. The example now defaults to
+  `DATABASE_SSL=disable` + `DATABASE_SSL_DISABLE_ALLOWED=true` for the bundled
+  stack (managed Postgres still uses `verify-full`), empty `METRICS_AUTH_TOKEN`
+  is treated as unset, and the compose passes the escape-hatch vars through.
+- **Compose env allowlist completed.** `docker-compose.production.yml` now
+  forwards every documented optional var — including the dynamic-policy features
+  (`POLICY_STORE_ENABLED`, `POLICY_HOT_RELOAD`, `POLICY_APPROVAL_REQUIRED`,
+  `MULTI_TENANT_POLICY`, `POLICY_CACHE_TTL_MS`), OIDC (`OIDC_*`),
+  `HIERARCHICAL_BUDGETS`, `DB_RLS_ENABLED`, `ALLOW_BOOTSTRAP_ADMIN_KEY`,
+  `MODELGOV_BEHIND_PROXY`, OTEL export, and the DB timeouts — so enabling them in
+  `.env.production` is no longer a silent no-op.
+- **`make up-prod` no longer reports success when the stack failed.** The launcher
+  now detects a crash-looping/exited api container, prints its logs, and exits
+  non-zero instead of printing `✓` after the wait loop times out.
+
+### Changed
+- **Published Docker images are `linux/amd64` only** (documented in
+  `docs/production-deploy.md`). arm64 hosts (Graviton, Apple Silicon) should build
+  the image natively (`BUILD_LOCAL_IMAGE=true`) rather than pulling; a native
+  multi-arch image is planned.
+
+### ⚠ Breaking
 - **`DATABASE_SSL=require` with a remote `DATABASE_URL` now refuses to boot in
   production.** `require` encrypts but does NOT verify the Postgres server
   certificate, so a managed/remote connection is MITM-able while reading as

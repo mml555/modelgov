@@ -52,6 +52,20 @@ export function registerAuditRoutes(app: FastifyInstance, pool: Pool): void {
   }, async (request, reply) => {
     const auth = requireAuditRead(request.ctx);
     if (!auth.ok) return sendError(reply, auth.status, auth.code, {}, auth.message);
+    // The hash chain is global (rows across all tenants link into one chain), so
+    // verification necessarily walks every row and its result (total row count,
+    // the id of any tamper point) reflects other tenants' entries. Restrict it to
+    // platform (unbound) operators — a tenant-bound admin would otherwise learn
+    // cross-tenant metadata. Tenant-scoped reads still go through GET /v1/admin/audit.
+    if (request.ctx.tenantBound) {
+      return sendError(
+        reply,
+        403,
+        "forbidden",
+        {},
+        "Audit chain verification is a platform operation (the chain spans all tenants)",
+      );
+    }
     return reply.send(await verifyAuditChain(pool));
   });
 }

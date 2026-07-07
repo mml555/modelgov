@@ -32,6 +32,11 @@ export function authorizeChatInput(
   ctx: RequestContext,
   body: ChatInput,
 ): ChatAuthResult {
+  // The `ctx.apiKeyName` guard is the unauthenticated-mode bypass: when the
+  // server is built with allowUnauthenticated (tests/openapi export) no auth hook
+  // runs, so there is no principal and permission enforcement is intentionally
+  // skipped. In production auth always sets a non-empty name, so an authenticated
+  // principal is always subject to this check (the check never fails open there).
   if (ctx.apiKeyName && !ctx.permissions?.includes("chat:create")) {
     return deny(403, "forbidden", "API key is not permitted to create chats");
   }
