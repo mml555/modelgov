@@ -15,6 +15,77 @@ guarantees in `docs/versioning.md` apply.
 
 ## [Unreleased]
 
+### ⚠ Breaking
+- **`image_url` in chat/vision content is restricted to `data:` and `https:`
+  URLs.** The upstream provider/vision backend dereferences the URL, so an
+  arbitrary `http(s)` URL pointing at an internal address (e.g.
+  `http://169.254.169.254/…`) was a server-side request forgery (SSRF) vector
+  executed from inside the deployment's network. A cleartext `http:` or non-URL
+  image reference is now rejected with `400`. Inline `data:` URIs and public
+  `https:` URLs are unaffected.
+- **Operator SSO in production now requires `OIDC_ROLE_MAP`.** Without it, IdP
+  role/group claim values were used as Modelgov role names verbatim — an IdP
+  group literally named `owner` would grant the `owner` role. Production boot now
+  refuses OIDC without an explicit role map (dev warns). Set e.g.
+  `OIDC_ROLE_MAP={"platform-admins":"owner"}`.
+
+### Security
+- **Control-plane tenant isolation for unbound operators.** An unbound operator
+  without `tenant:switch` (e.g. an OIDC `key-admin`/`finops` with no
+  `OIDC_TENANT_CLAIM`) could omit the `X-Modelgov-Tenant` header to reach *every*
+  tenant's API keys, audit trail, emergency switch, and tenant list on the
+  control plane — including rotating another tenant's key to obtain a live
+  secret. Such operators are now confined to the default partition exactly like
+  the data plane; only a `tenant:switch` platform operator sees all tenants.
+  Audit-chain verification (`/v1/admin/audit/verify`) now also requires
+  `tenant:switch`.
+- **Embeddings honor a chat-oriented `pii_scope: output` safely.** A
+  `pii_scope: output` config (mask completions only) silently disabled *all* PII
+  masking for `POST /v1/embeddings` (embeddings have no output side), sending raw
+  PII to the provider/vector store. Embeddings now always run input-side PII
+  handling regardless of scope.
+- **Safety/data-class config keys are validated strictly.** A misspelled key
+  under `safety.protect`, `features.*.safety`, or `data_classes.*` (e.g.
+  `promptInjection` in camelCase, or `allowed_providrs`) was silently dropped and
+  could fail *open* (injection off, or restricted data routed to any provider).
+  Such keys are now a loud config error, matching the budget schemas.
+- **Injection classifier respects data-sovereignty.** A `prompt_injection: block`
+  feature with a restricted `data_sensitivity` class is now rejected at config
+  load if `safety.injection_model` routes to a provider outside that class's
+  `allowed_providers` — previously the classifier could exfiltrate restricted
+  text to an unapproved provider before any block decision.
+- **Block-mode safety fails closed on unscanned images.** A `pii: block` or
+  `prompt_injection: block` feature now rejects a message carrying an image part
+  (images aren't scanned) instead of forwarding it unscanned.
+- **Two-person policy approval keys on a stable identity.** The self-approval
+  check now compares the OIDC `sub` / API-key id rather than the mutable display
+  name.
+
+### Fixed
+- **Stripe subscription webhooks are ordered.** A late-redelivered
+  `customer.subscription.updated` (`active`) arriving after a `deleted` no longer
+  re-upgrades a cancelled account; events older than the last applied one (by
+  Stripe `event.created`) are skipped. Adds migration `0027`.
+- **Checkout credits wait for cleared funds.** `checkout.session.completed` with
+  `payment_status: "unpaid"` (async ACH/SEPA/boleto) no longer grants credits;
+  the grant defers to `checkout.session.async_payment_succeeded`.
+- **Admin top-up idempotency keys are namespaced** by tenant + user, so reusing a
+  key across different grants no longer silently drops the second.
+- **One billing account per Stripe customer** is enforced (migration `0027`,
+  applied only when existing data is already clean) and customer lookups are
+  deterministic.
+- **Streamed requests deplete token caps.** When the provider omits the usage
+  chunk, streamed settlement now estimates tokens from emitted characters instead
+  of booking zero (token-only caps were previously evadable via streaming).
+- **SDKs surface mid-stream errors.** Both the TypeScript and Python SDKs now
+  raise on a mid-stream `event: error` frame instead of ending the stream
+  silently (a truncated answer previously looked complete). An oversized
+  `Idempotency-Key` is now a `400` rather than silently ignored, and
+  `inputTokensEstimate` is bounded to avoid a numeric overflow.
+- **CI/release test gate.** The `pnpm test … | tee` steps ran under GitHub's
+  default shell (no `pipefail`), so a failing suite took `tee`'s exit code and
+  passed CI *and* the release gate; all workflows now force `shell: bash`.
+
 ## [1.2.0] - 2026-07-07
 
 ### ⚠ Breaking

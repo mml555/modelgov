@@ -608,6 +608,19 @@ def _parse_sse_line(line: str) -> Any:
     if isinstance(payload, dict) and payload.get("done") is True:
         return _DoneFrame(payload)  # type: ignore[arg-type]
 
+    # Mid-stream error frame: the server emits `event: error` (dropped above as a
+    # non-`data:` field) then a data frame carrying an error `code` when a stream
+    # fails after the first token. Raise instead of returning "" — otherwise the
+    # truncated answer ends cleanly and looks complete to the caller.
+    if isinstance(payload, dict) and isinstance(payload.get("code"), str) and "delta" not in payload:
+        msg = payload.get("message")
+        raise ModelgovError(
+            502,
+            payload["code"],
+            payload,
+            message=msg if isinstance(msg, str) else None,
+        )
+
     return _extract_delta(payload)
 
 

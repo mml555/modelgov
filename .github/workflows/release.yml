@@ -17,6 +17,14 @@ permissions:
   contents: write # create/attach GitHub Release assets
   id-token: write # npm provenance / PyPI trusted publishing (optional)
 
+# Force an explicit `bash` shell so `run` steps get `-o pipefail`. GitHub's
+# default shell (`bash -e {0}`) omits pipefail, so `pnpm test | tee log` would
+# take tee's exit code and a FAILING test suite would pass — silently publishing
+# a broken commit. This is the release gate; it must fail when tests fail.
+defaults:
+  run:
+    shell: bash
+
 jobs:
   # Fail fast if the tag doesn't match the versions in the tree, so we never
   # publish mismatched artifacts under the wrong tag.

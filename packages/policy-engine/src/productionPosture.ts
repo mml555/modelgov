@@ -211,5 +211,28 @@ export function productionPostureChecks(
     }
   }
 
+  // ── Operator SSO role mapping ─────────────────────────────────────────────
+  // Without OIDC_ROLE_MAP the IdP's role/group claim values are used as modelgov
+  // role names VERBATIM, so an IdP group literally named "owner" grants the owner
+  // role (tenant:switch, keys:admin, data:erase, policy:*). Production must map
+  // groups explicitly; dev gets a warning. Mirrors createAuthProviders.
+  if (env.OIDC_ISSUER && env.OIDC_JWKS_URI && !env.OIDC_ROLE_MAP) {
+    if (env.MODELGOV_PRODUCTION === "true") {
+      push(
+        "fail",
+        "oidc_role_map",
+        "OIDC_ROLE_MAP is required when operator SSO is enabled in production",
+        'Map IdP groups to modelgov roles explicitly (e.g. {"platform-admins":"owner"}); without it an IdP group named "owner" grants the owner role',
+      );
+    } else {
+      push(
+        "warn",
+        "oidc_role_map",
+        "OIDC_ROLE_MAP is unset — IdP role/group claim values are treated as modelgov role names verbatim (an IdP group named 'owner' grants owner)",
+        "Set OIDC_ROLE_MAP to map IdP groups to roles explicitly",
+      );
+    }
+  }
+
   return checks;
 }

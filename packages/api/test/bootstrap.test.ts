@@ -204,6 +204,35 @@ describe("createAuthProviders OIDC audience", () => {
     });
     expect(() => createAuthProviders(env, mockPool() as never)).toThrow(/valid JSON/);
   });
+
+  it("throws in production when OIDC is configured without a role map", () => {
+    const env = loadEnv({
+      DATABASE_URL: "postgres://u:p@localhost/db",
+      MODELGOV_CONFIG: "./modelgov.yaml",
+      LITELLM_BASE_URL: "http://localhost:4000",
+      MODELGOV_API_KEY: "sk-production-secret-key-12345",
+      MODELGOV_PRODUCTION: "true",
+      OIDC_ISSUER: "https://login.example.com/",
+      OIDC_JWKS_URI: "https://login.example.com/.well-known/jwks.json",
+      OIDC_AUDIENCE: "modelgov",
+    });
+    expect(() => createAuthProviders(env, mockPool() as never)).toThrow(/OIDC_ROLE_MAP/);
+  });
+
+  it("allows production OIDC with an explicit role map", () => {
+    const env = loadEnv({
+      DATABASE_URL: "postgres://u:p@localhost/db",
+      MODELGOV_CONFIG: "./modelgov.yaml",
+      LITELLM_BASE_URL: "http://localhost:4000",
+      MODELGOV_API_KEY: "sk-production-secret-key-12345",
+      MODELGOV_PRODUCTION: "true",
+      OIDC_ISSUER: "https://login.example.com/",
+      OIDC_JWKS_URI: "https://login.example.com/.well-known/jwks.json",
+      OIDC_AUDIENCE: "modelgov",
+      OIDC_ROLE_MAP: JSON.stringify({ "platform-admins": "owner" }),
+    });
+    expect(() => createAuthProviders(env, mockPool() as never)).not.toThrow();
+  });
 });
 
 const MINIMAL_YAML = `

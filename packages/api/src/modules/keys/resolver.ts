@@ -63,6 +63,9 @@ export function createDbKeyResolver(
       const principal: ResolvedPrincipal | null = active
         ? {
             name: active.name,
+            // Stable id (the key uuid) for controls that must identify the
+            // operator regardless of its mutable display name.
+            principalId: active.id,
             projectId: active.projectId,
             environment: active.environment,
             allowedUserTypes: active.allowedUserTypes,

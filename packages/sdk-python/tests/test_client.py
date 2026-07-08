@@ -532,6 +532,36 @@ def test_chat_stream_yields_chunks() -> None:
 
 
 @respx.mock
+def test_chat_stream_raises_on_mid_stream_error_frame() -> None:
+    # The server emits `event: error` + a data frame with a `code` when a stream
+    # fails after the first token. It must raise, not end silently (a truncated
+    # answer would otherwise look complete).
+    stream_bytes = (
+        b'data: {"delta":"Hel"}\n\n'
+        b'event: error\n'
+        b'data: {"code":"provider_unavailable","message":"Stream interrupted"}\n\n'
+    )
+    respx.post(f"{BASE_URL}/v1/chat").mock(
+        return_value=httpx.Response(
+            200, headers={"content-type": "text/event-stream"}, content=stream_bytes
+        )
+    )
+
+    with make_client() as client:
+        stream = client.chat_stream(
+            user_id="u",
+            user_type="logged_in",
+            feature="support_chat",
+            messages=[{"role": "user", "content": "Hi"}],
+        )
+        it = iter(stream)
+        assert next(it) == "Hel"
+        with pytest.raises(ModelgovError) as excinfo:
+            next(it)
+        assert excinfo.value.code == "provider_unavailable"
+
+
+@respx.mock
 def test_chat_stream_exposes_terminal_done_frame() -> None:
     respx.post(f"{BASE_URL}/v1/chat").mock(
         return_value=httpx.Response(

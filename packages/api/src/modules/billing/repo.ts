@@ -79,6 +79,36 @@ export async function upsertBillingAccount(
  * nor release ever runs (worker crash, settle-write failure), the maintenance
  * sweep finds the stale lease and returns the amount to the wallet.
  */
+/**
+ * Apply a subscription-driven user_type to an existing account, GUARDED by the
+ * event's Stripe timestamp so a stale redelivered event can never overwrite a
+ * newer state (e.g. a retried `active` after a `deleted`). Returns false when the
+ * event was skipped as stale. The account must already exist (the caller resolves
+ * it by stripe_customer_id first).
+ */
+export async function applySubscriptionUserType(
+  pool: Pool,
+  params: {
+    tenantId: string;
+    userId: string;
+    userType: string;
+    stripeCustomerId?: string | null;
+    eventCreatedAt: number;
+  },
+): Promise<boolean> {
+  const { rowCount } = await pool.query(
+    `UPDATE billing_accounts
+        SET user_type = $3,
+            stripe_customer_id = COALESCE($4, stripe_customer_id),
+            last_subscription_event_at = GREATEST(last_subscription_event_at, $5),
+            updated_at = now()
+      WHERE tenant_id = $1 AND user_id = $2
+        AND last_subscription_event_at <= $5`,
+    [params.tenantId, params.userId, params.userType, params.stripeCustomerId ?? null, params.eventCreatedAt],
+  );
+  return (rowCount ?? 0) > 0;
+}
+
 export async function reserveCredits(
   pool: Pool,
   params: { tenantId: string; userId: string; amountUsd: number; holdId?: string },
@@ -270,6 +300,9 @@ export async function findAccountByStripeCustomer(
             credits_reserved_usd::float8 AS credits_reserved_usd
      FROM billing_accounts
      WHERE stripe_customer_id = $1
+     -- Deterministic when the (defensive) unique index isn't yet in place on a
+     -- deployment with duplicate customer mappings: always the oldest account.
+     ORDER BY updated_at ASC, tenant_id ASC, user_id ASC
      LIMIT 1`,
     [stripeCustomerId],
   );

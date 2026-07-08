@@ -213,6 +213,11 @@ export function createModelgovClient(
         const decoder = new TextDecoder();
         let buffer = "";
         let done: ChatStreamDone | undefined;
+        // The server emits an `event: error` line before a terminal error frame
+        // when a stream fails AFTER the first token (provider drop, duration cap).
+        // Track it so the following `data:` frame is raised, not silently dropped —
+        // otherwise a truncated answer is indistinguishable from a complete one.
+        let sawErrorEvent = false;
         for (;;) {
           const chunk = await reader.read();
           if (chunk.done) break;
@@ -221,15 +226,29 @@ export function createModelgovClient(
           while ((nl = buffer.indexOf("\n")) !== -1) {
             const line = buffer.slice(0, nl).trim();
             buffer = buffer.slice(nl + 1);
+            if (line.startsWith("event:")) {
+              sawErrorEvent = line.slice(6).trim() === "error";
+              continue;
+            }
             if (!line.startsWith("data:")) continue;
             const payload = line.slice(5).trim();
             if (payload === "[DONE]") return done;
             try {
               const parsed = JSON.parse(payload) as Record<string, unknown>;
+              // A mid-stream error frame (either preceded by `event: error`, or a
+              // data frame carrying an error `code` and no delta) aborts the read.
+              if (
+                sawErrorEvent ||
+                (typeof parsed.code === "string" && typeof parsed.delta !== "string" && parsed.done !== true)
+              ) {
+                const code = typeof parsed.code === "string" ? parsed.code : "stream_error";
+                throw new ModelgovError(502, code, parsed);
+              }
               if (parsed.done === true) done = parsed as unknown as ChatStreamDone;
               else if (typeof parsed.delta === "string") yield parsed.delta;
-            } catch {
-              // ignore keep-alive / comment frames
+            } catch (err) {
+              if (err instanceof ModelgovError) throw err;
+              // ignore keep-alive / comment frames (unparseable JSON)
             }
           }
         }

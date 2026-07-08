@@ -8,6 +8,7 @@ import type { Pool } from "pg";
 // funds proportionally less wallet credit — that spread is the operator's markup.
 const PAR_USD_PER_CREDIT = 0.01;
 import {
+  applySubscriptionUserType,
   findAccountByStripeCustomer,
   getBillingAccount,
   listPendingMeterEvents,
@@ -297,9 +298,15 @@ export function createBillingService(
       const { idempotencyKey, ...rest } = params;
       await topUpCreditsInTransaction(pool, {
         ...rest,
-        // Namespaced so an admin key can't collide with a real Stripe event id in
-        // the shared stripe_processed_events dedup table.
-        stripeEventId: idempotencyKey ? `admin-topup:${idempotencyKey}` : undefined,
+        // Namespaced by tenant + user (not just the raw key) so the same
+        // Idempotency-Key reused across DIFFERENT grants (e.g. topping up user A
+        // then user B, or two tenants) does not silently collapse into one via
+        // the shared stripe_processed_events dedup table — which would drop the
+        // second grant with a misleading {ok:true}. Also prefixed so it can't
+        // collide with a real Stripe event id.
+        stripeEventId: idempotencyKey
+          ? `admin-topup:${rest.tenantId ?? ""}:${rest.userId}:${idempotencyKey}`
+          : undefined,
       });
     },
   };
@@ -319,10 +326,24 @@ async function applyStripeEvent(
   const obj = event.data.object;
 
   switch (event.type) {
+    // async_payment_succeeded fires when a deferred method (ACH/SEPA/boleto)
+    // finally clears; it carries the same session shape, so both grant here.
+    case "checkout.session.async_payment_succeeded":
     case "checkout.session.completed": {
       const session = obj as StripeCheckoutSession;
       const userId = session.metadata?.user_id ?? session.metadata?.userId;
       if (!userId) return;
+      // Only grant once funds have cleared. Asynchronous methods complete the
+      // session with payment_status "unpaid" and settle later via
+      // async_payment_succeeded — crediting on the "unpaid" completion would hand
+      // out credits for money that can still bounce (with no clawback path).
+      if (session.payment_status === "unpaid") {
+        opts.log?.warn(
+          { customerId: session.customer, userId, eventId: event.id },
+          "checkout.session payment_status is 'unpaid' (async payment not yet cleared) — deferring the credit grant until checkout.session.async_payment_succeeded",
+        );
+        return;
+      }
       const customerId = typeof session.customer === "string" ? session.customer : undefined;
       // Resolve which tenant the credits belong to. Prefer explicit metadata
       // (an empty string is a valid single-tenant value and is respected as-is).
@@ -412,12 +433,24 @@ async function applyStripeEvent(
         userType = priceId ? opts.planMap[priceId] : undefined;
       }
       if (userType) {
-        await upsertBillingAccount(pool, {
+        // Ordering guard: skip an event older than the last applied subscription
+        // event for this account. Without it, a redelivered/resent `active` that
+        // arrives AFTER a `deleted` would re-grant the paid tier to a cancelled
+        // account (Stripe retries for ~3 days). event.created is stable across
+        // redeliveries; absent only on a malformed payload → treat as 0 (apply).
+        const applied = await applySubscriptionUserType(pool, {
           tenantId: account.tenantId,
           userId: account.userId,
           userType,
           stripeCustomerId: customerId,
+          eventCreatedAt: typeof event.created === "number" ? event.created : 0,
         });
+        if (!applied) {
+          opts.log?.warn(
+            { customerId, eventId: event.id, eventType: event.type, eventCreated: event.created },
+            "skipped a stale customer.subscription.* event (older than the last applied one) to avoid re-applying a superseded state",
+          );
+        }
       }
       break;
     }

@@ -12,6 +12,13 @@ export interface RequestContext {
    * so it reads accurately for OIDC operators too.
    */
   readonly principalName?: string;
+  /**
+   * Stable identity of the principal (OIDC `sub` or DB API-key id); absent for
+   * static env keys, where `principalName` is stable. Used by controls that must
+   * distinguish operators (e.g. the two-person policy-approval self-approval
+   * check), which must NOT rely on the mutable display name.
+   */
+  readonly principalId?: string;
   readonly projectId?: string;
   readonly environment?: string;
   readonly allowedUserTypes?: readonly string[];

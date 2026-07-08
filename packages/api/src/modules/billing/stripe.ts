@@ -46,6 +46,13 @@ export interface StripeCheckoutSession {
   amount_total?: number | null;
   /** ISO-4217 currency of amount_total (lowercase, e.g. "usd"). */
   currency?: string | null;
+  /**
+   * "paid" | "unpaid" | "no_payment_required". For asynchronous payment methods
+   * (ACH, SEPA, boleto) `checkout.session.completed` fires with "unpaid" — funds
+   * have NOT cleared — and `checkout.session.async_payment_succeeded` fires later
+   * once they do. Credits must only be granted when this is not "unpaid".
+   */
+  payment_status?: string | null;
 }
 
 export interface StripeSubscription {
@@ -66,6 +73,9 @@ export interface StripeInvoice {
 export interface StripeEvent {
   id: string;
   type: string;
+  /** Unix seconds when Stripe generated the event; stable across redeliveries.
+   *  Used to order customer.subscription.* events (skip stale retries). */
+  created?: number;
   data: { object: Record<string, unknown> };
 }
 

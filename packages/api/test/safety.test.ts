@@ -75,6 +75,36 @@ describe("CompositeGuard", () => {
     expect(r.blockReason).toBe("pii_detected");
   });
 
+  const WITH_IMAGE = [
+    {
+      role: "user" as const,
+      content: [
+        { type: "text" as const, text: "describe this" },
+        { type: "image_url" as const, image_url: { url: "data:image/png;base64,AAAA" } },
+      ],
+    },
+  ];
+
+  it("fails closed on an unscanned image under pii=block", async () => {
+    const g = new CompositeGuard(maskingPii, cleanInjection);
+    const r = await g.inspectInput(WITH_IMAGE, plan({ pii: "block", promptInjection: "off" }));
+    expect(r.action).toBe("block");
+    expect(r.blockReason).toBe("unscanned_image");
+  });
+
+  it("fails closed on an unscanned image under prompt_injection=block", async () => {
+    const g = new CompositeGuard(cleanPii, cleanInjection);
+    const r = await g.inspectInput(WITH_IMAGE, plan({ pii: "off", promptInjection: "block" }));
+    expect(r.action).toBe("block");
+    expect(r.blockReason).toBe("unscanned_image");
+  });
+
+  it("allows an image when neither pii nor injection is in block mode", async () => {
+    const g = new CompositeGuard(maskingPii, cleanInjection);
+    const r = await g.inspectInput(WITH_IMAGE, plan({ pii: "mask", promptInjection: "off" }));
+    expect(r.action).toBe("allow");
+  });
+
   it("blocks on detected prompt injection", async () => {
     const g = new CompositeGuard(cleanPii, flaggingInjection);
     const r = await g.inspectInput(USER, plan());

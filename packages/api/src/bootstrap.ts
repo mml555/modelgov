@@ -387,6 +387,20 @@ export function createAuthProviders(env: Env, pool: Pool): AuthProviders {
         "OIDC_AUDIENCE is unset (OIDC_AUDIENCE_OPTIONAL=true) — tokens minted for other audiences at the same IdP will pass verification. Set OIDC_AUDIENCE to enforce audience binding.",
       );
     }
+    // Without a role map, IdP claim values become modelgov role names verbatim —
+    // an IdP group named "owner" would grant the owner role. Production must map
+    // explicitly (mirrored in productionPostureChecks so `doctor production`
+    // reports it); dev warns.
+    if (!roleMap) {
+      if (env.MODELGOV_PRODUCTION === "true") {
+        throw new Error(
+          'OIDC_ROLE_MAP is required when operator SSO is enabled in production — without it an IdP group named "owner" grants the owner role. Map IdP groups explicitly, e.g. {"platform-admins":"owner"}.',
+        );
+      }
+      console.warn(
+        "OIDC_ROLE_MAP is unset — IdP role/group claim values are treated as modelgov role names verbatim (an IdP group named 'owner' grants owner). Set OIDC_ROLE_MAP to map IdP groups to roles explicitly.",
+      );
+    }
     console.log(`operator SSO enabled (OIDC issuer ${env.OIDC_ISSUER})`);
   }
 

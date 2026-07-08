@@ -4,6 +4,7 @@ import { z } from "zod";
 import { withTransaction } from "../../db/pool";
 import { sendError } from "../../errors";
 import type { RequestContext } from "../../plugins/requestContext";
+import { resolveControlPlaneTenant } from "../authz/scope";
 import { appendAuditInTransaction } from "../audit/repo";
 import { errorJsonSchema } from "../chat/schemas";
 import {
@@ -95,7 +96,10 @@ function authorizeKeyCreation(
 ):
   | { ok: true; tenantId?: string }
   | { ok: false; status: number; code: string; message: string } {
-  if (ctx.tenantId !== undefined && body.tenantId !== undefined && body.tenantId !== ctx.tenantId) {
+  // An unbound admin without tenant:switch is confined to the default partition,
+  // so it can only mint keys there — not plant a key in an arbitrary tenant.
+  const callerTenant = resolveControlPlaneTenant(ctx);
+  if (callerTenant !== undefined && body.tenantId !== undefined && body.tenantId !== callerTenant) {
     return {
       ok: false,
       status: 403,
@@ -120,7 +124,7 @@ function authorizeKeyCreation(
       message: `cannot grant permissions the caller does not hold: ${escalated.join(", ")}`,
     };
   }
-  return { ok: true, tenantId: ctx.tenantId ?? body.tenantId };
+  return { ok: true, tenantId: callerTenant ?? body.tenantId };
 }
 
 export function registerKeysRoutes(
@@ -208,7 +212,7 @@ export function registerKeysRoutes(
     const items = await listApiKeys(pool, {
       includeRevoked: query.includeRevoked === true,
       projectId: query.projectId,
-      tenantId: request.ctx.tenantId,
+      tenantId: resolveControlPlaneTenant(request.ctx),
     });
     return reply.send({ items });
   });
@@ -231,7 +235,7 @@ export function registerKeysRoutes(
 
     const id = (request.params as { id: string }).id;
     if (!UUID_RE.test(id)) return sendError(reply, 404, "not_found", {}, "Key not found");
-    const record = await getApiKeyById(pool, id, request.ctx.tenantId);
+    const record = await getApiKeyById(pool, id, resolveControlPlaneTenant(request.ctx));
     if (!record) return sendError(reply, 404, "not_found", {}, "Key not found");
     return reply.send(record);
   });
@@ -255,7 +259,7 @@ export function registerKeysRoutes(
     const id = (request.params as { id: string }).id;
     if (!UUID_RE.test(id)) return sendError(reply, 404, "not_found", {}, "Key not found");
     const issued = await withTransaction(pool, async (client) => {
-      const rotated = await rotateApiKey(client, id, request.ctx.tenantId);
+      const rotated = await rotateApiKey(client, id, resolveControlPlaneTenant(request.ctx));
       if (!rotated) return null;
       await appendAuditInTransaction(client, {
         actor: request.ctx.principalName ?? "unknown",
@@ -290,7 +294,7 @@ export function registerKeysRoutes(
     const id = (request.params as { id: string }).id;
     if (!UUID_RE.test(id)) return sendError(reply, 404, "not_found", {}, "Key not found");
     const ok = await withTransaction(pool, async (client) => {
-      const revoked = await revokeApiKey(client, id, request.ctx.tenantId);
+      const revoked = await revokeApiKey(client, id, resolveControlPlaneTenant(request.ctx));
       if (!revoked) return false;
       await appendAuditInTransaction(client, {
         actor: request.ctx.principalName ?? "unknown",

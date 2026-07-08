@@ -81,6 +81,48 @@ describe.skipIf(!DATABASE_URL)("billing stripe webhooks + meter flush (integrati
     expect((await svc.getBalance("", "u_fx")).creditsUsd).toBeCloseTo(0, 6);
   });
 
+  it("defers the credit until an async payment clears, then grants once (N1)", async () => {
+    const secret = "whsec_async";
+    const svc = createBillingService(pool, { billing: config.billing, stripeWebhookSecret: secret })!;
+    // completed but payment_status "unpaid" (ACH not cleared) → no grant yet.
+    const unpaid = JSON.stringify({
+      id: "evt_async_pending",
+      type: "checkout.session.completed",
+      data: {
+        object: {
+          customer: "cus_async",
+          payment_status: "unpaid",
+          metadata: { user_id: "u_async", tenant_id: "", credits_usd: "7" },
+        },
+      },
+    });
+    await svc.handleStripeWebhook(Buffer.from(unpaid), signStripe(secret, unpaid));
+    expect((await svc.getBalance("", "u_async")).creditsUsd).toBeCloseTo(0, 6);
+
+    // Funds clear → async_payment_succeeded (payment_status "paid") → grant once.
+    const cleared = JSON.stringify({
+      id: "evt_async_cleared",
+      type: "checkout.session.async_payment_succeeded",
+      data: {
+        object: {
+          customer: "cus_async",
+          payment_status: "paid",
+          metadata: { user_id: "u_async", tenant_id: "", credits_usd: "7" },
+        },
+      },
+    });
+    await svc.handleStripeWebhook(Buffer.from(cleared), signStripe(secret, cleared));
+    expect((await svc.getBalance("", "u_async")).creditsUsd).toBeCloseTo(7, 6);
+  });
+
+  it("does not collapse admin top-ups for different users sharing an idempotency key (N2)", async () => {
+    const svc = createBillingService(pool, { billing: config.billing, stripeWebhookSecret: "whsec_x" })!;
+    await svc.adminTopUp({ tenantId: "", userId: "u_a", creditsUsd: 3, idempotencyKey: "june" });
+    await svc.adminTopUp({ tenantId: "", userId: "u_b", creditsUsd: 5, idempotencyKey: "june" });
+    expect((await svc.getBalance("", "u_a")).creditsUsd).toBeCloseTo(3, 6);
+    expect((await svc.getBalance("", "u_b")).creditsUsd).toBeCloseTo(5, 6);
+  });
+
   it("downgrades user_type on customer.subscription.deleted (H3)", async () => {
     const secret = "whsec_subdel";
     const subConfig = parseConfigObject({
@@ -109,6 +151,51 @@ describe.skipIf(!DATABASE_URL)("billing stripe webhooks + meter flush (integrati
     });
     await svc.handleStripeWebhook(Buffer.from(deleted), signStripe(secret, deleted));
     expect((await svc.getBalance("", "u_sub")).userType).toBe("free_user");
+  });
+
+  it("ignores a stale redelivered subscription event (ordering guard, H4)", async () => {
+    const secret = "whsec_order";
+    const subConfig = parseConfigObject({
+      ...RAW_CONFIG,
+      billing: {
+        provider: "stripe",
+        mode: "hybrid",
+        stripe: { plan_map: { price_pro: "paid_user" }, downgrade_user_type: "free_user" },
+      },
+    });
+    const svc = createBillingService(pool, { billing: subConfig.billing, stripeWebhookSecret: secret })!;
+    await topUpCreditsInTransaction(pool, { tenantId: "", userId: "u_ord", creditsUsd: 1, stripeCustomerId: "cus_ord" });
+
+    // 1) active @ t=1000 → paid.
+    const active = JSON.stringify({
+      id: "evt_active",
+      type: "customer.subscription.updated",
+      created: 1000,
+      data: { object: { customer: "cus_ord", status: "active", items: { data: [{ price: { id: "price_pro" } }] } } },
+    });
+    await svc.handleStripeWebhook(Buffer.from(active), signStripe(secret, active));
+    expect((await svc.getBalance("", "u_ord")).userType).toBe("paid_user");
+
+    // 2) deleted @ t=2000 → downgraded.
+    const deleted = JSON.stringify({
+      id: "evt_deleted",
+      type: "customer.subscription.deleted",
+      created: 2000,
+      data: { object: { customer: "cus_ord", status: "canceled", items: { data: [{ price: { id: "price_pro" } }] } } },
+    });
+    await svc.handleStripeWebhook(Buffer.from(deleted), signStripe(secret, deleted));
+    expect((await svc.getBalance("", "u_ord")).userType).toBe("free_user");
+
+    // 3) Stripe RE-DELIVERS the stale active @ t=1000 (different event id, older
+    //    created). It must be SKIPPED — a cancelled account must not re-upgrade.
+    const staleActive = JSON.stringify({
+      id: "evt_active_retry",
+      type: "customer.subscription.updated",
+      created: 1000,
+      data: { object: { customer: "cus_ord", status: "active", items: { data: [{ price: { id: "price_pro" } }] } } },
+    });
+    await svc.handleStripeWebhook(Buffer.from(staleActive), signStripe(secret, staleActive));
+    expect((await svc.getBalance("", "u_ord")).userType).toBe("free_user");
   });
 
   it("does not upgrade on an incomplete subscription (M3)", async () => {

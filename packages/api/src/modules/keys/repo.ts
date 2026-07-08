@@ -147,6 +147,25 @@ export async function createApiKey(
   return { record: rowToRecord(row), secret };
 }
 
+/**
+ * Tenant predicate for a control-plane key query. Three cases:
+ *  - `undefined`: platform operator with tenant:switch — no filter, all tenants.
+ *  - `""`: the default (untenanted) partition. api_keys stores such keys as NULL
+ *    (see migration 0014), so `= ''` would match nothing and silently hide a
+ *    default-partition admin's own keys — match NULL (and tolerate any '').
+ *  - a tenant id: that tenant only.
+ * `nextParamIndex` is the positional-parameter number the tenant value would
+ * take when it is bound (callers pass the count after their fixed params).
+ */
+function keyTenantScope(
+  tenantId: string | undefined,
+  nextParamIndex: number,
+): { scope: string; params: string[] } {
+  if (tenantId === undefined) return { scope: "", params: [] };
+  if (tenantId === "") return { scope: " AND (tenant_id IS NULL OR tenant_id = '')", params: [] };
+  return { scope: ` AND tenant_id = $${nextParamIndex}`, params: [tenantId] };
+}
+
 export async function listApiKeys(
   pool: Queryable,
   opts: { includeRevoked?: boolean; projectId?: string; tenantId?: string } = {},
@@ -158,8 +177,11 @@ export async function listApiKeys(
     values.push(opts.projectId);
     conditions.push(`project_id = $${values.length}`);
   }
-  // A tenant-scoped admin only ever sees its own tenant's keys.
-  if (opts.tenantId !== undefined) {
+  // A tenant-scoped admin only ever sees its own tenant's keys; "" is the
+  // default (untenanted, NULL) partition, undefined is a platform operator.
+  if (opts.tenantId === "") {
+    conditions.push("(tenant_id IS NULL OR tenant_id = '')");
+  } else if (opts.tenantId !== undefined) {
     values.push(opts.tenantId);
     conditions.push(`tenant_id = $${values.length}`);
   }
@@ -181,13 +203,11 @@ export async function getApiKeyById(
   id: string,
   tenantId?: string,
 ): Promise<ApiKeyRecord | null> {
-  const { rows } =
-    tenantId === undefined
-      ? await pool.query<ApiKeyDbRow>(`SELECT ${SELECT_FIELDS} FROM api_keys WHERE id = $1`, [id])
-      : await pool.query<ApiKeyDbRow>(
-          `SELECT ${SELECT_FIELDS} FROM api_keys WHERE id = $1 AND tenant_id = $2`,
-          [id, tenantId],
-        );
+  const { scope, params } = keyTenantScope(tenantId, 2);
+  const { rows } = await pool.query<ApiKeyDbRow>(
+    `SELECT ${SELECT_FIELDS} FROM api_keys WHERE id = $1${scope}`,
+    [id, ...params],
+  );
   return rows[0] ? rowToRecord(rows[0]) : null;
 }
 
@@ -197,8 +217,8 @@ export async function revokeApiKey(
   id: string,
   tenantId?: string,
 ): Promise<boolean> {
-  const scope = tenantId === undefined ? "" : " AND tenant_id = $2";
-  const params = tenantId === undefined ? [id] : [id, tenantId];
+  const { scope, params: tenantParams } = keyTenantScope(tenantId, 2);
+  const params = [id, ...tenantParams];
   const { rowCount } = await pool.query(
     `UPDATE api_keys SET revoked_at = now()
      WHERE id = $1 AND revoked_at IS NULL${scope}`,
@@ -225,9 +245,8 @@ export async function rotateApiKey(
   tenantId?: string,
 ): Promise<IssuedApiKey | null> {
   const { secret, keyHash, keyPrefix } = generateApiKeySecret();
-  const scope = tenantId === undefined ? "" : " AND tenant_id = $4";
-  const params =
-    tenantId === undefined ? [id, keyHash, keyPrefix] : [id, keyHash, keyPrefix, tenantId];
+  const { scope, params: tenantParams } = keyTenantScope(tenantId, 4);
+  const params = [id, keyHash, keyPrefix, ...tenantParams];
   const { rows } = await pool.query<ApiKeyDbRow>(
     `UPDATE api_keys
        SET key_hash = $2, key_prefix = $3

@@ -171,6 +171,20 @@ describe("createModelgovClient", () => {
     expect(result.value?.requestId).toBe("req_9");
   });
 
+  it("chatStream raises a mid-stream error frame instead of ending silently", async () => {
+    const fetchImpl: typeof fetch = async () =>
+      new Response(
+        `data: ${JSON.stringify({ delta: "Hel" })}\n\n` +
+          `event: error\ndata: ${JSON.stringify({ code: "provider_unavailable", message: "Stream interrupted" })}\n\n`,
+        { status: 200, headers: { "content-type": "text/event-stream" } },
+      );
+    const client = createModelgovClient({ baseUrl: "http://api", apiKey: "k", fetchImpl });
+    const it = client.chatStream(baseRequest);
+    const first = await it.next();
+    expect(first.value).toBe("Hel");
+    await expect(it.next()).rejects.toMatchObject({ code: "provider_unavailable" });
+  });
+
   it("chatStream throws typed errors before streaming begins", async () => {
     const fetchImpl: typeof fetch = async () =>
       jsonResponse({ error: { code: "budget_exceeded", message: "x", details: {}, requestId: "r" } }, 403);

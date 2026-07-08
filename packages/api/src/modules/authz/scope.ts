@@ -118,6 +118,25 @@ export function resolveTenantScope(ctx: RequestContext): string {
 }
 
 /**
+ * Tenant partition a CONTROL-plane admin (keys, audit, emergency) must be
+ * confined to. Unlike the data-plane repos, the control-plane repos treat an
+ * `undefined` tenant as "no filter — every tenant". That all-tenants view must
+ * be reserved for a platform operator that holds `tenant:switch`; ANY other
+ * unbound operator (e.g. an OIDC `key-admin`/`viewer` with no tenant binding
+ * and no OIDC_TENANT_CLAIM) must be pinned to the default (untenanted) partition
+ * — the `""` sentinel — exactly like the data plane, so it cannot omit the
+ * `X-Modelgov-Tenant` header to reach other tenants' keys/audit/switches.
+ *
+ * A bound key, or an unbound key that switched via the header, already carries a
+ * concrete `ctx.tenantId` and is returned unchanged. Repos translate `""` to the
+ * default-partition storage convention for their table.
+ */
+export function resolveControlPlaneTenant(ctx: RequestContext): string | undefined {
+  if (ctx.tenantId !== undefined) return ctx.tenantId;
+  return ctx.permissions?.includes("tenant:switch") ? undefined : "";
+}
+
+/**
  * Tenant-bound keys must scope usage/requests reads to their tenant. Returns a
  * denial when an explicit query tenant disagrees with the key binding.
  */

@@ -105,6 +105,19 @@ export function registerChatRoute(
     const input = auth.value;
     const rawKey = request.headers["idempotency-key"];
     const idempotencyKey = readIdempotencyKey(rawKey);
+    // A present-but-unusable key (too long) must be a loud 400, not silently
+    // dropped — otherwise the client believes the call is idempotent while it
+    // runs unprotected, and a retry double-charges.
+    const rawKeyStr = Array.isArray(rawKey) ? rawKey[0] : rawKey;
+    if (rawKeyStr && rawKeyStr.trim() !== "" && !idempotencyKey) {
+      return sendError(
+        reply,
+        400,
+        "invalid_request",
+        {},
+        "Idempotency-Key must be between 1 and 255 characters",
+      );
+    }
 
     // Per-tenant policy resolution (MULTI_TENANT_POLICY): evaluate this request
     // against its tenant's active config version + stamp its policy identity.

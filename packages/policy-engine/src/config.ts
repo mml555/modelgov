@@ -1,6 +1,8 @@
 import { parse as parseYaml } from "yaml";
 import { z } from "zod";
 import { findUnpricedModels } from "./cost";
+import { providerOf } from "./routing";
+import { resolveSafetyPlan } from "./safety";
 import {
   PolicyConfigError,
   type ModelgovConfig,
@@ -13,12 +15,17 @@ import {
 
 const presetEnum = z.enum(["dev", "balanced", "strict", "custom"]);
 
+// .strict() for the same reason as the budget schemas: safety is a protection
+// control, so a misspelled key (e.g. `promptInjection` in camelCase, or a typo)
+// must be a loud config error, never silently dropped — a dropped protect key
+// would fall back to the preset default and can fail OPEN (injection/pii off).
 const protectSchema = z
   .object({
     pii: z.enum(["mask", "block", "off"]).optional(),
     pii_scope: z.enum(["input", "output", "both"]).optional(),
     prompt_injection: z.enum(["block", "off"]).optional(),
   })
+  .strict()
   .transform((p) => ({ pii: p.pii, piiScope: p.pii_scope, promptInjection: p.prompt_injection }));
 
 const projectSchema = z
@@ -73,11 +80,13 @@ const groundingEnum = z.enum(["off", "strict"]);
 
 const featureSafetySchema = z.union([
   presetEnum,
-  z.object({
-    preset: presetEnum.optional(),
-    protect: protectSchema.optional(),
-    grounding: groundingEnum.optional(),
-  }),
+  z
+    .object({
+      preset: presetEnum.optional(),
+      protect: protectSchema.optional(),
+      grounding: groundingEnum.optional(),
+    })
+    .strict(),
 ]);
 
 const featureSchema = z
@@ -112,6 +121,9 @@ const dataClassSchema = z
     allowed_model_classes: z.array(z.string()).optional(),
     allowed_providers: z.array(z.string()).optional(),
   })
+  // .strict(): a typo like `allowed_providrs` must fail loudly, not silently
+  // drop the restriction and let restricted-class data route to any provider.
+  .strict()
   .transform((d) => ({
     allowedModelClasses: d.allowed_model_classes,
     allowedProviders: d.allowed_providers,
@@ -240,6 +252,7 @@ const safetySchema = z
     injection_model: z.string().optional(),
     grounding: groundingEnum.optional(),
   })
+  .strict()
   .transform((s) => ({
     preset: s.preset,
     protect: s.protect ?? { pii: undefined, promptInjection: undefined },
@@ -356,6 +369,28 @@ function validateRefs(
       if (!config.modelClasses[mc]) {
         throw new PolicyConfigError(
           `data class '${cls}' allows unknown model_class '${mc}'`,
+          "invalid_config",
+        );
+      }
+    }
+  }
+
+  // A feature that hard-BLOCKS prompt injection sends its full text to the
+  // injection classifier's model BEFORE any block decision. For a data-class-
+  // restricted feature, that model's provider must itself be permitted by the
+  // class — otherwise restricted data is exfiltrated to an unapproved provider by
+  // the safety layer, bypassing the data-sovereignty gate the class enforces.
+  const injectionModel = config.safety.injectionModel;
+  if (injectionModel) {
+    const injectionProvider = providerOf(injectionModel);
+    for (const [name, feature] of Object.entries(config.features)) {
+      if (!feature.dataSensitivity) continue;
+      const dc = config.dataClasses?.[feature.dataSensitivity];
+      if (!dc?.allowedProviders) continue;
+      const plan = resolveSafetyPlan(config, feature);
+      if (plan.promptInjection === "block" && !dc.allowedProviders.includes(injectionProvider)) {
+        throw new PolicyConfigError(
+          `feature '${name}' has data_sensitivity '${feature.dataSensitivity}' (allowed providers: ${dc.allowedProviders.join(", ")}) but safety.injection_model '${injectionModel}' routes to provider '${injectionProvider}', which is not permitted — restricted data would be sent to an unapproved provider for injection screening`,
           "invalid_config",
         );
       }

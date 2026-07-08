@@ -19,6 +19,12 @@ env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}/modelgov-api
 
+# Explicit bash shell → `-o pipefail`, so any piped `run` step fails when its
+# left-hand command does (GitHub's default `bash -e {0}` omits pipefail).
+defaults:
+  run:
+    shell: bash
+
 jobs:
   build:
     runs-on: ubuntu-latest
