@@ -33,7 +33,16 @@ function estimateForModel(
   inputTokensEstimate: number | undefined,
   outputTokensForEstimate: number,
 ): number {
-  if (config.providers[providerOf(model)]?.billing === "subscription") return 0;
+  // A config-level `billing: subscription` provider reserves $0 USD — UNLESS the
+  // operator also set an explicit `pricing` override for the model, which wins
+  // (matching getModelPrice's override-first precedence, so a deliberately
+  // priced subscription model still enforces its USD budgets). Registry-based
+  // subscription providers (e.g. github_copilot) need no branch here:
+  // estimateCostUsd → getModelPrice already applies override → subscription-zero.
+  const hasPricingOverride = config.pricing?.[model] !== undefined;
+  if (!hasPricingOverride && config.providers[providerOf(model)]?.billing === "subscription") {
+    return 0;
+  }
   return estimateCostUsd(model, inputTokensEstimate, outputTokensForEstimate, config.pricing);
 }
 

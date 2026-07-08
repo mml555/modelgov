@@ -164,6 +164,31 @@ describe("custom pricing", () => {
     expect(findUnpricedModels(config)).not.toContain("myco/enterprise-llm");
   });
 
+  it("an explicit pricing override wins over `billing: subscription` (USD budgets enforced)", () => {
+    const config = parseConfigObject({
+      project: { name: "t", environment: "test" },
+      providers: { myco: { billing: "subscription" } },
+      budgets: {
+        global: { monthly_usd: 1000, hard_stop_at_percent: 100 },
+        by_user_type: { logged_in: { daily_usd: 0.5, daily_requests: 100, models: ["cheap"] } },
+      },
+      features: { chat: { safety: "dev", model_class: "cheap", max_tokens: 1000 } },
+      model_classes: { cheap: { primary: "myco/enterprise-llm" } },
+      safety: { preset: "dev" },
+      // Operator deliberately prices the subscription model → the override wins.
+      pricing: { "myco/enterprise-llm": { input_per_1k: 1, output_per_1k: 1 } },
+    });
+    // est = (500/1000)*1 + (1000/1000)*1 = 1.5 > daily_usd 0.5 → block (not $0).
+    const d = evaluateAiRequest({
+      request: { projectId: "p", environment: "test", userId: "u", userType: "logged_in", feature: "chat" },
+      config,
+      usage: ZERO,
+    });
+    expect(d.estimatedCostUsd).toBeCloseTo(1.5, 6);
+    expect(d.decision).toBe("block");
+    expect(d.reasonCode).toBe("daily_budget_exceeded");
+  });
+
   it("rejects negative prices", () => {
     expect(() =>
       parseConfigObject({
