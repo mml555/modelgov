@@ -105,4 +105,61 @@ describe("GET /v1/admin/providers/health", () => {
     // Two requests, but LiteLLM was hit only once (second served from cache).
     expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
+
+  it("re-fetches after the TTL expires", async () => {
+    // Fake only Date so the route's TTL check advances, without touching the
+    // real timers Fastify's inject relies on.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      const t0 = new Date("2026-01-01T00:00:00Z").getTime();
+      vi.setSystemTime(t0);
+      const fetchImpl = vi.fn(async () => new Response(JSON.stringify(litellmHealthBody), { status: 200 }));
+      const server = buildServer({
+        config,
+        pool: mockPool() as never,
+        litellm: { chat: async () => { throw new Error("unreached"); } },
+        safety: new NoopGuard(),
+        observability: new NoopObservability(),
+        logger: false,
+        apiKeys: [{ name: "viewer", key: "viewer-key", permissions: ["usage:read"] }],
+        health: { litellmBaseUrl: "http://litellm:4000", fetchImpl: fetchImpl as typeof fetch },
+      });
+      const call = () => server.inject({ method: "GET", url: "/v1/admin/providers/health", headers: { authorization: "Bearer viewer-key" } });
+      await call();
+      expect(fetchImpl).toHaveBeenCalledTimes(1);
+      vi.setSystemTime(t0 + 16_000); // past the 15s TTL
+      await call();
+      expect(fetchImpl).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("coalesces concurrent cache misses onto a single upstream call", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((r) => { release = r; });
+    const fetchImpl = vi.fn(async () => {
+      await gate; // hold all callers in the fetch until released
+      return new Response(JSON.stringify(litellmHealthBody), { status: 200 });
+    });
+    const server = buildServer({
+      config,
+      pool: mockPool() as never,
+      litellm: { chat: async () => { throw new Error("unreached"); } },
+      safety: new NoopGuard(),
+      observability: new NoopObservability(),
+      logger: false,
+      apiKeys: [{ name: "viewer", key: "viewer-key", permissions: ["usage:read"] }],
+      health: { litellmBaseUrl: "http://litellm:4000", fetchImpl: fetchImpl as typeof fetch },
+    });
+    const call = () => server.inject({ method: "GET", url: "/v1/admin/providers/health", headers: { authorization: "Bearer viewer-key" } });
+    const inflight = [call(), call(), call()];
+    // Let all three handlers reach `await providerHealthInFlight` before resolving.
+    await new Promise((r) => setImmediate(r));
+    release();
+    const results = await Promise.all(inflight);
+    expect(results.every((r) => r.statusCode === 200)).toBe(true);
+    // Three concurrent misses, one upstream call.
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
 });

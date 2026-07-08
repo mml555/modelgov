@@ -68,17 +68,26 @@ export function registerHealthRoute(app: FastifyInstance, deps: HealthDeps): voi
     );
   });
 
-  let providerHealthCache: { at: number; result: Awaited<ReturnType<typeof checkProviderHealth>> } | undefined;
+  type ProviderHealth = Awaited<ReturnType<typeof checkProviderHealth>>;
+  let providerHealthCache: { at: number; result: ProviderHealth } | undefined;
+  // Single-flight: coalesce concurrent cache-misses onto one upstream call so a
+  // burst of pollers (or the first poll after TTL expiry) can't each trigger a
+  // full LiteLLM /health fan-out before the cache is populated.
+  let providerHealthInFlight: Promise<ProviderHealth> | undefined;
   app.get("/v1/admin/providers/health", { schema: providerHealthSchema }, async (request, reply) => {
     if (!request.ctx.permissions?.includes("usage:read")) {
       return sendError(reply, 403, "forbidden", {}, "API key is not permitted to read provider health (requires usage:read)");
     }
-    const now = Date.now();
-    if (providerHealthCache && now - providerHealthCache.at < PROVIDER_HEALTH_CACHE_TTL_MS) {
+    if (providerHealthCache && Date.now() - providerHealthCache.at < PROVIDER_HEALTH_CACHE_TTL_MS) {
       return providerHealthCache.result;
     }
-    const result = await checkProviderHealth(deps);
-    providerHealthCache = { at: now, result };
+    if (!providerHealthInFlight) {
+      providerHealthInFlight = checkProviderHealth(deps).finally(() => {
+        providerHealthInFlight = undefined;
+      });
+    }
+    const result = await providerHealthInFlight;
+    providerHealthCache = { at: Date.now(), result };
     return result;
   });
 }
