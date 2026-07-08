@@ -15,6 +15,41 @@ guarantees in `docs/versioning.md` apply.
 
 ## [Unreleased]
 
+### Added
+
+- **First-class multi-provider support.** A new provider registry
+  (`@modelgov/policy-engine`'s `providers.ts`) is the single source of truth for
+  each provider's auth style, billing style, credential env vars, and built-in
+  prices. Adds turnkey support (built-in pricing + wizard presets + docs) for
+  **AWS Bedrock, Google Vertex, Mistral, Groq, xAI (Grok), DeepSeek, Cohere, and
+  GitHub Copilot**, alongside the existing OpenAI/Anthropic/Gemini/OpenRouter/
+  Azure/Azure AI Foundry. Any LiteLLM-backed provider still works; these are just
+  wired end-to-end.
+- **Subscription billing semantics.** Providers billed per-seat (GitHub Copilot,
+  or any provider marked `providers.<id>: { billing: subscription }`) reserve
+  **$0 USD** — they have no per-token cost — while **token and request budgets**
+  still enforce. Recognized automatically for `github_copilot` via the registry.
+- **Widened `providers:` schema.** Provider entries accept `api_base`,
+  `api_version`, `region`, `project`, `location`, `auth`, and `billing` (all
+  optional; existing `{ api_key }` configs are unchanged). `.strict()` so a
+  misspelled key is a loud error.
+- **`GET /v1/admin/providers/health`** (requires `usage:read`) surfaces the
+  LiteLLM proxy's per-model health (which provider/model is up/down, with the
+  provider error). Read-only; does not affect the `/ready` gate.
+- **`create-modelgov` wizard** now offers all registered providers and generates
+  the correct LiteLLM `litellm_params` per auth kind (AWS creds for Bedrock,
+  `vertex_project`/`vertex_location` for Vertex, model-only for Copilot's OAuth
+  device flow, `api_key` for the rest).
+
+### Changed
+
+- The env-credential allowlist for `providers.*` `env/VAR` refs now also admits
+  the credential vars of any **registered provider** (e.g. `AWS_ACCESS_KEY_ID`,
+  `GOOGLE_APPLICATION_CREDENTIALS`, `AZURE_API_BASE`, `GITHUB_COPILOT_TOKEN`) in
+  addition to the `*_KEY` suffix and `MODELGOV_POLICY_ENV_ALLOWLIST`. Gateway
+  secrets remain always-denied. `modelgov validate --production` now checks every
+  `env/` credential ref on a provider (not just `api_key`).
+
 ### ⚠ Breaking
 
 - **`image_url` in chat/vision content is restricted to `data:` and `https:`

@@ -106,6 +106,28 @@ describe("resolveEnvRefs allowlist (F3)", () => {
     const resolved = resolveEnvRefs(withProviderKey("env/MY_TOKEN"), { MY_TOKEN: "tok" });
     expect(resolved.providers.openai?.apiKey).toBe("tok");
   });
+
+  it("resolves known provider credential vars that don't end in _KEY", () => {
+    // These are non-_KEY names the registry marks as provider credentials, so
+    // they resolve without needing MODELGOV_POLICY_ENV_ALLOWLIST.
+    for (const [varName, value] of [
+      ["AWS_ACCESS_KEY_ID", "AKIA..."],
+      ["AWS_SESSION_TOKEN", "sess..."],
+      ["AWS_REGION_NAME", "us-east-1"],
+      ["GOOGLE_APPLICATION_CREDENTIALS", "/etc/gcp.json"],
+      ["AZURE_API_BASE", "https://x.openai.azure.com"],
+      ["AZURE_API_VERSION", "2024-08-01-preview"],
+      ["GITHUB_COPILOT_TOKEN", "ghu_..."],
+    ] as const) {
+      const resolved = resolveEnvRefs(withProviderKey(`env/${varName}`), { [varName]: value });
+      expect(resolved.providers.openai?.apiKey).toBe(value);
+    }
+  });
+
+  it("still refuses an unknown non-_KEY var not in the registry", () => {
+    const resolved = resolveEnvRefs(withProviderKey("env/RANDOM_VALUE"), { RANDOM_VALUE: "x" });
+    expect(resolved.providers.openai?.apiKey).toBeUndefined();
+  });
 });
 
 describe("loadConfigFromFile", () => {

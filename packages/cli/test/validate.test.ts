@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { resolve } from "node:path";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 import { validateConfig } from "../src/validate.js";
 import { runPolicyTestFile } from "../src/testPolicy.js";
 
@@ -21,6 +23,33 @@ describe("modelgov validate", () => {
     });
     expect(result.ok).toBe(false);
     expect(result.issues.some((i) => i.code === "missing_provider_key")).toBe(true);
+  });
+
+  it("flags a missing non-api_key provider env ref (e.g. Azure api_base)", () => {
+    const dir = mkdtempSync(join(tmpdir(), "modelgov-validate-"));
+    const path = join(dir, "modelgov.yaml");
+    writeFileSync(
+      path,
+      [
+        "project: { name: t, environment: production }",
+        "providers:",
+        "  azure:",
+        "    api_key: env/AZURE_API_KEY",
+        "    api_base: env/AZURE_API_BASE",
+        "budgets:",
+        "  global: { monthly_usd: 100, alert_at_percent: 80, hard_stop_at_percent: 100 }",
+        "  by_user_type: { logged_in: { daily_usd: 1, daily_requests: 10, models: [cheap] } }",
+        "features: { chat: { safety: balanced, model_class: cheap, max_tokens: 500 } }",
+        "model_classes: { cheap: { primary: azure/gpt-4o-mini } }",
+        "safety: { preset: balanced, injection_model: azure/gpt-4o-mini }",
+        "",
+      ].join("\n"),
+    );
+    // Only the api_key is set; the api_base env ref is missing → flagged.
+    const result = validateConfig({ configPath: path, production: true, env: { AZURE_API_KEY: "x" } });
+    const missing = result.issues.filter((i) => i.code === "missing_provider_key");
+    expect(missing.some((i) => i.message.includes("AZURE_API_BASE"))).toBe(true);
+    expect(missing.some((i) => i.message.includes("AZURE_API_KEY"))).toBe(false);
   });
 
   it("resolves relative config paths from the original pnpm cwd", () => {

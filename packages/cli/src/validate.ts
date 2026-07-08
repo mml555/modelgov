@@ -134,10 +134,22 @@ function validateProduction(
     });
   }
 
+  // Validate every `env/VAR` credential ref an operator explicitly wrote on a
+  // provider (api_key, but also api_base/region/etc. for non-api_key providers).
+  // We only check refs written into modelgov.yaml — in the proxy deployment
+  // LiteLLM reads provider creds from its own env, which modelgov can't see, so
+  // absence of a ref is not itself an error.
   for (const [providerName, provider] of Object.entries(config.providers)) {
-    const ref = provider.apiKey;
-    if (!ref) continue;
-    if (ref.startsWith("env/")) {
+    const refs = [
+      provider.apiKey,
+      provider.apiBase,
+      provider.apiVersion,
+      provider.region,
+      provider.project,
+      provider.location,
+    ];
+    for (const ref of refs) {
+      if (!ref?.startsWith("env/")) continue;
       const varName = ref.slice(4);
       if (!env[varName]) {
         issues.push({

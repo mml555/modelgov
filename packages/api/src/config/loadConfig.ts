@@ -1,5 +1,10 @@
 import { readFileSync } from "node:fs";
-import { findUnpricedModels, parseConfig, type ModelgovConfig } from "@modelgov/policy-engine";
+import {
+  findUnpricedModels,
+  parseConfig,
+  providerCredentialEnvVars,
+  type ModelgovConfig,
+} from "@modelgov/policy-engine";
 
 const ENV_PREFIX = "env/";
 
@@ -8,9 +13,16 @@ const ENV_PREFIX = "env/";
 // e.g. env/STRIPE_SECRET_KEY or env/DATABASE_URL and — the moment any future
 // endpoint echoes provider config — exfiltrate it. Default policy: names ending
 // in _KEY are allowed (OPENAI_API_KEY, ANTHROPIC_API_KEY, AZURE_OPENAI_KEY, a
-// custom MY_OPENAI_KEY, ...); an explicit allowlist can add others (e.g. a
-// *_TOKEN); and a hardcoded set of known gateway secrets is always denied even
-// when it would otherwise match the suffix.
+// custom MY_OPENAI_KEY, ...); credential vars of any registered provider are
+// allowed even when they don't end in _KEY (Bedrock AWS_ACCESS_KEY_ID/
+// AWS_SESSION_TOKEN/AWS_REGION_NAME, Vertex GOOGLE_APPLICATION_CREDENTIALS,
+// Azure AZURE_API_BASE/AZURE_API_VERSION, Copilot GITHUB_COPILOT_TOKEN); an
+// explicit allowlist can add still more; and a hardcoded set of known gateway
+// secrets is always denied even when it would otherwise match. (Note: this only
+// gates env/VAR refs written into modelgov.yaml — in the proxy deployment
+// LiteLLM reads provider creds from its own environment, not through here.)
+const PROVIDER_CRED_VARS = new Set(providerCredentialEnvVars());
+
 const GATEWAY_SECRET_DENY = new Set([
   "DATABASE_URL",
   "DATABASE_SSL_CA",
@@ -32,8 +44,9 @@ export function setPolicyEnvRefAllowlist(names: readonly string[]): void {
   explicitEnvRefAllow = new Set(names.map((n) => n.trim()).filter(Boolean));
 }
 function envRefAllowed(varName: string): boolean {
-  if (GATEWAY_SECRET_DENY.has(varName)) return false;
+  if (GATEWAY_SECRET_DENY.has(varName)) return false; // deny always wins
   if (explicitEnvRefAllow.has(varName)) return true;
+  if (PROVIDER_CRED_VARS.has(varName)) return true; // known provider credential
   return varName.endsWith("_KEY");
 }
 

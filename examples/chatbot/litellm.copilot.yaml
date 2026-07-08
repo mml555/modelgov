@@ -1,0 +1,21 @@
+# Route the chatbot's model names through GitHub Copilot.
+#
+# Auth: Copilot uses an OAuth device flow that LiteLLM performs on first use. For
+# a headless proxy, do the device login once and reuse the cached token — mount
+# ~/.config/litellm/github_copilot/ into the container, or set GITHUB_COPILOT_TOKEN
+# in .env. See docs/providers.md#github-copilot-subscription.
+#
+# Billing: Copilot is a per-seat subscription — there is NO per-token cost, so
+# Modelgov reserves $0 USD for github_copilot/* models. Govern it with token and
+# request budgets in modelgov.yaml (daily_requests / daily_tokens), not USD.
+model_list:
+  - model_name: openai/gpt-4o-mini
+    litellm_params:
+      model: github_copilot/gpt-4o-mini
+  - model_name: openai/gpt-4o
+    litellm_params:
+      model: github_copilot/gpt-4o
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY
+litellm_settings:
+  drop_params: true

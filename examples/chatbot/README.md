@@ -71,6 +71,16 @@ LITELLM_CONFIG=./litellm.azure.yaml
 AZURE_API_KEY=...
 AZURE_API_BASE=https://<resource>.openai.azure.com
 AZURE_API_VERSION=2024-08-01-preview
+
+# …or AWS Bedrock (Claude on Bedrock)
+LITELLM_CONFIG=./litellm.bedrock.yaml
+AWS_ACCESS_KEY_ID=...
+AWS_SECRET_ACCESS_KEY=...
+AWS_REGION_NAME=us-east-1
+
+# …or GitHub Copilot (per-seat subscription — govern with token/request budgets,
+# not USD; see docs/providers.md#github-copilot-subscription)
+LITELLM_CONFIG=./litellm.copilot.yaml
 ```
 
 Then `docker compose up`. Budgets/tokens/limits behave identically. (If you

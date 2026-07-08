@@ -54,23 +54,47 @@ Keys use **snake_case** in YAML; the policy engine normalizes to camelCase inter
 
 ## `providers`
 
-Maps provider id → credentials reference. The API resolves `env/VAR_NAME` to the
-process environment at startup.
+Maps provider id → credentials + metadata. The API resolves `env/VAR_NAME` to the
+process environment at startup. Fields (all optional):
+
+| Field | Purpose |
+| --- | --- |
+| `api_key` | Credential ref for API-key providers (OpenAI, Anthropic, Mistral, …) |
+| `api_base` | Endpoint base (Azure/OpenAI-compatible) |
+| `api_version` | API version (Azure) |
+| `region` | Cloud region (Bedrock) |
+| `project`, `location` | GCP project/region (Vertex) |
+| `auth` | `api_key` \| `aws` \| `gcp` \| `oauth_device` \| `local` — informational; LiteLLM performs auth |
+| `billing` | `per_token` (default) \| `subscription` |
 
 > **Security (since 1.2.0):** `env/VAR` only resolves variable names ending in
-> `_KEY` (plus any listed in `MODELGOV_POLICY_ENV_ALLOWLIST`). Gateway secrets
-> such as `DATABASE_URL`, `STRIPE_SECRET_KEY`, and `LITELLM_MASTER_KEY` are
-> always denied — a denied reference resolves to no credential rather than
-> leaking the secret into the config object. This applies to **every** config
-> source (file on disk and versioned policy store alike), so a `policy:write`
-> operator cannot exfiltrate a gateway secret through a provider
-> `api_key: env/VAR` reference.
+> `_KEY`, credential vars of a **registered provider** (e.g. `AWS_ACCESS_KEY_ID`,
+> `GOOGLE_APPLICATION_CREDENTIALS`, `AZURE_API_BASE`, `GITHUB_COPILOT_TOKEN`), or
+> any name listed in `MODELGOV_POLICY_ENV_ALLOWLIST`. Gateway secrets such as
+> `DATABASE_URL`, `STRIPE_SECRET_KEY`, and `LITELLM_MASTER_KEY` are always denied
+> — a denied reference resolves to no credential rather than leaking the secret.
+> This applies to **every** config source (file on disk and versioned policy
+> store alike), so a `policy:write` operator cannot exfiltrate a gateway secret
+> through a provider `env/VAR` reference. (In the LiteLLM-proxy deployment the
+> proxy reads provider creds from its own env; this gate is for the modelgov.yaml
+> `providers:` refs.)
 
 ```yaml
 providers:
   openai:
     api_key: env/OPENAI_API_KEY
+  bedrock:
+    auth: aws                    # creds live in LiteLLM's env, not here
+  github_copilot:
+    auth: oauth_device
+    billing: subscription        # reserve $0 USD; enforce token/request budgets
 ```
+
+**`billing: subscription`** marks a per-seat provider so its models reserve **$0
+USD** (token and request budgets still enforce). Built-in subscription providers
+(`github_copilot`) are recognized automatically; set this only for a
+custom/self-hosted subscription gateway. See
+[providers.md](./providers.md#github-copilot-subscription).
 
 The pure policy engine never reads API keys.
 
@@ -188,15 +212,15 @@ model_classes:
 
 ## `pricing` (optional — custom token prices)
 
-Modelgov ships a built-in price table for common OpenAI/Anthropic/Gemini models.
-For anything it doesn't know — **OpenRouter**, **Azure** deployments, self-hosted
-models you bill internally, or a negotiated rate — declare the price so budget
-estimates (and the settled-cost fallback) are accurate:
+Modelgov ships a built-in price table for common OpenAI/Anthropic/Gemini/Azure
+(Azure OpenAI + Azure AI Foundry) models. For anything it doesn't know — **OpenRouter**, **custom Azure**
+deployments, self-hosted models you bill internally, or a negotiated rate —
+declare the price so budget estimates (and the settled-cost fallback) are accurate:
 
 ```yaml
 pricing:                                   # USD per 1K tokens, keyed by model string
   "openrouter/anthropic/claude-3.5-sonnet": { input_per_1k: 0.003, output_per_1k: 0.015 }
-  "azure/gpt-4o-mini":                       { input_per_1k: 0.00015, output_per_1k: 0.0006 }
+  "azure/my-custom-deployment":            { input_per_1k: 0.00015, output_per_1k: 0.0006 }
 ```
 
 - Overrides the built-in table for that model; extends it for unknown models.

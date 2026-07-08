@@ -1,6 +1,7 @@
 import { estimateCostUsd, estimateTokens, roundUsd } from "./cost";
 import {
   nextPermittedCheaperClass,
+  providerOf,
   resolveModelInfo,
 } from "./routing";
 import { resolveSafetyPlan } from "./safety";
@@ -18,6 +19,23 @@ import {
   type UsageSnapshot,
   type UserTypeBudget,
 } from "./types";
+
+/**
+ * Worst-case USD estimate for a model, honoring subscription billing. Models on
+ * a registry subscription provider (e.g. Copilot) are already zeroed inside
+ * `getModelPrice`; this additionally zeroes a model whose provider an operator
+ * marked `billing: subscription` in `providers:` (custom/self-hosted gateways),
+ * so USD is not reserved for it — token/request budgets still enforce.
+ */
+function estimateForModel(
+  config: ModelgovConfig,
+  model: string,
+  inputTokensEstimate: number | undefined,
+  outputTokensForEstimate: number,
+): number {
+  if (config.providers[providerOf(model)]?.billing === "subscription") return 0;
+  return estimateCostUsd(model, inputTokensEstimate, outputTokensForEstimate, config.pricing);
+}
 
 /**
  * The core IP. Pure and deterministic — no I/O, no clock, no randomness. Given
@@ -164,11 +182,11 @@ export function evaluateAiRequest(input: EvaluateInput): PolicyDecision {
   }
 
   // ── Budget gates (block on any breach) ─────────────────────────────────────
-  const estimate = estimateCostUsd(
+  const estimate = estimateForModel(
+    config,
     model,
     request.inputTokensEstimate,
     outputTokensForEstimate,
-    config.pricing,
   );
 
   if (usage.userDailyRequestsUsed + 1 > userBudget.dailyRequests) {
@@ -338,11 +356,11 @@ function buildDecision(ctx: BuildCtx, args: BuildArgs): PolicyDecision {
     args.effectiveClass,
     args.useFallback,
   );
-  const estimatedCostUsd = estimateCostUsd(
+  const estimatedCostUsd = estimateForModel(
+    config,
     model,
     ctx.inputTokensEstimate,
     ctx.outputTokensForEstimate,
-    config.pricing,
   );
   const estimatedTokens = estimateTokens(ctx.inputTokensEstimate, ctx.outputTokensForEstimate);
 

@@ -46,6 +46,29 @@ export interface ProjectConfig {
 export interface ProviderConfig {
   /** Resolved by the API layer (env/VAR). The pure engine never reads it. */
   apiKey?: string;
+  /** Azure/OpenAI-compatible endpoint base (also `env/VAR`-resolvable). */
+  apiBase?: string;
+  /** Azure API version, e.g. "2024-08-01-preview". */
+  apiVersion?: string;
+  /** Cloud region (Bedrock). */
+  region?: string;
+  /** GCP project (Vertex). */
+  project?: string;
+  /** GCP location/region (Vertex). */
+  location?: string;
+  /**
+   * Auth style, mirroring the provider registry's AuthKind. Informational for
+   * the proxy deployment (LiteLLM performs auth); used by validation/wizard.
+   */
+  auth?: "api_key" | "aws" | "gcp" | "oauth_device" | "local";
+  /**
+   * Billing style. `subscription` marks a per-seat provider (e.g. a self-hosted
+   * Copilot-style gateway) so the engine reserves $0 USD for its models and
+   * governs them with token/request budgets only. Built-in subscription
+   * providers (github_copilot) are recognized automatically via the registry;
+   * this override is for custom/unknown providers.
+   */
+  billing?: "per_token" | "subscription";
 }
 
 export interface GlobalBudget {
