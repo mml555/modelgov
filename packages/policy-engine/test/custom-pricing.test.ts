@@ -57,6 +57,138 @@ describe("custom pricing", () => {
     expect(findUnpricedModels(config)).not.toContain("azure/my-deployment");
   });
 
+  it("built-in Azure deployment names are not reported as unpriced", () => {
+    const config = parseConfigObject({
+      project: { name: "t", environment: "test" },
+      budgets: { global: { monthly_usd: 100, hard_stop_at_percent: 100 }, by_user_type: { u: { daily_usd: 1, daily_requests: 1, models: ["cheap"] } } },
+      features: { f: { model_class: "cheap", max_tokens: 10, safety: "dev" } },
+      model_classes: { cheap: { primary: "azure/gpt-4o-mini" } },
+      safety: { preset: "dev" },
+    });
+    expect(findUnpricedModels(config)).not.toContain("azure/gpt-4o-mini");
+    expect(getModelPrice("azure/gpt-4o-mini").inputPer1k).toBe(0.00015);
+  });
+
+  it("built-in Azure AI Foundry model names are not reported as unpriced", () => {
+    const config = parseConfigObject({
+      project: { name: "t", environment: "test" },
+      budgets: { global: { monthly_usd: 100, hard_stop_at_percent: 100 }, by_user_type: { u: { daily_usd: 1, daily_requests: 1, models: ["premium"] } } },
+      features: { f: { model_class: "premium", max_tokens: 10, safety: "dev" } },
+      model_classes: { premium: { primary: "azure_ai/claude-opus-4-1" } },
+      safety: { preset: "dev" },
+    });
+    expect(findUnpricedModels(config)).not.toContain("azure_ai/claude-opus-4-1");
+    expect(getModelPrice("azure_ai/gpt-4o").inputPer1k).toBe(0.0025);
+  });
+
+  it("subscription provider (Copilot) reserves $0 USD but still enforces request + token budgets", () => {
+    const base = {
+      project: { name: "t", environment: "test" },
+      features: { chat: { safety: "dev", model_class: "cheap", max_tokens: 1000 } },
+      model_classes: { cheap: { primary: "github_copilot/gpt-4o-mini" } },
+      safety: { preset: "dev" },
+    } as const;
+
+    // Tiny USD cap that ANY per-token model would blow through — Copilot must not,
+    // because it reserves $0 USD.
+    const usd = parseConfigObject({
+      ...base,
+      budgets: {
+        global: { monthly_usd: 1000, hard_stop_at_percent: 100 },
+        by_user_type: { logged_in: { daily_usd: 0.0000001, daily_requests: 100, models: ["cheap"] } },
+      },
+    });
+    const allowed = evaluateAiRequest({
+      request: { projectId: "p", environment: "test", userId: "u", userType: "logged_in", feature: "chat", inputTokensEstimate: 5000 },
+      config: usd,
+      usage: ZERO,
+    });
+    expect(allowed.decision).toBe("allow");
+    expect(allowed.estimatedCostUsd).toBe(0);
+    // Tokens are still estimated/reserved even though USD is zero.
+    expect(allowed.estimatedTokens).toBeGreaterThan(0);
+
+    // A request-count cap still blocks it.
+    const req = parseConfigObject({
+      ...base,
+      budgets: {
+        global: { monthly_usd: 1000, hard_stop_at_percent: 100 },
+        by_user_type: { logged_in: { daily_usd: 100, daily_requests: 5, models: ["cheap"] } },
+      },
+    });
+    const overReq = evaluateAiRequest({
+      request: { projectId: "p", environment: "test", userId: "u", userType: "logged_in", feature: "chat" },
+      config: req,
+      usage: { ...ZERO, userDailyRequestsUsed: 5 },
+    });
+    expect(overReq.decision).toBe("block");
+    expect(overReq.reasonCode).toBe("daily_request_limit_reached");
+
+    // A per-user token cap still blocks it.
+    const tok = parseConfigObject({
+      ...base,
+      budgets: {
+        global: { monthly_usd: 1000, hard_stop_at_percent: 100 },
+        by_user_type: { logged_in: { daily_usd: 100, daily_requests: 100, daily_tokens: 100, models: ["cheap"] } },
+      },
+    });
+    const overTok = evaluateAiRequest({
+      request: { projectId: "p", environment: "test", userId: "u", userType: "logged_in", feature: "chat", inputTokensEstimate: 5000 },
+      config: tok,
+      usage: ZERO,
+    });
+    expect(overTok.decision).toBe("block");
+    expect(overTok.reasonCode).toBe("daily_token_limit_reached");
+  });
+
+  it("provider `billing: subscription` override zeroes USD for a custom provider", () => {
+    const config = parseConfigObject({
+      project: { name: "t", environment: "test" },
+      providers: { myco: { billing: "subscription" } },
+      budgets: {
+        global: { monthly_usd: 1000, hard_stop_at_percent: 100 },
+        by_user_type: { logged_in: { daily_usd: 0.0000001, daily_requests: 100, models: ["cheap"] } },
+      },
+      features: { chat: { safety: "dev", model_class: "cheap", max_tokens: 1000 } },
+      model_classes: { cheap: { primary: "myco/enterprise-llm" } },
+      safety: { preset: "dev" },
+    });
+    const d = evaluateAiRequest({
+      request: { projectId: "p", environment: "test", userId: "u", userType: "logged_in", feature: "chat", inputTokensEstimate: 5000 },
+      config,
+      usage: ZERO,
+    });
+    expect(d.decision).toBe("allow");
+    expect(d.estimatedCostUsd).toBe(0);
+    // Not flagged as unpriced despite having no price table entry.
+    expect(findUnpricedModels(config)).not.toContain("myco/enterprise-llm");
+  });
+
+  it("an explicit pricing override wins over `billing: subscription` (USD budgets enforced)", () => {
+    const config = parseConfigObject({
+      project: { name: "t", environment: "test" },
+      providers: { myco: { billing: "subscription" } },
+      budgets: {
+        global: { monthly_usd: 1000, hard_stop_at_percent: 100 },
+        by_user_type: { logged_in: { daily_usd: 0.5, daily_requests: 100, models: ["cheap"] } },
+      },
+      features: { chat: { safety: "dev", model_class: "cheap", max_tokens: 1000 } },
+      model_classes: { cheap: { primary: "myco/enterprise-llm" } },
+      safety: { preset: "dev" },
+      // Operator deliberately prices the subscription model → the override wins.
+      pricing: { "myco/enterprise-llm": { input_per_1k: 1, output_per_1k: 1 } },
+    });
+    // est = (500/1000)*1 + (1000/1000)*1 = 1.5 > daily_usd 0.5 → block (not $0).
+    const d = evaluateAiRequest({
+      request: { projectId: "p", environment: "test", userId: "u", userType: "logged_in", feature: "chat" },
+      config,
+      usage: ZERO,
+    });
+    expect(d.estimatedCostUsd).toBeCloseTo(1.5, 6);
+    expect(d.decision).toBe("block");
+    expect(d.reasonCode).toBe("daily_budget_exceeded");
+  });
+
   it("rejects negative prices", () => {
     expect(() =>
       parseConfigObject({

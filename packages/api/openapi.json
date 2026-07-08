@@ -44,6 +44,66 @@
         }
       }
     },
+    "/v1/admin/providers/health": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "description": "Per-provider/model health from the LiteLLM proxy. Requires usage:read. Read-only; does not affect readiness.",
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "ok",
+                        "degraded",
+                        "fail",
+                        "skipped"
+                      ]
+                    },
+                    "models": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "model": {
+                            "type": "string"
+                          },
+                          "provider": {
+                            "type": "string"
+                          },
+                          "healthy": {
+                            "type": "boolean"
+                          },
+                          "error": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "model",
+                          "provider",
+                          "healthy"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "models"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/admin/whoami": {
       "get": {
         "tags": [

@@ -1,3 +1,4 @@
+import { PROVIDER_REGISTRY, providerOf } from "@modelgov/policy-engine";
 import { adapterFor, type Framework } from "./adapters";
 import {
   composeFileFor,
@@ -28,10 +29,25 @@ const LITELLM_MAP: Record<string, { model: string; keyEnv?: string; apiBase?: st
 // Pin to a digest in production; override via MODELGOV_API_IMAGE in .env.
 const DEFAULT_API_IMAGE = "ghcr.io/mml555/modelgov/modelgov-api:latest";
 
-/** LiteLLM params for a model string — derives provider wiring from the prefix. */
+/** LiteLLM params for a model string — derives provider wiring from the registry. */
 function litellmParamsFor(m: string): string[] {
-  if (m.startsWith("openrouter/")) {
-    return [`      model: ${m}`, `      api_key: os.environ/OPENROUTER_API_KEY`];
+  // Built-in friendly names are remapped to real LiteLLM model ids (+ apiBase for
+  // Ollama); check this first so the remap wins over prefix dispatch.
+  const map = LITELLM_MAP[m];
+  if (map) {
+    const params = [`      model: ${map.model}`];
+    if (map.keyEnv) params.push(`      api_key: os.environ/${map.keyEnv}`);
+    if (map.apiBase) params.push(`      api_base: ${map.apiBase}`);
+    return params;
+  }
+  // Azure variants are api_key-based but need the endpoint (+ version) too.
+  if (m.startsWith("azure_ai/")) {
+    // Azure AI Foundry — model name is your deployment; needs the Foundry endpoint.
+    return [
+      `      model: ${m}`,
+      `      api_key: os.environ/AZURE_AI_API_KEY`,
+      `      api_base: os.environ/AZURE_AI_API_BASE`,
+    ];
   }
   if (m.startsWith("azure/")) {
     // azure/<deployment> — needs endpoint + api version alongside the key.
@@ -42,14 +58,32 @@ function litellmParamsFor(m: string): string[] {
       `      api_version: os.environ/AZURE_API_VERSION`,
     ];
   }
-  const map = LITELLM_MAP[m];
-  if (map) {
-    const params = [`      model: ${map.model}`];
-    if (map.keyEnv) params.push(`      api_key: os.environ/${map.keyEnv}`);
-    if (map.apiBase) params.push(`      api_base: ${map.apiBase}`);
-    return params;
+  const spec = PROVIDER_REGISTRY[providerOf(m)];
+  switch (spec?.authKind) {
+    case "aws":
+      // Bedrock — LiteLLM signs requests with AWS credentials from the env.
+      return [
+        `      model: ${m}`,
+        `      aws_access_key_id: os.environ/AWS_ACCESS_KEY_ID`,
+        `      aws_secret_access_key: os.environ/AWS_SECRET_ACCESS_KEY`,
+        `      aws_region_name: os.environ/AWS_REGION_NAME`,
+      ];
+    case "gcp":
+      // Vertex — GOOGLE_APPLICATION_CREDENTIALS is read from the env by the SDK.
+      return [
+        `      model: ${m}`,
+        `      vertex_project: os.environ/VERTEX_PROJECT`,
+        `      vertex_location: os.environ/VERTEX_LOCATION`,
+      ];
+    case "oauth_device":
+      // GitHub Copilot — LiteLLM performs the OAuth device flow and caches the token.
+      return [`      model: ${m}`];
+    case "api_key":
+      // OpenRouter, Mistral, Groq, xAI, DeepSeek, Cohere, …
+      return [`      model: ${m}`, `      api_key: os.environ/${spec.credentialEnvVars[0]}`];
+    default:
+      return [`      model: ${m}`];
   }
-  return [`      model: ${m}`];
 }
 
 function renderLitellmConfig(models: string[]): string {

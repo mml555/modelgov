@@ -23,11 +23,23 @@ export {
   getModelPrice,
   PRICE_TABLE,
   DEFAULT_PRICE,
+  SUBSCRIPTION_PRICE,
   DEFAULT_INPUT_TOKENS,
   isPricingExemptModel,
   collectConfiguredModels,
   findUnpricedModels,
+  type ModelPrice,
 } from "./cost";
+export {
+  PROVIDER_REGISTRY,
+  providerSpecOf,
+  isSubscriptionModel,
+  providerCredentialEnvVars,
+  buildBuiltinPriceTable,
+  type AuthKind,
+  type BillingKind,
+  type ProviderSpec,
+} from "./providers";
 export {
   DEPLOY_PROFILE_ENV,
   assertDeployProfilePosture,

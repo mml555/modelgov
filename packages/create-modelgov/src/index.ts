@@ -2,8 +2,9 @@
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { cancel, confirm, group, intro, isCancel, multiselect, note, outro, select, text } from "@clack/prompts";
+import { PROVIDER_REGISTRY } from "@modelgov/policy-engine";
 import { buildScaffold, type ProjectOptions } from "./scaffold";
-import type { DeployMode, Provider, SafetyPreset } from "./render";
+import { WIZARD_PROVIDERS, type DeployMode, type Provider, type SafetyPreset } from "./render";
 import type { Framework } from "./adapters";
 import { TEMPLATES, TEMPLATE_IDS, type TemplateId } from "./templates";
 
@@ -76,13 +77,10 @@ async function promptOptions(flags: Flags): Promise<ProjectOptions> {
       providers: () =>
         multiselect({
           message: "Which provider(s)? (skipped for the local template)",
-          options: [
-            { value: "openai", label: "OpenAI" },
-            { value: "anthropic", label: "Anthropic" },
-            { value: "gemini", label: "Gemini" },
-            { value: "openrouter", label: "OpenRouter" },
-            { value: "azure", label: "Azure OpenAI" },
-          ],
+          options: WIZARD_PROVIDERS.map((slug) => ({
+            value: slug,
+            label: PROVIDER_REGISTRY[slug]?.label ?? slug,
+          })),
           initialValues: flags.providers ?? ["openai"],
           required: false,
         }),

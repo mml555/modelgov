@@ -134,7 +134,7 @@ describe("buildScaffold", () => {
   });
 });
 
-describe("providers (openrouter / azure)", () => {
+describe("providers (openrouter / azure / azure_ai)", () => {
   it("OpenRouter: valid config, openrouter model strings, and custom pricing emitted", () => {
     const yaml = renderModelgovYaml({ ...base, providers: ["openrouter"] });
     const cfg = parseConfig(yaml);
@@ -146,7 +146,11 @@ describe("providers (openrouter / azure)", () => {
   it("Azure: valid config + generated LiteLLM uses azure api_base/api_version, and .env has them", () => {
     const opts: ProjectOptions = { ...base, providers: ["azure"], framework: "none" };
     const files = buildScaffold(opts);
+    const cfg = parseConfig(files.get("modelgov.yaml")!);
     expect(() => parseConfig(files.get("modelgov.yaml")!)).not.toThrow();
+    expect(cfg.modelClasses.cheap?.primary).toBe("azure/gpt-4o-mini");
+    // Standard Azure deployment names are in the built-in price table — no custom pricing needed.
+    expect(cfg.pricing?.["azure/gpt-4o-mini"]).toBeUndefined();
     const litellm = files.get("litellm_config.yaml")!;
     expect(litellm).toContain("model: azure/gpt-4o-mini");
     expect(litellm).toContain("api_key: os.environ/AZURE_API_KEY");
@@ -159,6 +163,86 @@ describe("providers (openrouter / azure)", () => {
     const litellm = buildScaffold({ ...base, providers: ["openrouter"], framework: "none" }).get("litellm_config.yaml")!;
     expect(litellm).toContain("model: openrouter/openai/gpt-4o-mini");
     expect(litellm).toContain("api_key: os.environ/OPENROUTER_API_KEY");
+  });
+
+  it("Bedrock: valid config, AWS creds in LiteLLM + .env, built-in pricing (no custom)", () => {
+    const files = buildScaffold({ ...base, providers: ["bedrock"], framework: "none" });
+    const cfg = parseConfig(files.get("modelgov.yaml")!);
+    expect(cfg.modelClasses.cheap?.primary).toBe("bedrock/anthropic.claude-3-5-haiku-20241022-v1:0");
+    // Bedrock models are in the built-in price table now → no custom pricing.
+    expect(cfg.pricing).toBeUndefined();
+    // Non-api_key provider: declares auth, no api_key.
+    expect(cfg.providers.bedrock?.auth).toBe("aws");
+    expect(cfg.providers.bedrock?.apiKey).toBeUndefined();
+    const litellm = files.get("litellm_config.yaml")!;
+    expect(litellm).toContain("aws_access_key_id: os.environ/AWS_ACCESS_KEY_ID");
+    expect(litellm).toContain("aws_region_name: os.environ/AWS_REGION_NAME");
+    const env = files.get(".env")!;
+    expect(env).toContain("AWS_ACCESS_KEY_ID=");
+    expect(env).toContain("AWS_REGION_NAME=us-east-1");
+  });
+
+  it("Vertex: valid config, vertex_project/location in LiteLLM, creds in .env", () => {
+    const files = buildScaffold({ ...base, providers: ["vertex_ai"], framework: "none" });
+    const cfg = parseConfig(files.get("modelgov.yaml")!);
+    expect(cfg.modelClasses.cheap?.primary).toBe("vertex_ai/gemini-1.5-flash");
+    expect(cfg.providers.vertex_ai?.auth).toBe("gcp");
+    const litellm = files.get("litellm_config.yaml")!;
+    expect(litellm).toContain("vertex_project: os.environ/VERTEX_PROJECT");
+    expect(litellm).toContain("vertex_location: os.environ/VERTEX_LOCATION");
+    expect(files.get(".env")!).toContain("GOOGLE_APPLICATION_CREDENTIALS=");
+  });
+
+  it("GitHub Copilot: subscription provider, no api_key/pricing, model-only LiteLLM entry", () => {
+    const files = buildScaffold({ ...base, providers: ["github_copilot"], framework: "none" });
+    const cfg = parseConfig(files.get("modelgov.yaml")!);
+    expect(cfg.modelClasses.cheap?.primary).toBe("github_copilot/gpt-4o-mini");
+    // Subscription-billed: no per-token pricing emitted, declared billing.
+    expect(cfg.pricing).toBeUndefined();
+    expect(cfg.providers.github_copilot?.billing).toBe("subscription");
+    expect(cfg.providers.github_copilot?.auth).toBe("oauth_device");
+    const litellm = files.get("litellm_config.yaml")!;
+    expect(litellm).toContain("model: github_copilot/gpt-4o-mini");
+    // No api_key line for the copilot model (OAuth device flow, LiteLLM-owned).
+    // Scope to the model's own block (up to the next model_name) so the check
+    // stays valid if the entry is reformatted or grows.
+    const start = litellm.indexOf("github_copilot/gpt-4o-mini");
+    const nextEntry = litellm.indexOf("- model_name:", start + 1);
+    const copilotBlock = litellm.slice(start, nextEntry === -1 ? undefined : nextEntry);
+    expect(copilotBlock).not.toContain("api_key");
+    expect(files.get(".env")!).toContain("GITHUB_COPILOT_TOKEN=");
+  });
+
+  it("Mistral (plain api_key): registry-driven key env in LiteLLM + .env", () => {
+    const files = buildScaffold({ ...base, providers: ["mistral"], framework: "none" });
+    const cfg = parseConfig(files.get("modelgov.yaml")!);
+    expect(cfg.modelClasses.cheap?.primary).toBe("mistral/mistral-small-latest");
+    expect(cfg.providers.mistral?.apiKey).toBe("env/MISTRAL_API_KEY");
+    expect(files.get("litellm_config.yaml")!).toContain("api_key: os.environ/MISTRAL_API_KEY");
+    expect(files.get(".env")!).toContain("MISTRAL_API_KEY=");
+  });
+
+  it("Azure AI Foundry: valid config + LiteLLM uses azure_ai api_base, and .env has them", () => {
+    const opts: ProjectOptions = {
+      ...base,
+      providers: ["azure_ai"],
+      framework: "none",
+      template: TEMPLATES.saas_tiers,
+    };
+    const files = buildScaffold(opts);
+    const cfg = parseConfig(files.get("modelgov.yaml")!);
+    expect(cfg.modelClasses.cheap?.primary).toBe("azure_ai/gpt-4o-mini");
+    expect(cfg.modelClasses.premium?.primary).toBe("azure_ai/claude-opus-4-1");
+    expect(cfg.providers.azure_ai?.apiKey).toBe("env/AZURE_AI_API_KEY");
+    expect(cfg.pricing?.["azure_ai/gpt-4o-mini"]).toBeUndefined();
+    const litellm = files.get("litellm_config.yaml")!;
+    expect(litellm).toContain("model: azure_ai/gpt-4o-mini");
+    expect(litellm).toContain("api_key: os.environ/AZURE_AI_API_KEY");
+    expect(litellm).toContain("api_base: os.environ/AZURE_AI_API_BASE");
+    expect(litellm).not.toContain("api_version:");
+    const env = files.get(".env")!;
+    expect(env).toContain("AZURE_AI_API_KEY=");
+    expect(env).toContain("AZURE_AI_API_BASE=");
   });
 });
 

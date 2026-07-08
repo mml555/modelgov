@@ -1,0 +1,19 @@
+# Azure OpenAI OVERLAY for local development with real Azure deployments.
+# Layer it over the simple stack:
+#   docker compose -f docker-compose.simple.yml -f docker-compose.azure.yml up --build
+# Or: make start-azure
+name: modelgov
+
+services:
+  litellm:
+    command: ["--config", "/app/config.azure.yaml", "--port", "4000"]
+    environment:
+      AZURE_API_KEY: ${AZURE_API_KEY}
+      AZURE_API_BASE: ${AZURE_API_BASE}
+      AZURE_API_VERSION: ${AZURE_API_VERSION:-2024-08-01-preview}
+    volumes:
+      - ./litellm_config.azure.yaml:/app/config.azure.yaml:ro
+
+  api:
+    volumes:
+      - ./modelgov.azure.example.yaml:/app/modelgov.yaml:ro

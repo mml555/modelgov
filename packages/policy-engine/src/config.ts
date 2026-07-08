@@ -35,9 +35,33 @@ const projectSchema = z
   })
   .transform((p) => ({ name: p.name, environment: p.environment }));
 
+// Provider entries are largely informational in the LiteLLM-proxy deployment
+// (the proxy owns credentials + routing); the extra fields let non-api_key
+// providers (Azure endpoint/version, Bedrock region, Vertex project/location)
+// be expressed, and `billing` marks a custom subscription provider as $0-USD.
+// `.strict()` so a misspelled key is a loud error, not a silently ignored one.
 const providerSchema = z
-  .object({ api_key: z.string().optional() })
-  .transform((p) => ({ apiKey: p.api_key }));
+  .object({
+    api_key: z.string().optional(),
+    api_base: z.string().optional(),
+    api_version: z.string().optional(),
+    region: z.string().optional(),
+    project: z.string().optional(),
+    location: z.string().optional(),
+    auth: z.enum(["api_key", "aws", "gcp", "oauth_device", "local"]).optional(),
+    billing: z.enum(["per_token", "subscription"]).optional(),
+  })
+  .strict()
+  .transform((p) => ({
+    apiKey: p.api_key,
+    apiBase: p.api_base,
+    apiVersion: p.api_version,
+    region: p.region,
+    project: p.project,
+    location: p.location,
+    auth: p.auth,
+    billing: p.billing,
+  }));
 
 // .strict() throughout the budget/cap schemas: this is a spend-ENFORCEMENT
 // product, so a misspelled cap key (`montly_usd`, `hard_stop_percent`) must be a

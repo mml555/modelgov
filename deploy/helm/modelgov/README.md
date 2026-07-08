@@ -18,6 +18,18 @@ helm install modelgov ./deploy/helm/modelgov \
   --set-string secret.providerKeys.OPENAI_API_KEY=sk-...
 ```
 
+**Azure OpenAI** (use `values-azure.yaml` for policy + LiteLLM wiring):
+
+```bash
+helm install modelgov ./deploy/helm/modelgov \
+  -f deploy/helm/modelgov/values-selfhost.yaml \
+  -f deploy/helm/modelgov/values-azure.yaml \
+  ...
+  --set-string secret.providerKeys.AZURE_API_KEY='...' \
+  --set-string secret.providerKeys.AZURE_API_BASE='https://<resource>.openai.azure.com' \
+  --set-string secret.providerKeys.AZURE_API_VERSION='2024-08-01-preview'
+```
+
 **SaaS multi-tenant control plane** (per-tenant policy + RLS — connect as a
 non-owner DB role; see `values-multitenant.yaml`):
 

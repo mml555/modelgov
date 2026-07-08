@@ -1,0 +1,66 @@
+# Azure OpenAI policy template for `make start-azure` / `modelgov up azure`.
+# Deployment names in model_classes must match your Azure resource AND
+# litellm_config.azure.yaml. Copy and customize before production deploy.
+
+project:
+  name: modelgov-azure
+  environment: development
+
+providers:
+  azure:
+    api_key: env/AZURE_API_KEY
+
+budgets:
+  global:
+    monthly_usd: 500
+    alert_at_percent: 80
+    hard_stop_at_percent: 100
+  by_user_type:
+    anonymous:
+      daily_usd: 0.02
+      daily_requests: 5
+      models: ["cheap"]
+    logged_in:
+      daily_usd: 0.25
+      daily_requests: 50
+      models: ["cheap", "standard"]
+    admin:
+      daily_usd: 5.00
+      daily_requests: 500
+      models: ["cheap", "standard", "premium"]
+
+features:
+  support_chat:
+    safety: strict
+    model_class: cheap
+    max_tokens: 500
+  notes_helper:
+    safety: balanced
+    model_class: cheap
+    max_tokens: 500
+
+routing:
+  degrade_at_percent: 80
+  retry:
+    max_attempts: 3
+    backoff_ms: [500, 2000, 8000]
+    retry_on: [429, 502, 503]
+    respect_retry_after: true
+
+model_classes:
+  cheap:
+    primary: azure/gpt-4o-mini
+  standard:
+    primary: azure/gpt-4o
+  premium:
+    primary: azure/gpt-5
+
+safety:
+  preset: balanced
+  protect:
+    pii: mask
+    prompt_injection: block
+  injection_model: azure/gpt-4o-mini
+
+observability:
+  provider: none

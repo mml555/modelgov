@@ -33,6 +33,7 @@
     "up:full": "pnpm modelgov up full",
     "up:local": "pnpm modelgov up local",
     "up:cloud": "pnpm modelgov up cloud",
+    "up:azure": "pnpm modelgov up azure",
     "status": "pnpm modelgov status simple",
     "doctor": "pnpm modelgov doctor simple",
     "smoke": "pnpm modelgov smoke simple",
@@ -40,7 +41,8 @@
     "down": "pnpm modelgov down simple",
     "down:full": "pnpm modelgov down full",
     "down:local": "pnpm modelgov down local",
-    "down:cloud": "pnpm modelgov down cloud"
+    "down:cloud": "pnpm modelgov down cloud",
+    "down:azure": "pnpm modelgov down azure"
   },
   "devDependencies": {
     "@eslint/js": "^9.17.0",

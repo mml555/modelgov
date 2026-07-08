@@ -1,7 +1,29 @@
 import { stringify } from "yaml";
+import { PROVIDER_REGISTRY } from "@modelgov/policy-engine";
 import type { ModelClass, SafetyPreset, Template } from "./templates";
 
-export type Provider = "openai" | "anthropic" | "gemini" | "openrouter" | "azure";
+// The providers the wizard offers. Each MUST be a registry slug that defines
+// `defaultModels` for cheap/standard/premium (asserted by tests). Adding a
+// provider is: an entry in @modelgov/policy-engine's registry + this list + a
+// UI option in index.ts — model strings, prices, env vars, and LiteLLM wiring
+// all derive from the registry.
+export const WIZARD_PROVIDERS = [
+  "openai",
+  "anthropic",
+  "gemini",
+  "openrouter",
+  "azure",
+  "azure_ai",
+  "bedrock",
+  "vertex_ai",
+  "mistral",
+  "groq",
+  "xai",
+  "deepseek",
+  "cohere",
+  "github_copilot",
+] as const;
+export type Provider = (typeof WIZARD_PROVIDERS)[number];
 export type DeployMode = "simple" | "full";
 export type { SafetyPreset } from "./templates";
 
@@ -14,49 +36,75 @@ export interface ScaffoldOptions {
 }
 
 const OLLAMA = "ollama/llama3.2:3b";
-const PRIMARY: Record<ModelClass, Record<Provider, string>> = {
-  cheap: {
-    openai: "openai/gpt-4o-mini",
-    anthropic: "anthropic/claude-haiku",
-    gemini: "gemini/gemini-flash",
-    openrouter: "openrouter/openai/gpt-4o-mini",
-    azure: "azure/gpt-4o-mini",
-  },
-  standard: {
-    openai: "openai/gpt-4o",
-    anthropic: "anthropic/claude-sonnet",
-    gemini: "gemini/gemini-pro",
-    openrouter: "openrouter/openai/gpt-4o",
-    azure: "azure/gpt-4o",
-  },
-  premium: {
-    openai: "openai/gpt-5",
-    anthropic: "anthropic/claude-opus",
-    gemini: "gemini/gemini-ultra",
-    openrouter: "openrouter/anthropic/claude-3.5-sonnet",
-    azure: "azure/gpt-4o",
-  },
-  local: { openai: OLLAMA, anthropic: OLLAMA, gemini: OLLAMA, openrouter: OLLAMA, azure: OLLAMA },
-};
+const LOCAL_MODEL = OLLAMA;
 
-// Prices (USD / 1K tokens) for models NOT in Modelgov's built-in table, so the
-// generated modelgov.yaml can budget them. Keyed by model string.
+/** Primary model string for a class × provider, from the registry's presets. */
+function primaryModel(cls: ModelClass, provider: Provider): string {
+  if (cls === "local") return LOCAL_MODEL;
+  return PROVIDER_REGISTRY[provider]?.defaultModels?.[cls] ?? LOCAL_MODEL;
+}
+
+// Prices (USD / 1K tokens) for models NOT in Modelgov's built-in price table, so
+// the generated modelgov.yaml can budget them. Providers registered with prices
+// (bedrock, vertex_ai, mistral, …) are already in the built-in table and need no
+// entry here; OpenRouter is priced per-route, so it does.
 const MODEL_PRICING: Record<string, { input: number; output: number }> = {
   "openrouter/openai/gpt-4o-mini": { input: 0.00015, output: 0.0006 },
   "openrouter/openai/gpt-4o": { input: 0.0025, output: 0.01 },
   "openrouter/anthropic/claude-3.5-sonnet": { input: 0.003, output: 0.015 },
-  "azure/gpt-4o-mini": { input: 0.00015, output: 0.0006 },
-  "azure/gpt-4o": { input: 0.0025, output: 0.01 },
 };
 
-const LOCAL_MODEL = OLLAMA;
+// Placeholder values for credential env vars that benefit from a hint in `.env`.
+const ENV_HINTS: Record<string, string> = {
+  AZURE_API_BASE: "https://<your-resource>.openai.azure.com",
+  AZURE_API_VERSION: "2024-08-01-preview",
+  AZURE_AI_API_BASE: "https://<your-resource>.services.ai.azure.com",
+  AWS_REGION_NAME: "us-east-1",
+  VERTEX_LOCATION: "us-central1",
+  GOOGLE_APPLICATION_CREDENTIALS: "/path/to/service-account.json",
+};
+
+// Extra `.env` comment lines appended after a provider's credential lines.
+const ENV_NOTES: Partial<Record<Provider, string[]>> = {
+  azure_ai: [
+    "# For Foundry Claude deployments, use e.g. https://<resource>.services.ai.azure.com/anthropic",
+  ],
+  github_copilot: [
+    "# GitHub Copilot uses an OAuth device flow that LiteLLM performs on first use.",
+    "# For a headless proxy, pre-provision the token (see docs/providers.md) or set it here.",
+  ],
+};
+
+/**
+ * The modelgov.yaml `providers:` entry for a provider. api_key providers get an
+ * `env/VAR` key ref; non-api_key providers (Bedrock/Vertex/Copilot) declare
+ * their `auth` (and `billing` for subscription) — credentials themselves live in
+ * `.env` and are read by LiteLLM, not modelgov.
+ */
+function providerConfigEntry(p: Provider): Record<string, string> {
+  const spec = PROVIDER_REGISTRY[p];
+  switch (spec?.authKind) {
+    case "api_key":
+      return { api_key: `env/${spec.credentialEnvVars[0]}` };
+    case "aws":
+      return { auth: "aws" };
+    case "gcp":
+      return { auth: "gcp" };
+    case "oauth_device":
+      return spec.billingKind === "subscription"
+        ? { auth: "oauth_device", billing: "subscription" }
+        : { auth: "oauth_device" };
+    default:
+      return {};
+  }
+}
 
 /** Resolve primary + optional fallback (a different provider at the same tier). */
 function modelClassEntry(cls: ModelClass, providers: Provider[]): { primary: string; fallback?: string } {
   if (cls === "local") return { primary: LOCAL_MODEL };
-  const primary = PRIMARY[cls][providers[0]!];
+  const primary = primaryModel(cls, providers[0]!);
   const alt = providers.find((p) => p !== providers[0]);
-  return alt ? { primary, fallback: PRIMARY[cls][alt] } : { primary };
+  return alt ? { primary, fallback: primaryModel(cls, alt) } : { primary };
 }
 
 /** Build a valid modelgov.yaml (snake_case) from wizard answers + template. */
@@ -65,7 +113,7 @@ export function renderModelgovYaml(opts: ScaffoldOptions): string {
   const localOnly = t.localOnly === true;
   const providers = localOnly ? [] : opts.providers;
   const preset: SafetyPreset = localOnly ? "dev" : opts.safetyPreset;
-  const injectionModel = localOnly ? LOCAL_MODEL : PRIMARY.cheap[opts.providers[0]!];
+  const injectionModel = localOnly ? LOCAL_MODEL : primaryModel("cheap", opts.providers[0]!);
 
   const features = Object.fromEntries(
     Object.entries(t.features).map(([name, f]) => [
@@ -92,7 +140,7 @@ export function renderModelgovYaml(opts: ScaffoldOptions): string {
   );
 
   // Custom pricing for any used model not in Modelgov's built-in table
-  // (OpenRouter / Azure) so budgets estimate correctly.
+  // (OpenRouter, custom Azure deployment names, etc.) so budgets estimate correctly.
   const pricing: Record<string, { input_per_1k: number; output_per_1k: number }> = {};
   for (const m of modelStringsFor({ ...opts, providers: opts.providers })) {
     const p = MODEL_PRICING[m];
@@ -104,7 +152,7 @@ export function renderModelgovYaml(opts: ScaffoldOptions): string {
     ...(providers.length
       ? {
           providers: Object.fromEntries(
-            providers.map((p) => [p, { api_key: `env/${p.toUpperCase()}_API_KEY` }]),
+            providers.map((p) => [p, providerConfigEntry(p)]),
           ),
         }
       : {}),
@@ -144,12 +192,13 @@ export function renderEnv(opts: ScaffoldOptions): string {
   const localOnly = opts.template.localOnly === true;
   const lines: string[] = [];
   if (!localOnly) {
-    lines.push("# Provider keys (consumed by the LiteLLM proxy)");
+    lines.push("# Provider credentials (consumed by the LiteLLM proxy)");
     for (const p of opts.providers) {
-      lines.push(`${p.toUpperCase()}_API_KEY=`);
-      if (p === "azure") {
-        lines.push("AZURE_API_BASE=https://<your-resource>.openai.azure.com", "AZURE_API_VERSION=2024-08-01-preview");
+      const spec = PROVIDER_REGISTRY[p];
+      for (const v of spec?.credentialEnvVars ?? []) {
+        lines.push(`${v}=${ENV_HINTS[v] ?? ""}`);
       }
+      for (const note of ENV_NOTES[p] ?? []) lines.push(note);
     }
     lines.push("");
   }

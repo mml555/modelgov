@@ -1,0 +1,76 @@
+# Azure OpenAI production overlay for Helm.
+#
+# Install:
+#   helm upgrade --install modelgov ./deploy/helm/modelgov \
+#     -f deploy/helm/modelgov/values-selfhost.yaml \
+#     -f deploy/helm/modelgov/values-azure.yaml \
+#     --set secret.databaseUrl='...' \
+#     --set secret.aiGuardApiKey='...' \
+#     --set-string secret.providerKeys.AZURE_API_KEY='...' \
+#     --set-string secret.providerKeys.AZURE_API_BASE='https://<resource>.openai.azure.com' \
+#     --set-string secret.providerKeys.AZURE_API_VERSION='2024-08-01-preview'
+
+production: true
+deployProfile: selfhost
+
+secret:
+  providerKeys:
+    AZURE_API_KEY: ""
+    AZURE_API_BASE: ""
+    AZURE_API_VERSION: "2024-08-01-preview"
+
+config:
+  aiGuardYaml: |
+    project:
+      name: production
+      environment: production
+    providers:
+      azure:
+        api_key: env/AZURE_API_KEY
+    budgets:
+      global:
+        monthly_usd: 500
+        alert_at_percent: 80
+        hard_stop_at_percent: 100
+      by_user_type:
+        logged_in:
+          daily_usd: 1
+          daily_requests: 100
+          models: ["cheap", "standard"]
+    features:
+      support_chat:
+        safety: balanced
+        model_class: cheap
+        max_tokens: 500
+    routing:
+      degrade_at_percent: 80
+    model_classes:
+      cheap:
+        primary: azure/gpt-4o-mini
+      standard:
+        primary: azure/gpt-4o
+    safety:
+      preset: balanced
+      injection_model: azure/gpt-4o-mini
+    observability:
+      provider: none
+
+litellm:
+  config: |
+    model_list:
+      - model_name: azure/gpt-4o-mini
+        litellm_params:
+          model: azure/gpt-4o-mini
+          api_key: os.environ/AZURE_API_KEY
+          api_base: os.environ/AZURE_API_BASE
+          api_version: os.environ/AZURE_API_VERSION
+      - model_name: azure/gpt-4o
+        litellm_params:
+          model: azure/gpt-4o
+          api_key: os.environ/AZURE_API_KEY
+          api_base: os.environ/AZURE_API_BASE
+          api_version: os.environ/AZURE_API_VERSION
+    general_settings:
+      master_key: os.environ/LITELLM_MASTER_KEY
+    litellm_settings:
+      drop_params: true

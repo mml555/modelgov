@@ -72,6 +72,10 @@ describe("parseOpsFlags", () => {
     expect(parseOpsFlags(["cloud"]).mode).toBe("cloud");
   });
 
+  it("parses azure mode", () => {
+    expect(parseOpsFlags(["azure"]).mode).toBe("azure");
+  });
+
   it("parses --strict", () => {
     expect(parseOpsFlags(["prod", "--strict"]).strict).toBe(true);
   });
@@ -122,6 +126,15 @@ describe("modeConfig", () => {
       "docker-compose.simple.yml",
       "-f",
       "docker-compose.cloud.yml",
+    ]);
+  });
+
+  it("maps azure mode to the Azure OpenAI overlay", () => {
+    expect(modeConfig("azure").composeArgs).toEqual([
+      "-f",
+      "docker-compose.simple.yml",
+      "-f",
+      "docker-compose.azure.yml",
     ]);
   });
 

@@ -160,14 +160,14 @@ Options:
 const OPS_USAGE = `modelgov ops commands
 
 Usage:
-  modelgov setup [simple|full|local|cloud]
-  modelgov up [simple|full|local|cloud|prod]
-  modelgov down [simple|full|local|cloud|prod]
-  modelgov status [simple|full|local|cloud|prod]
-  modelgov logs [simple|full|local|cloud|prod] [--no-follow]
-  modelgov doctor [simple|full|local|cloud|prod] [--strict]
-  modelgov smoke [simple|full|local|cloud|prod]
-  modelgov reset [simple|full|local|cloud|prod] --yes
+  modelgov setup [simple|full|local|cloud|azure]
+  modelgov up [simple|full|local|cloud|azure|prod]
+  modelgov down [simple|full|local|cloud|azure|prod]
+  modelgov status [simple|full|local|cloud|azure|prod]
+  modelgov logs [simple|full|local|cloud|azure|prod] [--no-follow]
+  modelgov doctor [simple|full|local|cloud|azure|prod] [--strict]
+  modelgov smoke [simple|full|local|cloud|azure|prod]
+  modelgov reset [simple|full|local|cloud|azure|prod] --yes
 `;
 
 function parseExplainFlags(args: string[]): ExplainFlags {

@@ -13,7 +13,7 @@ export type OpsCommand =
   | "status"
   | "up";
 
-type Mode = "simple" | "full" | "local" | "cloud" | "prod";
+type Mode = "simple" | "full" | "local" | "cloud" | "azure" | "prod";
 
 interface OpsFlags {
   mode: Mode;
@@ -152,7 +152,7 @@ export function parseOpsFlags(args: string[]): OpsFlags {
 }
 
 function isMode(value: string): value is Mode {
-  return value === "simple" || value === "full" || value === "local" || value === "cloud" || value === "prod";
+  return value === "simple" || value === "full" || value === "local" || value === "cloud" || value === "azure" || value === "prod";
 }
 
 async function up(flags: OpsFlags, opts: { strictSmoke: boolean }): Promise<void> {
@@ -171,6 +171,8 @@ async function up(flags: OpsFlags, opts: { strictSmoke: boolean }): Promise<void
     await ensureOllama();
   } else if (flags.mode === "cloud") {
     ensureProviderKeys();
+  } else if (flags.mode === "azure") {
+    ensureAzureKeys();
   }
 
   console.log(`Starting Modelgov (${flags.mode})...`);
@@ -182,7 +184,8 @@ async function up(flags: OpsFlags, opts: { strictSmoke: boolean }): Promise<void
 
 function ensureEnv(mode: Mode): void {
   if (existsSync(resolve(ROOT, ".env"))) return;
-  const template = mode === "cloud" ? ".env.example" : ".env.local.example";
+  const template =
+    mode === "cloud" ? ".env.example" : mode === "azure" ? ".env.azure.example" : ".env.local.example";
   copyFileSync(resolve(ROOT, template), resolve(ROOT, ".env"));
   console.log(`Created .env from ${template}.`);
   if (mode === "simple" || mode === "full") {
@@ -196,11 +199,18 @@ function ensureEnv(mode: Mode): void {
     console.log("  ollama pull llama3.2:3b");
     return;
   }
-  console.log("Add at least one provider key to .env, then rerun:");
+  console.log("Add provider credentials to .env, then rerun:");
   console.log(`  ${rerunCommand(mode)}`);
-  console.log("Required for cloud:");
-  console.log("  OPENAI_API_KEY=sk-...");
-  console.log("  or ANTHROPIC_API_KEY=sk-ant-...");
+  if (mode === "azure") {
+    console.log("Required for azure:");
+    console.log("  AZURE_API_KEY=...");
+    console.log("  AZURE_API_BASE=https://<resource>.openai.azure.com");
+    console.log("  AZURE_API_VERSION=2024-08-01-preview");
+  } else {
+    console.log("Required for cloud:");
+    console.log("  OPENAI_API_KEY=sk-...");
+    console.log("  or ANTHROPIC_API_KEY=sk-ant-...");
+  }
   process.exit(0);
 }
 
@@ -211,6 +221,18 @@ function ensureProviderKeys(): void {
   if (isRealSecret(openAi) || isRealSecret(anthropic)) return;
   throw new Error(
     "Set OPENAI_API_KEY or ANTHROPIC_API_KEY in .env, then rerun. Use `./setup` for the zero-secret demo stack.",
+  );
+}
+
+function ensureAzureKeys(): void {
+  const env = readEnvFile(".env");
+  const key = env.AZURE_API_KEY;
+  const base = env.AZURE_API_BASE;
+  const version = env.AZURE_API_VERSION;
+  if (isRealSecret(key) && isRealSecret(base) && isRealSecret(version)) return;
+  throw new Error(
+    "Set AZURE_API_KEY, AZURE_API_BASE, and AZURE_API_VERSION in .env, then rerun. " +
+      "Deployment names in modelgov.azure.example.yaml must match your Azure resource.",
   );
 }
 
@@ -250,9 +272,19 @@ async function doctor(mode: Mode, strict: boolean): Promise<void> {
       await checkOllamaForDoctor();
     } else if (existsSync(resolve(ROOT, ".env"))) {
       const env = readEnvFile(".env");
-      console.log(isRealSecret(env.OPENAI_API_KEY) || isRealSecret(env.ANTHROPIC_API_KEY)
-        ? "ok provider key present"
-        : "missing provider key; set OPENAI_API_KEY or ANTHROPIC_API_KEY");
+      if (mode === "azure") {
+        const azureOk =
+          isRealSecret(env.AZURE_API_KEY) &&
+          isRealSecret(env.AZURE_API_BASE) &&
+          isRealSecret(env.AZURE_API_VERSION);
+        console.log(azureOk
+          ? "ok Azure credentials present"
+          : "missing Azure credentials; set AZURE_API_KEY, AZURE_API_BASE, AZURE_API_VERSION");
+      } else {
+        console.log(isRealSecret(env.OPENAI_API_KEY) || isRealSecret(env.ANTHROPIC_API_KEY)
+          ? "ok provider key present"
+          : "missing provider key; set OPENAI_API_KEY or ANTHROPIC_API_KEY");
+      }
       securityLines.push(...securityConfigWarnings(env));
       for (const line of securityLines) console.log(line);
     }
@@ -350,6 +382,8 @@ export function modeConfig(mode: Mode): ModeConfig {
       return { apiPort: 3080, composeArgs: ["-f", "docker-compose.simple.yml", "-f", "docker-compose.local.yml"] };
     case "cloud":
       return { apiPort: localPublicPort(3090), composeArgs: ["-f", "docker-compose.simple.yml", "-f", "docker-compose.cloud.yml"] };
+    case "azure":
+      return { apiPort: localPublicPort(3090), composeArgs: ["-f", "docker-compose.simple.yml", "-f", "docker-compose.azure.yml"] };
     case "prod":
       return { apiPort: Number(process.env.MODELGOV_PUBLIC_PORT ?? 3000), envFile: ".env.production", composeArgs: ["-f", "docker-compose.production.yml"] };
     case "simple":
@@ -446,6 +480,7 @@ function rerunCommand(commandOrMode: Mode | OpsCommand, mode?: Mode): string {
   if (commandOrMode === "full") return "make start-full";
   if (commandOrMode === "local") return "make start-local";
   if (commandOrMode === "cloud") return "make start-cloud";
+  if (commandOrMode === "azure") return "make start-azure";
   if (commandOrMode === "prod") return "make up-prod";
   const suffix = mode && mode !== "simple" ? `-${mode}` : "";
   if (commandOrMode === "up") return mode && mode !== "simple" ? `make start${suffix}` : "make start";
