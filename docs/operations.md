@@ -159,6 +159,7 @@ roles**, which expand to permissions. Application traffic keeps using API keys.
 | `OIDC_ROLES_CLAIM` | Claim holding roles/groups (default `roles`) |
 | `OIDC_NAME_CLAIM` | Claim used as display name (default `sub`) |
 | `OIDC_ROLE_MAP` | JSON mapping IdP group → Modelgov role(s) |
+| `OIDC_TENANT_CLAIM` | Name of the token claim that binds the operator to a tenant. An operator is tenant-bound only when this var is set **and** the named claim is present and non-empty on their token; otherwise the operator is unbound and needs the `tenant:switch` permission to scope another tenant (see below). |
 
 Built-in operator roles (least privilege):
 
@@ -175,6 +176,14 @@ When `POLICY_APPROVAL_REQUIRED=true`, a saved policy version is `proposed` and
 can only be activated after a **different** operator holding `policy:approve`
 approves it (self-approval is rejected). Keep `policy:write` and `policy:approve`
 on separate roles/people so the two-person rule has teeth.
+
+**Cross-tenant access (multi-tenant deployments):** scoping a request to another
+tenant via the `X-Modelgov-Tenant` header requires the `tenant:switch`
+permission, which only `owner` holds by default (breaking change in 1.2.0). An
+OIDC operator is unbound unless `OIDC_TENANT_CLAIM` is set, so without either
+`tenant:switch` or that claim an SSO operator is confined to the default
+partition. Grant `tenant:switch` deliberately — it is the platform-wide escape
+hatch.
 
 Example: map an Okta/Entra group to `owner`:
 

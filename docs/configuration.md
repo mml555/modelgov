@@ -57,6 +57,15 @@ Keys use **snake_case** in YAML; the policy engine normalizes to camelCase inter
 Maps provider id → credentials reference. The API resolves `env/VAR_NAME` to the
 process environment at startup.
 
+> **Security (since 1.2.0):** `env/VAR` only resolves variable names ending in
+> `_KEY` (plus any listed in `MODELGOV_POLICY_ENV_ALLOWLIST`). Gateway secrets
+> such as `DATABASE_URL`, `STRIPE_SECRET_KEY`, and `LITELLM_MASTER_KEY` are
+> always denied — a denied reference resolves to no credential rather than
+> leaking the secret into the config object. This applies to **every** config
+> source (file on disk and versioned policy store alike), so a `policy:write`
+> operator cannot exfiltrate a gateway secret through a provider
+> `api_key: env/VAR` reference.
+
 ```yaml
 providers:
   openai:

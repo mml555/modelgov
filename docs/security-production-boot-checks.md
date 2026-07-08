@@ -11,8 +11,9 @@ Use `pnpm modelgov doctor production` for an offline check before deploy.
 | `METRICS_ENABLED` without auth | fail | Set `METRICS_AUTH_TOKEN` or `METRICS_ALLOW_PUBLIC=true` (discouraged) |
 | `OBSERVABILITY_CAPTURE_CONTENT=true` | fail | Set `false` or `OBSERVABILITY_CAPTURE_CONTENT_ALLOW=true` |
 | `IDEMPOTENCY_CAPTURE_CONTENT=true` | fail | Set `false` or `IDEMPOTENCY_CAPTURE_CONTENT_ALLOW=true` |
-| `DATABASE_SSL=disable` | fail | Use `require`/`verify-full`, or `DATABASE_SSL_DISABLE_ALLOWED=true` for bundled Postgres only |
+| `DATABASE_SSL=disable` | fail | Use `verify-full` (or `require` for a bundled/local DB), or `DATABASE_SSL_DISABLE_ALLOWED=true` for bundled Postgres only |
 | `DATABASE_SSL=disable` on remote host | fail | Always use TLS for managed Postgres |
+| `DATABASE_SSL=require` on remote host | fail | `require` encrypts but does not verify the server certificate (MITM-able). Use `verify-full` (set `DATABASE_SSL_CA` if needed), or `DATABASE_SSL_NO_VERIFY_ALLOWED=true` only on a trusted private network |
 | `MODELGOV_BEHIND_PROXY=true` without `TRUST_PROXY` | fail | Set `TRUST_PROXY` to LB CIDR or hop count |
 | Langfuse dev credentials | fail | Replace keys or set `OBSERVABILITY_PROVIDER=none` |
 | Weak `METRICS_AUTH_TOKEN` | fail | Use ≥24 random characters |
