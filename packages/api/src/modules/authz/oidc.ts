@@ -116,7 +116,15 @@ export function createOidcVerifier(
         typeof tenantValue === "string" && tenantValue.trim() !== "" ? tenantValue.trim() : undefined;
       // A verified token with no mapped roles is authenticated-but-unauthorized:
       // return an empty permission set so protected routes answer 403, not 401.
-      return { name: `oidc:${name}`, permissions, tenantId };
+      // principalId is the STABLE subject (sub) — controls like the two-person
+      // approval rule key on it, not the mutable `name`/display claim.
+      const sub = payload.sub ? String(payload.sub) : undefined;
+      return {
+        name: `oidc:${name}`,
+        principalId: sub ? `oidc:${sub}` : undefined,
+        permissions,
+        tenantId,
+      };
     },
   };
 }

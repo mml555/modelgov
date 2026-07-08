@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import type { Pool } from "pg";
 import { sendError } from "../../errors";
 import type { RequestContext } from "../../plugins/requestContext";
+import { resolveControlPlaneTenant } from "../authz/scope";
 import { errorJsonSchema } from "../chat/schemas";
 import { listTenants } from "./repo";
 
@@ -56,9 +57,13 @@ export function registerTenantsRoute(app: FastifyInstance, pool: Pool): void {
     if (!hasAnyPerm(request.ctx, TENANT_LIST_PERMS)) {
       return sendError(reply, 403, "forbidden", {}, "API key is not permitted to list tenants");
     }
-    // A bound operator is locked to its tenant — never enumerate others.
-    if (request.ctx.tenantBound) {
-      return reply.send({ tenants: request.ctx.tenantId ? [request.ctx.tenantId] : [] });
+    // Only a platform operator (unbound AND holding tenant:switch) may enumerate
+    // every tenant. A bound operator is locked to its own tenant, and an unbound
+    // operator WITHOUT tenant:switch is confined to the default partition (""),
+    // which has nothing to switch to — neither may enumerate others.
+    const scope = resolveControlPlaneTenant(request.ctx);
+    if (scope !== undefined) {
+      return reply.send({ tenants: scope ? [scope] : [] });
     }
     return reply.send({ tenants: await listTenants(pool) });
   });

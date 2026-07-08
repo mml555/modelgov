@@ -38,6 +38,34 @@ export class CompositeGuard implements SafetyGuard {
       throw new SafetyBackendError("PII protection is enabled but Presidio is not configured");
     }
 
+    // Image content parts are NOT scanned — Presidio and the injection classifier
+    // only see text (messageText drops image parts). A "block" contract that
+    // applies to the INPUT therefore cannot be honored for a message carrying an
+    // image, so fail closed (block) rather than forward an unscanned image (a
+    // photo of an ID card, or an instruction rendered as pixels) to the provider.
+    // Scope matters: injection block is always input-side; PII block only applies
+    // to the input when piiScope includes input (an output-only PII plan never
+    // scanned the input anyway and still scans the completion via inspectOutput,
+    // so an image is irrelevant to it). mask/off modes make no hard-block promise.
+    const piiBlocksInput = plan.pii === "block" && plan.piiScope !== "output";
+    const injectionBlocksInput = plan.promptInjection === "block";
+    if (
+      (piiBlocksInput || injectionBlocksInput) &&
+      messages.some(
+        (m) => Array.isArray(m.content) && m.content.some((p) => p.type === "image_url"),
+      )
+    ) {
+      return {
+        action: "block",
+        messages,
+        piiMasked: false,
+        injectionBlocked: false,
+        findings,
+        blockReason: "unscanned_image",
+        safetyCostUsd,
+      };
+    }
+
     // ── PII ── (input side: only when scope includes input)
     const pii = this.pii;
     const piiOnInput = plan.pii !== "off" && plan.piiScope !== "output";

@@ -61,6 +61,14 @@ export interface ApiKeyPrincipal {
  */
 export interface ResolvedPrincipal {
   name: string;
+  /**
+   * Stable identity of the principal — the OIDC `sub` or the DB API-key id.
+   * Unlike `name` (a mutable display name), this is what security controls that
+   * must distinguish *who* an operator is key on (e.g. the two-person policy
+   * approval's self-approval check). Absent for static env keys, where `name` is
+   * the stable identifier.
+   */
+  principalId?: string;
   projectId?: string;
   environment?: string;
   allowedUserTypes?: readonly string[];
@@ -171,6 +179,7 @@ export function registerAuth(
     }
     setRequestContext(request, {
       principalName: principal.name,
+      principalId: principal.principalId,
       projectId: principal.projectId,
       environment: principal.environment,
       allowedUserTypes: principal.allowedUserTypes,

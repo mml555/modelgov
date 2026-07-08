@@ -336,7 +336,20 @@ export type ReviewResult =
  */
 export async function reviewConfigVersion(
   pool: Pool,
-  input: { id: string; decision: "approved" | "rejected"; reviewer: string; tenantId?: string },
+  input: {
+    id: string;
+    decision: "approved" | "rejected";
+    reviewer: string;
+    /**
+     * All identities the reviewer is known by — the stable id AND the display
+     * name. The self-approval check matches `proposed_by` against ANY of them, so
+     * a proposal stored under the old name-based identity (before the stable-id
+     * change) still can't be self-approved by the same operator now identified by
+     * its id. Defaults to `[reviewer]`.
+     */
+    reviewerAliases?: readonly string[];
+    tenantId?: string;
+  },
   audit?: (record: ConfigVersionRecord) => AuditEvent,
 ): Promise<ReviewResult> {
   const expectedTenantId = input.tenantId ?? DEFAULT_TENANT;
@@ -359,7 +372,8 @@ export async function reviewConfigVersion(
       await client.query("ROLLBACK");
       return { ok: false, reason: "not_proposed" };
     }
-    if (input.decision === "approved" && row.proposed_by && row.proposed_by === input.reviewer) {
+    const reviewerAliases = input.reviewerAliases ?? [input.reviewer];
+    if (input.decision === "approved" && row.proposed_by && reviewerAliases.includes(row.proposed_by)) {
       await client.query("ROLLBACK");
       return { ok: false, reason: "self_approval" };
     }

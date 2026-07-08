@@ -227,6 +227,7 @@ export function createLiteLLMClient(
             signal: controller.signal,
           });
         } catch (err) {
+          clearTimeout(timer);
           lastProviderError = new ProviderError(
             `LiteLLM request failed for model '${params.model}'`,
             undefined,
@@ -237,47 +238,54 @@ export function createLiteLLMClient(
             continue;
           }
           throw lastProviderError;
+        }
+
+        // Keep the abort timer armed until the response BODY is consumed. Clearing
+        // it as soon as headers arrive (the old behavior) lets a provider that
+        // sends headers then stalls the body hang on res.json()/res.text() until
+        // undici's *default* bodyTimeout — correctness must not silently depend on
+        // that default (a custom dispatcher without it would outlive the reservation).
+        try {
+          if (!res.ok) {
+            const body = await res.text().catch(() => "");
+            if (res.status >= 500 || res.status === 429) {
+              lastProviderError = new ProviderError(
+                `LiteLLM returned ${res.status} for model '${params.model}': ${body}`,
+                res.status,
+              );
+              if (retry?.retryOn.includes(res.status) && attempt < maxAttempts - 1) {
+                await sleep(retryDelayMs(retry, attempt, res));
+                continue;
+              }
+              throw lastProviderError;
+            }
+            throw new LiteLLMClientError(
+              `LiteLLM rejected request (${res.status})`,
+              res.status,
+              body,
+            );
+          }
+
+          const json = (await res.json()) as Record<string, unknown>;
+          const choices = json["choices"] as
+            | Array<{ message?: { content?: string } }>
+            | undefined;
+          const content = choices?.[0]?.message?.content ?? "";
+          const usage = json["usage"] as
+            | { prompt_tokens?: number; completion_tokens?: number }
+            | undefined;
+
+          return {
+            content,
+            model: (json["model"] as string) ?? params.model,
+            actualCostUsd: extractCost(res.headers, json, params.model, options.priceOverrides),
+            inputTokens: usage?.prompt_tokens,
+            outputTokens: usage?.completion_tokens,
+            raw: json,
+          };
         } finally {
           clearTimeout(timer);
         }
-
-        if (!res.ok) {
-          const body = await res.text().catch(() => "");
-          if (res.status >= 500 || res.status === 429) {
-            lastProviderError = new ProviderError(
-              `LiteLLM returned ${res.status} for model '${params.model}': ${body}`,
-              res.status,
-            );
-            if (retry?.retryOn.includes(res.status) && attempt < maxAttempts - 1) {
-              await sleep(retryDelayMs(retry, attempt, res));
-              continue;
-            }
-            throw lastProviderError;
-          }
-          throw new LiteLLMClientError(
-            `LiteLLM rejected request (${res.status})`,
-            res.status,
-            body,
-          );
-        }
-
-        const json = (await res.json()) as Record<string, unknown>;
-        const choices = json["choices"] as
-          | Array<{ message?: { content?: string } }>
-          | undefined;
-        const content = choices?.[0]?.message?.content ?? "";
-        const usage = json["usage"] as
-          | { prompt_tokens?: number; completion_tokens?: number }
-          | undefined;
-
-        return {
-          content,
-          model: (json["model"] as string) ?? params.model,
-          actualCostUsd: extractCost(res.headers, json, params.model, options.priceOverrides),
-          inputTokens: usage?.prompt_tokens,
-          outputTokens: usage?.completion_tokens,
-          raw: json,
-        };
       }
 
       throw (
@@ -456,72 +464,76 @@ export function createLiteLLMClient(
           signal: controller.signal,
         });
       } catch (err) {
+        clearTimeout(timer);
         throw new ProviderError(
           `LiteLLM embeddings request failed for model '${params.model}'`,
           undefined,
           { cause: err },
         );
+      }
+
+      // Keep the abort timer armed until the response BODY is consumed (see chat()).
+      try {
+        if (!res.ok) {
+          const body = await res.text().catch(() => "");
+          if (res.status >= 500 || res.status === 429) {
+            throw new ProviderError(
+              `LiteLLM returned ${res.status} for embedding model '${params.model}': ${body}`,
+              res.status,
+            );
+          }
+          throw new LiteLLMClientError(
+            `LiteLLM rejected embeddings request (${res.status})`,
+            res.status,
+            body,
+          );
+        }
+
+        const json = (await res.json()) as Record<string, unknown>;
+        const data = json["data"] as Array<{ embedding?: number[]; index?: number }> | undefined;
+        if (!Array.isArray(data)) {
+          throw new ProviderError(
+            `LiteLLM embeddings response had no data array for model '${params.model}'`,
+          );
+        }
+        // Order by the provider's `index` so vectors line up with the input array
+        // even if the proxy returns them out of order.
+        const embeddings = [...data]
+          .sort((a, b) => (a.index ?? 0) - (b.index ?? 0))
+          .map((d) => d.embedding);
+        // Fail loud on a missing/empty vector rather than silently storing `[]`
+        // (which would corrupt a KB or fail a fixed-dimension vector column).
+        if (embeddings.length !== params.input.length || embeddings.some((e) => !e || e.length === 0)) {
+          throw new ProviderError(
+            `LiteLLM embeddings response was incomplete for model '${params.model}' (expected ${params.input.length} vectors)`,
+          );
+        }
+        const usage = json["usage"] as { prompt_tokens?: number; total_tokens?: number } | undefined;
+
+        // Embeddings have no completion tokens; use LiteLLM's reported cost, else
+        // the price table's input rate. (Shared explicit-cost sources with chat.)
+        const cost = (() => {
+          const explicit = explicitResponseCost(res.headers, json);
+          if (explicit !== null) return explicit;
+          const tokens = usage?.prompt_tokens ?? usage?.total_tokens;
+          if (typeof tokens === "number") {
+            const price = getModelPrice(params.model, options.priceOverrides);
+            return roundUsd((tokens / 1000) * price.inputPer1k);
+          }
+          return null;
+        })();
+
+        return {
+          // Guaranteed non-empty by the completeness check above.
+          embeddings: embeddings as number[][],
+          model: (json["model"] as string) ?? params.model,
+          actualCostUsd: cost,
+          inputTokens: usage?.prompt_tokens ?? usage?.total_tokens,
+          raw: json,
+        };
       } finally {
         clearTimeout(timer);
       }
-
-      if (!res.ok) {
-        const body = await res.text().catch(() => "");
-        if (res.status >= 500 || res.status === 429) {
-          throw new ProviderError(
-            `LiteLLM returned ${res.status} for embedding model '${params.model}': ${body}`,
-            res.status,
-          );
-        }
-        throw new LiteLLMClientError(
-          `LiteLLM rejected embeddings request (${res.status})`,
-          res.status,
-          body,
-        );
-      }
-
-      const json = (await res.json()) as Record<string, unknown>;
-      const data = json["data"] as Array<{ embedding?: number[]; index?: number }> | undefined;
-      if (!Array.isArray(data)) {
-        throw new ProviderError(
-          `LiteLLM embeddings response had no data array for model '${params.model}'`,
-        );
-      }
-      // Order by the provider's `index` so vectors line up with the input array
-      // even if the proxy returns them out of order.
-      const embeddings = [...data]
-        .sort((a, b) => (a.index ?? 0) - (b.index ?? 0))
-        .map((d) => d.embedding);
-      // Fail loud on a missing/empty vector rather than silently storing `[]`
-      // (which would corrupt a KB or fail a fixed-dimension vector column).
-      if (embeddings.length !== params.input.length || embeddings.some((e) => !e || e.length === 0)) {
-        throw new ProviderError(
-          `LiteLLM embeddings response was incomplete for model '${params.model}' (expected ${params.input.length} vectors)`,
-        );
-      }
-      const usage = json["usage"] as { prompt_tokens?: number; total_tokens?: number } | undefined;
-
-      // Embeddings have no completion tokens; use LiteLLM's reported cost, else
-      // the price table's input rate. (Shared explicit-cost sources with chat.)
-      const cost = (() => {
-        const explicit = explicitResponseCost(res.headers, json);
-        if (explicit !== null) return explicit;
-        const tokens = usage?.prompt_tokens ?? usage?.total_tokens;
-        if (typeof tokens === "number") {
-          const price = getModelPrice(params.model, options.priceOverrides);
-          return roundUsd((tokens / 1000) * price.inputPer1k);
-        }
-        return null;
-      })();
-
-      return {
-        // Guaranteed non-empty by the completeness check above.
-        embeddings: embeddings as number[][],
-        model: (json["model"] as string) ?? params.model,
-        actualCostUsd: cost,
-        inputTokens: usage?.prompt_tokens ?? usage?.total_tokens,
-        raw: json,
-      };
     },
   };
 }

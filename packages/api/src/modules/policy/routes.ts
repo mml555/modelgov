@@ -97,7 +97,10 @@ export function registerPolicyRoutes(
       record = await saveConfigVersion(pool, {
         yaml: parsed.data.yaml,
         note: parsed.data.note,
-        author: request.ctx.principalName,
+        // Record the STABLE identity (OIDC sub / key id, falling back to the
+        // display name for static keys). The two-person self-approval check
+        // compares proposer vs reviewer, so it must not key on a mutable name.
+        author: request.ctx.principalId ?? request.ctx.principalName,
         tenantId: request.ctx.tenantId,
         approvalRequired: deps.approvalRequired,
       }, (saved) => ({
@@ -272,7 +275,19 @@ export function registerPolicyRoutes(
       if (!UUID_OR_INT.test(id)) return sendError(reply, 404, "not_found", {}, "Version not found");
       const result = await reviewConfigVersion(
         pool,
-        { id, decision, reviewer: request.ctx.principalName ?? "unknown", tenantId: request.ctx.tenantId },
+        {
+          id,
+          decision,
+          // Match author: stable identity, so a renamed display name can't defeat
+          // the self-approval check.
+          reviewer: request.ctx.principalId ?? request.ctx.principalName ?? "unknown",
+          // Both identities so a proposal stored under the OLD name-based identity
+          // (before this change) still can't be self-approved by the same operator.
+          reviewerAliases: [request.ctx.principalId, request.ctx.principalName].filter(
+            (v): v is string => typeof v === "string",
+          ),
+          tenantId: request.ctx.tenantId,
+        },
         (reviewed) => ({
           actor: request.ctx.principalName ?? "unknown",
           action: decision === "approved" ? "policy.approve" : "policy.reject",

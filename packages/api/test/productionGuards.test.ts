@@ -126,6 +126,18 @@ describe("assertProductionEnv", () => {
     ).toThrow(/OIDC_AUDIENCE/);
   });
 
+  it("refuses OIDC without a role map", () => {
+    expect(() =>
+      assertProductionEnv(
+        prodEnv({
+          OIDC_ISSUER: "https://login.example.com/",
+          OIDC_JWKS_URI: "https://login.example.com/.well-known/jwks.json",
+          OIDC_AUDIENCE: "modelgov",
+        }),
+      ),
+    ).toThrow(/OIDC_ROLE_MAP/);
+  });
+
   it("requires TRUST_PROXY when behind proxy", () => {
     expect(() =>
       assertProductionEnv(prodEnv({ MODELGOV_BEHIND_PROXY: "true" })),

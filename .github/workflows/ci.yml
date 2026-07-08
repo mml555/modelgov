@@ -13,6 +13,14 @@ concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
+# GitHub's DEFAULT shell is `bash -e {0}` — WITHOUT pipefail. Steps that pipe a
+# command into `tee` (e.g. `pnpm test | tee log`) would otherwise take tee's
+# exit code (0), so a FAILING test suite would pass the step. Forcing an explicit
+# `bash` shell adds `-o pipefail`, so the pipeline fails when the left side does.
+defaults:
+  run:
+    shell: bash
+
 jobs:
   test:
     runs-on: ubuntu-latest

@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import type { Pool } from "pg";
 import { z } from "zod";
 import { sendError } from "../../errors";
+import { resolveControlPlaneTenant } from "../authz/scope";
 import { getEmergencyPause, setEmergencyPause } from "../emergency/repo";
 
 const pauseBodySchema = z.object({
@@ -18,7 +19,7 @@ export function registerEmergencyRoutes(app: FastifyInstance, pool: Pool): void 
     if (!request.ctx.permissions?.includes("policy:read")) {
       return sendError(reply, 403, "forbidden", {}, "API key is not permitted to read emergency status");
     }
-    return reply.send(await getEmergencyPause(pool, request.ctx.tenantId));
+    return reply.send(await getEmergencyPause(pool, resolveControlPlaneTenant(request.ctx)));
   });
 
   app.post("/v1/admin/emergency/pause", {
@@ -40,9 +41,10 @@ export function registerEmergencyRoutes(app: FastifyInstance, pool: Pool): void 
       paused: true,
       reason: parsed.data.reason,
       pausedBy: request.ctx.principalName ?? "unknown",
-      // A tenant-bound operator pauses only their own tenant; a platform key
-      // (no tenant binding) pauses everyone.
-      tenantId: request.ctx.tenantId,
+      // A tenant-bound operator pauses only their own tenant; an unbound operator
+      // without tenant:switch is confined to the default partition; only a
+      // platform (tenant:switch) key pauses everyone.
+      tenantId: resolveControlPlaneTenant(request.ctx),
     });
     return reply.send(state);
   });
@@ -56,14 +58,15 @@ export function registerEmergencyRoutes(app: FastifyInstance, pool: Pool): void 
     if (!request.ctx.permissions?.includes("policy:write")) {
       return sendError(reply, 403, "forbidden", {}, "API key is not permitted to resume AI requests");
     }
+    const resumeTenant = resolveControlPlaneTenant(request.ctx);
     await setEmergencyPause(pool, {
       paused: false,
       pausedBy: request.ctx.principalName ?? "unknown",
-      tenantId: request.ctx.tenantId,
+      tenantId: resumeTenant,
     });
     // Report the EFFECTIVE state, not the write: a platform-wide pause still
     // keeps this tenant paused after clearing its own switch, so echoing
     // {paused:false} would misleadingly report success for a no-op.
-    return reply.send(await getEmergencyPause(pool, request.ctx.tenantId));
+    return reply.send(await getEmergencyPause(pool, resumeTenant));
   });
 }

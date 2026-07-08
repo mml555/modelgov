@@ -19,6 +19,15 @@ class ReservationRejected extends Error {
   }
 }
 
+/** A fallback top-up found the reservation lease already gone (swept). Rolls the
+ *  whole top-up back so no reserved_usd is stranded without a lease behind it. */
+class ReservationLeaseGone extends Error {
+  constructor() {
+    super("reservation lease already released");
+    this.name = "ReservationLeaseGone";
+  }
+}
+
 // All Postgres reads/writes for budget accounting live here. The pure engine
 // never touches the DB; it consumes the UsageSnapshot this repo loads.
 //
@@ -349,12 +358,18 @@ export async function topUpBudget(
           if (res.rowCount === 0) throw new ReservationRejected(d.scope);
         }
         if (params.leaseId) {
-          await client.query(
+          const updated = await client.query(
             `UPDATE budget_reservation_leases
              SET estimated_cost = estimated_cost + $2::numeric
              WHERE id = $1::bigint`,
             [params.leaseId, params.additionalCostUsd],
           );
+          // The lease is gone — the request outlived RESERVATION_STALE_MS and the
+          // sweep already refunded its reservation. The RESERVE_SQL increments
+          // above would then have no lease to settle/release against, stranding
+          // reserved_usd for the rest of the window (a soft budget DoS). Roll the
+          // whole top-up back instead.
+          if (updated.rowCount === 0) throw new ReservationLeaseGone();
         }
       },
       { lockTimeoutMs: LOCK_TIMEOUT_MS },
@@ -363,6 +378,11 @@ export async function topUpBudget(
   } catch (err) {
     if (err instanceof ReservationRejected) {
       return { ok: false, failedScope: err.scope };
+    }
+    if (err instanceof ReservationLeaseGone) {
+      // Lease swept mid-request — treat the top-up as rejected (the whole txn,
+      // including the RESERVE_SQL increments, was rolled back).
+      return { ok: false };
     }
     throw err;
   }

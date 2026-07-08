@@ -86,7 +86,11 @@ describe.skipIf(!DATABASE_URL)("admin audit log (integration)", () => {
         safety: new NoopGuard(),
         observability: new NoopObservability(),
         logger: false,
-        apiKeys: [{ name: "admin", key: "admin-secret", permissions: ["keys:admin", "audit:read"] }],
+        // Platform root operator: manages keys across the deployment and verifies
+        // the global (all-tenant) audit chain, so it holds tenant:switch.
+        apiKeys: [
+          { name: "admin", key: "admin-secret", permissions: ["keys:admin", "audit:read", "tenant:switch"] },
+        ],
         keyResolver: createDbKeyResolver(pool, { cacheTtlMs: 1000 }),
       });
     }

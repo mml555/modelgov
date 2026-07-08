@@ -70,7 +70,13 @@ export async function settleStream(
         feature: aiRequest.feature,
         actualCostUsd,
         estimatedCostUsd: reservedUsd,
-        actualTokens: (final.inputTokens ?? 0) + (final.outputTokens ?? 0),
+        // Mirror the cost fallback above: when the provider omits the usage chunk
+        // (some LiteLLM versions do), estimate tokens from the emitted chars
+        // instead of booking 0 — otherwise streamed requests never deplete a
+        // token-only cap (userDailyTokens / featureMonthlyTokens).
+        actualTokens:
+          (final.inputTokens ?? aiRequest.inputTokensEstimate ?? 0) +
+          (final.outputTokens ?? Math.ceil(Math.max(0, outputChars) / CHARS_PER_TOKEN)),
         estimatedTokens: decision.estimatedTokens,
         caps: decision.reservationCaps,
         now,

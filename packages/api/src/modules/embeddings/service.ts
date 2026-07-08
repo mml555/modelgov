@@ -116,7 +116,14 @@ export async function handleEmbeddings(
     userType: input.userType,
     feature: input.feature,
     requestedModelClass: input.modelClass,
-    inputTokensEstimate: input.inputTokensEstimate ?? estimateTokensFromText(texts),
+    // Never trust a caller-supplied estimate BELOW the server's own content-based
+    // floor — otherwise a near-zero `inputTokensEstimate` under-reserves budget
+    // and slips a huge batch past the token/USD gates (chat applies the same
+    // floor in prep.ts). Take the larger of the two.
+    inputTokensEstimate: Math.max(
+      input.inputTokensEstimate ?? 0,
+      estimateTokensFromText(texts),
+    ),
     // Embeddings produce no completion — reserve zero output tokens so the
     // worst-case estimate doesn't add the feature's maxOutputTokens (which would
     // over-book budget and spuriously trip a token/USD cap).
@@ -174,7 +181,17 @@ export async function handleEmbeddings(
   // data, not instructions). Fails closed (503) on a safety backend outage, and
   // charges nothing on a PII block (PII masking incurs no classifier cost).
   let embedTexts = texts;
-  const piiOnlyPlan: SafetyPlan = { ...decision.safetyPlan, promptInjection: "off" };
+  // Force piiScope=input: embedding text is INPUT that reaches the provider (and
+  // usually a vector store) and has NO output side to catch anything later. A
+  // chat-oriented `pii_scope: output` config would otherwise make CompositeGuard
+  // skip input masking here (piiOnInput = pii !== "off" && piiScope !== "output"),
+  // silently sending raw PII to the provider. Injection is off (data, not
+  // instructions).
+  const piiOnlyPlan: SafetyPlan = {
+    ...decision.safetyPlan,
+    promptInjection: "off",
+    piiScope: "input",
+  };
   let safetyResult;
   try {
     safetyResult = await deps.safety.inspectInput(

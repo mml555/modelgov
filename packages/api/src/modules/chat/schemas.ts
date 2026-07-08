@@ -13,6 +13,22 @@ const MAX_METADATA_KEYS = 32;
 const MAX_CONTENT_PARTS = 32;
 const MAX_IMAGE_URL_CHARS = 12_000_000;
 
+// Only inline data: URIs and public https: image URLs are accepted. The upstream
+// provider / vision backend dereferences image_url, so an arbitrary http(s) URL
+// pointing at an internal address (e.g. http://169.254.169.254/… or
+// http://localhost) is an SSRF vector executed from inside the operator's
+// network. data: is inlined (no fetch); https is the only network scheme allowed.
+function isAllowedImageUrl(url: string): boolean {
+  if (url.startsWith("data:")) return true;
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return false;
+  }
+  return parsed.protocol === "https:";
+}
+
 const textPartSchema = z.object({
   type: z.literal("text"),
   text: z.string().max(MAX_CONTENT_CHARS),
@@ -20,7 +36,13 @@ const textPartSchema = z.object({
 const imagePartSchema = z.object({
   type: z.literal("image_url"),
   image_url: z.object({
-    url: z.string().min(1).max(MAX_IMAGE_URL_CHARS),
+    url: z
+      .string()
+      .min(1)
+      .max(MAX_IMAGE_URL_CHARS)
+      .refine(isAllowedImageUrl, {
+        message: "image_url.url must be a data: URI or an https: URL (SSRF guard)",
+      }),
     detail: z.enum(["low", "high", "auto"]).optional(),
   }),
 });
@@ -47,7 +69,9 @@ export const chatBodySchema = z.object({
    * requires the model to cite verbatim quotes, and verifies them.
    */
   context: z.array(z.string().min(1).max(MAX_CONTENT_CHARS)).min(1).max(64).optional(),
-  inputTokensEstimate: z.number().int().positive().optional(),
+  // Bounded above: an unbounded estimate can overflow the numeric(14,6) reserve
+  // column and 500 the request (and, in billing mode, after the credit hold).
+  inputTokensEstimate: z.number().int().positive().max(10_000_000).optional(),
   temperature: z.number().min(0).max(2).optional(),
   /** Stream the completion as SSE. Requires the feature's output PII mode to be off. */
   stream: z.boolean().optional(),

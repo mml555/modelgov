@@ -105,6 +105,19 @@ export function registerChatRoute(
     const input = auth.value;
     const rawKey = request.headers["idempotency-key"];
     const idempotencyKey = readIdempotencyKey(rawKey);
+    // A present-but-unusable key (too long) must be a loud 400, not silently
+    // dropped — otherwise the client believes the call is idempotent while it
+    // runs unprotected, and a retry double-charges.
+    const rawKeyStr = Array.isArray(rawKey) ? rawKey[0] : rawKey;
+    if (rawKeyStr && rawKeyStr.trim() !== "" && !idempotencyKey) {
+      return sendError(
+        reply,
+        400,
+        "invalid_request",
+        {},
+        "Idempotency-Key must be between 1 and 255 characters",
+      );
+    }
 
     // Per-tenant policy resolution (MULTI_TENANT_POLICY): evaluate this request
     // against its tenant's active config version + stamp its policy identity.
@@ -252,15 +265,43 @@ async function streamChat(
     signal: controller.signal,
   });
 
+  // Abort the upstream + release the hold if the client disconnects during the
+  // PRE-first-byte window — input safety already ran, the budget is reserved, and
+  // provider TTFB can take seconds. The streaming close handler below is attached
+  // only AFTER the first token, so without this the close event fires with no
+  // listener: the abort never runs, the read loop drains the whole generation into
+  // a dead socket, and it settles for output nobody received.
+  const onEarlyClose = (): void => {
+    controller.abort();
+    void releaseOnce();
+  };
+  request.raw.on("close", onEarlyClose);
+  if (request.raw.destroyed) {
+    // Already gone before we attached the listener.
+    onEarlyClose();
+    return;
+  }
+
   // Pull the first event before committing headers: a connection/5xx failure
   // here is still a normal HTTP error (no SSE started, budget released).
   let first: IteratorResult<{ delta: string }, import("../../services/litellm").LiteLLMStreamFinal>;
   try {
     first = await gen.next();
   } catch (err) {
+    request.raw.off("close", onEarlyClose);
     await releaseOnce();
     request.log.error({ err }, "stream provider failure before first token");
     sendError(reply, 502, "provider_unavailable", {}, "Provider unavailable");
+    return;
+  }
+  // Streaming is about to begin: disconnect semantics change from "release the
+  // whole hold" to "partial-settle what was produced", so hand off from
+  // onEarlyClose to onClose. No await between the off() and the on() below, so a
+  // close can't slip through unobserved.
+  request.raw.off("close", onEarlyClose);
+  if (request.raw.destroyed) {
+    controller.abort();
+    await releaseOnce();
     return;
   }
 
@@ -300,11 +341,29 @@ async function streamChat(
     if (durationTimer) clearTimeout(durationTimer);
   };
 
+  // Honor write backpressure: if the kernel/socket buffer is full, wait for
+  // 'drain' before producing more — otherwise a slow-reading client makes the
+  // whole completion buffer in process memory (multiplied across concurrent
+  // streams). Resolve on 'close' too so a disconnected client never hangs the
+  // loop (the close handler has already aborted the upstream by then).
+  const writeSse = async (payload: string): Promise<void> => {
+    if (raw.write(payload)) return;
+    await new Promise<void>((resolve) => {
+      const done = (): void => {
+        raw.off("drain", done);
+        raw.off("close", done);
+        resolve();
+      };
+      raw.once("drain", done);
+      raw.once("close", done);
+    });
+  };
+
   try {
     let next = first;
     while (!next.done) {
       outputChars += next.value.delta.length;
-      raw.write(`data: ${JSON.stringify({ delta: next.value.delta })}\n\n`);
+      await writeSse(`data: ${JSON.stringify({ delta: next.value.delta })}\n\n`);
       next = await gen.next();
     }
     const final = next.value;

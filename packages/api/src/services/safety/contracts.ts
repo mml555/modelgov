@@ -17,7 +17,7 @@ export interface SafetyResult {
   piiMasked: boolean;
   injectionBlocked: boolean;
   findings: SafetyFinding[];
-  blockReason?: "pii_detected" | "prompt_injection";
+  blockReason?: "pii_detected" | "prompt_injection" | "unscanned_image";
   /**
    * Real provider cost incurred by the safety pass itself (the injection
    * classifier makes a billable model call). The caller books this against the

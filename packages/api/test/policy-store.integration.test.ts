@@ -130,6 +130,36 @@ describe.skipIf(!DATABASE_URL)("dynamic policy store (integration)", () => {
       expect((await activateConfigVersion(pool, v1.id)).ok).toBe(true);
     });
 
+    it("blocks self-approval of a legacy proposal stored under the reviewer's old (name) identity", async () => {
+      // Proposed before the stable-id change → proposed_by is the display name.
+      const v1 = await saveConfigVersion(pool, {
+        yaml: VALID_YAML,
+        author: "alice",
+        approvalRequired: true,
+      });
+      // The same human now authenticates with a stable id but still carries the
+      // old name as an alias — must still be blocked from approving.
+      expect(
+        await reviewConfigVersion(pool, {
+          id: v1.id,
+          decision: "approved",
+          reviewer: "oidc:sub-123",
+          reviewerAliases: ["oidc:sub-123", "alice"],
+        }),
+      ).toEqual({ ok: false, reason: "self_approval" });
+      // A genuinely different operator (no overlapping alias) may approve.
+      expect(
+        (
+          await reviewConfigVersion(pool, {
+            id: v1.id,
+            decision: "approved",
+            reviewer: "oidc:sub-999",
+            reviewerAliases: ["oidc:sub-999", "bob"],
+          })
+        ).ok,
+      ).toBe(true);
+    });
+
     it("cannot re-review a version that is no longer proposed", async () => {
       const v1 = await saveConfigVersion(pool, { yaml: VALID_YAML, author: "p", approvalRequired: true });
       await reviewConfigVersion(pool, { id: v1.id, decision: "approved", reviewer: "q" });

@@ -274,13 +274,29 @@ class ModelgovClient:
                 response.read()
                 self._raise_for_status(response)
 
+            # Track an `event: error` line so the data frame that follows it is
+            # raised even if it is malformed (missing `code`, null `delta`) and so
+            # slips past the shape check in _parse_sse_line. A well-formed error
+            # frame is raised by _parse_sse_line directly; this is the backstop.
+            saw_error_event = False
             for line in response.iter_lines():
+                stripped = line.strip() if line else ""
+                if stripped.startswith("event:"):
+                    saw_error_event = stripped[len("event:"):].strip() == "error"
+                    continue
                 chunk = _parse_sse_line(line)
                 if chunk is _DONE:
                     break
                 if isinstance(chunk, _DoneFrame):
                     stream._done = chunk.payload
+                    saw_error_event = False
                     continue
+                if stripped.startswith("data:"):
+                    if saw_error_event:
+                        raise ModelgovError(
+                            502, "stream_error", None, message="stream interrupted"
+                        )
+                    saw_error_event = False
                 if chunk:
                     yield chunk
 
@@ -607,6 +623,19 @@ def _parse_sse_line(line: str) -> Any:
 
     if isinstance(payload, dict) and payload.get("done") is True:
         return _DoneFrame(payload)  # type: ignore[arg-type]
+
+    # Mid-stream error frame: the server emits `event: error` (dropped above as a
+    # non-`data:` field) then a data frame carrying an error `code` when a stream
+    # fails after the first token. Raise instead of returning "" — otherwise the
+    # truncated answer ends cleanly and looks complete to the caller.
+    if isinstance(payload, dict) and isinstance(payload.get("code"), str) and "delta" not in payload:
+        msg = payload.get("message")
+        raise ModelgovError(
+            502,
+            payload["code"],
+            payload,
+            message=msg if isinstance(msg, str) else None,
+        )
 
     return _extract_delta(payload)
 

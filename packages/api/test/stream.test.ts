@@ -113,6 +113,55 @@ describe("SSE streaming", () => {
     expect(res.json().error.code).toBe("provider_unavailable");
   });
 
+  it("aborts the upstream and releases the hold on a pre-first-byte client disconnect", async () => {
+    // A stream that hangs on the first token until aborted — simulates slow
+    // provider TTFB. The client disconnects during that window (before any byte),
+    // which must abort the upstream and release the budget hold. Uses a real
+    // socket because `inject` can't sever a connection mid-request.
+    let captured: AbortSignal | undefined;
+    const litellm: LiteLLMClient = {
+      chat: async () => { throw new Error("chat() should not be called"); },
+      chatStream(params) {
+        captured = params.signal;
+        return (async function* () {
+          await new Promise<void>((_resolve, reject) => {
+            params.signal?.addEventListener(
+              "abort",
+              () => reject(new Error("aborted")),
+              { once: true },
+            );
+          });
+          yield { delta: "unreachable" };
+          return { model: "openai/gpt-4o-mini", actualCostUsd: 0 } as LiteLLMStreamFinal;
+        })();
+      },
+    };
+    const server = app(litellm);
+    await server.listen({ port: 0 });
+    try {
+      const addr = server.server.address();
+      const port = typeof addr === "object" && addr ? addr.port : 0;
+      const ac = new AbortController();
+      const req = fetch(`http://127.0.0.1:${port}/v1/chat`, {
+        method: "POST",
+        headers: { authorization: "Bearer secret", "content-type": "application/json" },
+        body: JSON.stringify({ ...base, feature: "support_chat", stream: true }),
+        signal: ac.signal,
+      }).catch(() => undefined); // the abort rejects the fetch
+      // Let the server reach the hanging first-token read, then disconnect.
+      await new Promise((r) => setTimeout(r, 150));
+      ac.abort();
+      await req;
+      // The server observed the disconnect and aborted the upstream generation.
+      for (let i = 0; i < 40 && !captured?.aborted; i++) {
+        await new Promise((r) => setTimeout(r, 50));
+      }
+      expect(captured?.aborted).toBe(true);
+    } finally {
+      await server.close();
+    }
+  });
+
   it("still serves non-streaming requests normally", async () => {
     const nonStream: LiteLLMClient = {
       chat: async () => ({ content: "ok", model: "openai/gpt-4o-mini", actualCostUsd: 0.001, inputTokens: 5, outputTokens: 2, raw: {} }),

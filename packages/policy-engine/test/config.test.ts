@@ -107,6 +107,84 @@ model_classes:
     ).toThrow(PolicyConfigError);
   });
 
+  it("rejects a misspelled safety protect key instead of failing open", () => {
+    // `promptInjection` (camelCase, the TS type name) or any typo must be a loud
+    // error — silently dropping it would resolve injection to off under a custom
+    // preset. Same fail-closed stance as the budget caps.
+    expect(() =>
+      parseConfigObject({
+        ...RAW_CONFIG,
+        safety: {
+          preset: "custom",
+          protect: { pii: "block", promptInjection: "block" },
+        },
+      } as never),
+    ).toThrow(PolicyConfigError);
+  });
+
+  it("rejects a misspelled data_classes key instead of dropping the restriction", () => {
+    // `allowed_providrs` would otherwise be ignored → restricted data routes to
+    // any provider (fail open on a data-sovereignty control).
+    expect(() =>
+      parseConfigObject({
+        ...RAW_CONFIG,
+        data_classes: { restricted: { allowed_providrs: ["azure"] } },
+      } as never),
+    ).toThrow(PolicyConfigError);
+  });
+
+  it("rejects a misspelled per-feature safety key", () => {
+    expect(() =>
+      parseConfigObject({
+        ...RAW_CONFIG,
+        features: {
+          ...RAW_CONFIG.features,
+          support_chat: { model_class: "cheap", max_tokens: 500, safety: { presett: "strict" } },
+        },
+      } as never),
+    ).toThrow(PolicyConfigError);
+  });
+
+  it("rejects an injection_model whose provider is outside a restricted feature's data class", () => {
+    // strict → prompt_injection: block; restricted data allows only azure, but the
+    // injection classifier runs on openai → restricted text would be exfiltrated.
+    expect(() =>
+      parseConfigObject({
+        ...RAW_CONFIG,
+        features: {
+          ...RAW_CONFIG.features,
+          support_chat: {
+            model_class: "cheap",
+            max_tokens: 500,
+            safety: "strict",
+            data_sensitivity: "restricted",
+          },
+        },
+        data_classes: { restricted: { allowed_providers: ["azure"] } },
+        safety: { preset: "balanced", injection_model: "openai/gpt-4o-mini" },
+      } as never),
+    ).toThrow(/injection_model/);
+  });
+
+  it("allows an injection_model whose provider IS permitted by the data class", () => {
+    expect(() =>
+      parseConfigObject({
+        ...RAW_CONFIG,
+        features: {
+          ...RAW_CONFIG.features,
+          support_chat: {
+            model_class: "cheap",
+            max_tokens: 500,
+            safety: "strict",
+            data_sensitivity: "restricted",
+          },
+        },
+        data_classes: { restricted: { allowed_providers: ["openai"] } },
+        safety: { preset: "balanced", injection_model: "openai/gpt-4o-mini" },
+      } as never),
+    ).not.toThrow();
+  });
+
   it("rejects an unknown top-level key", () => {
     expect(() =>
       parseConfigObject({

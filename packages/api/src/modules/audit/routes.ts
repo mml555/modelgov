@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import type { Pool } from "pg";
 import { sendError } from "../../errors";
 import type { RequestContext } from "../../plugins/requestContext";
+import { resolveControlPlaneTenant } from "../authz/scope";
 import { errorJsonSchema } from "../chat/schemas";
 import { listAudit, verifyAuditChain } from "./repo";
 
@@ -37,8 +38,10 @@ export function registerAuditRoutes(app: FastifyInstance, pool: Pool): void {
       action: q.action,
       actor: q.actor,
       limit: q.limit,
-      // A tenant-scoped admin only sees its own tenant's trail; root sees all.
-      tenantId: request.ctx.tenantId,
+      // A tenant-scoped admin only sees its own tenant's trail; an unbound admin
+      // without tenant:switch is confined to the default partition; only a
+      // platform (tenant:switch) operator sees all tenants.
+      tenantId: resolveControlPlaneTenant(request.ctx),
     });
     return reply.send({ items });
   });
@@ -55,9 +58,12 @@ export function registerAuditRoutes(app: FastifyInstance, pool: Pool): void {
     // The hash chain is global (rows across all tenants link into one chain), so
     // verification necessarily walks every row and its result (total row count,
     // the id of any tamper point) reflects other tenants' entries. Restrict it to
-    // platform (unbound) operators — a tenant-bound admin would otherwise learn
-    // cross-tenant metadata. Tenant-scoped reads still go through GET /v1/admin/audit.
-    if (request.ctx.tenantBound) {
+    // PLATFORM operators (unbound AND holding tenant:switch) — a tenant-bound
+    // admin, or an unbound operator without tenant:switch (confined to the default
+    // partition), would otherwise learn cross-tenant metadata. resolveControlPlaneTenant
+    // returns undefined only for that platform operator. Tenant-scoped reads still
+    // go through GET /v1/admin/audit.
+    if (resolveControlPlaneTenant(request.ctx) !== undefined) {
       return sendError(
         reply,
         403,
