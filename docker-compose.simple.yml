@@ -76,6 +76,13 @@ services:
     build:
       context: .
       dockerfile: packages/api/Dockerfile
+    # LOCAL DEV ONLY. Running as root + the docker.sock mount below let the setup
+    # wizard restart the litellm proxy so new provider keys go live without a
+    # terminal command. docker.sock is effectively host-root, so this is scoped to
+    # this local/demo compose (bound to 127.0.0.1) and MUST NOT appear in any
+    # production compose or the Helm chart. The setup API that uses it is itself
+    # gated off when MODELGOV_PRODUCTION=true. Remove both lines to opt out — the
+    # wizard then falls back to printing `pnpm modelgov reload-providers`.
     user: "0:0"
     depends_on:
       postgres:

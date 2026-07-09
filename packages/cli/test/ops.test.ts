@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  browserOpenCommand,
   buildAutoconnectConsoleUrl,
   hasAnyProviderCredentials,
   modeConfig,
@@ -148,6 +149,19 @@ describe("buildAutoconnectConsoleUrl", () => {
     expect(url).toBe(
       "http://localhost:5174/login?url=http%3A%2F%2Flocalhost%3A3090&token=sk-modelgov-api-local",
     );
+  });
+});
+
+describe("browserOpenCommand", () => {
+  const url = "http://localhost:5174/login?url=x&token=y";
+  it("uses open on macOS", () => {
+    expect(browserOpenCommand("darwin", url)).toEqual({ cmd: "open", args: [url] });
+  });
+  it("uses xdg-open on Linux", () => {
+    expect(browserOpenCommand("linux", url)).toEqual({ cmd: "xdg-open", args: [url] });
+  });
+  it("uses cmd /c start with an empty title arg on Windows", () => {
+    expect(browserOpenCommand("win32", url)).toEqual({ cmd: "cmd", args: ["/c", "start", "", url] });
   });
 });
 
