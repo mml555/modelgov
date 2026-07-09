@@ -55,10 +55,5 @@
     "vitest": "^4.1.9",
     "@vitest/coverage-v8": "^4.1.9",
     "wait-on": "^8.0.1"
-  },
-  "pnpm": {
-    "overrides": {
-      "tsup>esbuild": "^0.28.1"
-    }
   }
 }
