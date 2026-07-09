@@ -15,19 +15,30 @@ guarantees in `docs/versioning.md` apply.
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-07-09
+
 ### Added
 
 - **First-run browser setup wizard.** A guided, no-YAML setup for non-technical
   operators, reached automatically on first run of the operator console
-  (`/setup`). Pick a use case, an AI source (built-in demo — no keys — or a real
-  provider, or local Ollama), a spend cap, and a safety level; the wizard writes
-  and activates the policy, and for cloud providers saves keys to `.env`,
-  generates the LiteLLM config, and **auto-restarts the model proxy** (via the
-  Docker socket on the local dev stack) so keys go live with no terminal command
-  — falling back to a one-line `pnpm modelgov reload-providers` (with a copy
-  button) if the socket isn't available. The done step auto-runs a test message
-  so you see the AI reply, and `./setup` opens the console in your browser. This
-  is a candidate **minor** milestone whenever the next release is cut.
+  (`/setup`). The recommended quick-start connects a **real** provider (OpenAI
+  preset — support-chat template, balanced safety, $200/mo cap) so budgets and
+  cost governance are real from the first request; a built-in demo (no key) is
+  available as a secondary "just exploring" option. For cloud providers the
+  wizard saves keys to `.env`, generates the LiteLLM config, and **auto-restarts
+  the model proxy** (via the Docker socket on the local dev stack) so keys go
+  live with no terminal command — falling back to a one-line
+  `pnpm modelgov reload-providers` (with a copy button) if the socket isn't
+  available. The done step auto-runs a test message so you see the AI reply, and
+  `./setup` opens the console in your browser. `policyMerge` preserves the
+  running gateway's boot-only fields on apply, and hybrid prompt-injection
+  guidance is surfaced for cloud + non-dev safety.
+  - **Security:** setup writes only allowlisted provider-credential env vars
+    (never `DATABASE_URL`/`MODELGOV_API_KEY`), rejects newline-injecting values,
+    creates `.env` `0o600`, scopes provider secrets to the LiteLLM container
+    (not `env_file: .env`), and time-boxes the Docker-socket + probe calls. The
+    socket mount + root are **local-dev-only** (never prod compose or Helm) and
+    the setup API is disabled when `MODELGOV_PRODUCTION=true`.
 
 ### Changed
 
