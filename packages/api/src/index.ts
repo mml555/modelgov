@@ -7,6 +7,7 @@ import {
   setConfigVersionsStrictPricing,
 } from "./modules/policy/repo";
 import { buildServer } from "./app";
+import { createDocumentClient } from "./services/documents";
 import {
   connectRedisIfConfigured,
   createAuthProviders,
@@ -91,6 +92,40 @@ async function main(): Promise<void> {
     corsAllowOrigins: parseCsv(env.CORS_ALLOW_ORIGINS),
     bodyLimitBytes: env.REQUEST_BODY_LIMIT_BYTES,
     requestTimeoutMs: env.REQUEST_TIMEOUT_MS,
+    externalCost: {
+      sources: parseCsv(env.EXTERNAL_COST_SOURCES) ?? [],
+      maxUsd: env.EXTERNAL_COST_MAX_USD,
+    },
+    // Governed document-AI providers (second egress). Each provider is enabled
+    // only when its endpoint/credentials are configured.
+    documentClient: createDocumentClient({
+      tesseract: env.TESSERACT_URL
+        ? { url: env.TESSERACT_URL, perPageUsd: env.DOCUMENT_PRICE_PER_PAGE_TESSERACT }
+        : undefined,
+      azureDi:
+        env.AZURE_DI_ENDPOINT && env.AZURE_DI_KEY
+          ? {
+              endpoint: env.AZURE_DI_ENDPOINT,
+              key: env.AZURE_DI_KEY,
+              perPageUsd: env.DOCUMENT_PRICE_PER_PAGE_AZURE_DI,
+              apiVersion: env.AZURE_DI_API_VERSION,
+            }
+          : undefined,
+      // Enabled only with an explicit TEXTRACT_REGION (so generic AWS creds
+      // present for other reasons don't silently turn Textract on) + creds.
+      textract:
+        env.TEXTRACT_REGION && env.AWS_ACCESS_KEY_ID && env.AWS_SECRET_ACCESS_KEY
+          ? {
+              region: env.TEXTRACT_REGION,
+              accessKeyId: env.AWS_ACCESS_KEY_ID,
+              secretAccessKey: env.AWS_SECRET_ACCESS_KEY,
+              sessionToken: env.AWS_SESSION_TOKEN,
+              perPageUsd: env.DOCUMENT_PRICE_PER_PAGE_TEXTRACT,
+              s3AllowedBuckets: parseCsv(env.TEXTRACT_S3_ALLOWED_BUCKETS) ?? [],
+            }
+          : undefined,
+    }),
+    documentMaxPages: env.DOCUMENT_MAX_PAGES,
     trustProxy: parseTrustProxy(env.TRUST_PROXY),
     rateLimit: {
       max: env.RATE_LIMIT_MAX,

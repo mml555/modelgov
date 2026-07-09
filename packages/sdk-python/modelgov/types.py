@@ -205,6 +205,29 @@ class EmbeddingsResponse(TypedDict):
     requestId: str
 
 
+# --- Documents --------------------------------------------------------------
+
+
+class DocumentSafety(TypedDict):
+    piiMasked: bool
+
+
+class DocumentExtractResponse(TypedDict):
+    """``200`` body of ``POST /v1/documents/extract``."""
+
+    text: str  # extracted text (PII-masked per the feature's plan)
+    pages: int
+    provider: str
+    model: NotRequired[str]
+    decision: str  # "allow" | "degrade"
+    reason: NotRequired[str]
+    cost: Cost
+    # null under hierarchical budgets (the node tree is the authority).
+    budgetRemaining: Optional[BudgetRemaining]
+    safety: DocumentSafety
+    requestId: str
+
+
 # --- Usage ------------------------------------------------------------------
 
 # The /v1/usage and /v1/usage/summary bodies are operator-facing and not fully
@@ -217,6 +240,7 @@ UsageResponse = Dict[str, Any]
 ChatResult = ChatResponse
 ExplainResult = ExplainResponse
 EmbeddingsResult = EmbeddingsResponse
+DocumentExtractResult = DocumentExtractResponse
 UsageResult = UsageResponse
 
 
@@ -237,6 +261,9 @@ __all__ = [
     "EmbeddingsUsage",
     "EmbeddingsResponse",
     "EmbeddingsResult",
+    "DocumentSafety",
+    "DocumentExtractResponse",
+    "DocumentExtractResult",
     "ExplainRequested",
     "ExplainResolved",
     "ExplainSafety",

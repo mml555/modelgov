@@ -126,6 +126,38 @@ export interface EmbeddingsResponse {
   requestId: string;
 }
 
+/** A document to extract text from — exactly one source. */
+export type DocumentSource = { base64: string } | { url: string } | { s3: string };
+
+export interface DocumentExtractRequest {
+  /** Governed provider slug: "tesseract" | "azure-di" | "textract" (must be configured). */
+  provider: string;
+  userId: string;
+  userType: UserTypeName;
+  feature: FeatureName;
+  document: DocumentSource;
+  modelClass?: ModelClassName;
+  /** Caller estimate of page count, used for the pre-call budget reserve. */
+  pages?: number;
+  projectId?: string;
+  environment?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface DocumentExtractResponse {
+  /** Extracted text (PII-masked per the feature's plan). */
+  text: string;
+  pages: number;
+  provider: string;
+  model?: string;
+  decision: "allow" | "degrade";
+  reason?: string;
+  cost: { estimatedUsd: number; actualUsd: number };
+  budgetRemaining: BudgetRemaining | null;
+  safety: { piiMasked: boolean };
+  requestId: string;
+}
+
 export interface ExplainResponse {
   decision: "allow" | "block" | "degrade" | "fallback";
   reason?: string;

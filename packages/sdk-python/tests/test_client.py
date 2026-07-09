@@ -230,6 +230,70 @@ def test_embed_maps_policy_blocked() -> None:
     assert exc_info.value.code == "budget_exceeded"
 
 
+DOCUMENT_SUCCESS_BODY = {
+    "text": "extracted text",
+    "pages": 2,
+    "provider": "azure-di",
+    "decision": "allow",
+    "cost": {"estimatedUsd": 0.003, "actualUsd": 0.003},
+    "budgetRemaining": None,
+    "safety": {"piiMasked": False},
+    "requestId": "req_88",
+}
+
+
+@respx.mock
+def test_extract_document_success_and_auth() -> None:
+    route = respx.post(f"{BASE_URL}/v1/documents/extract").mock(
+        return_value=httpx.Response(200, json=DOCUMENT_SUCCESS_BODY)
+    )
+
+    with make_client() as client:
+        res = client.extract_document(
+            user_id="user_123",
+            user_type="logged_in",
+            feature="doc_review",
+            provider="azure-di",
+            document={"base64": "ZmFrZQ=="},
+            pages=2,
+            idempotency_key="idem-doc-1",
+        )
+
+    assert res == DOCUMENT_SUCCESS_BODY
+    assert res["text"] == "extracted text"
+    request = route.calls.last.request
+    assert request.headers["authorization"] == f"Bearer {API_KEY}"
+    assert request.headers["idempotency-key"] == "idem-doc-1"
+    sent = json.loads(request.content)
+    assert sent == {
+        "userId": "user_123",
+        "userType": "logged_in",
+        "feature": "doc_review",
+        "provider": "azure-di",
+        "document": {"base64": "ZmFrZQ=="},
+        "pages": 2,
+    }
+
+
+@respx.mock
+def test_extract_document_maps_policy_blocked() -> None:
+    respx.post(f"{BASE_URL}/v1/documents/extract").mock(
+        return_value=httpx.Response(
+            403, json={"error": {"code": "budget_exceeded", "message": "over budget"}}
+        )
+    )
+
+    with make_client() as client, pytest.raises(PolicyBlockedError) as exc_info:
+        client.extract_document(
+            user_id="u",
+            user_type="logged_in",
+            feature="doc_review",
+            provider="tesseract",
+            document={"url": "https://example.com/doc.pdf"},
+        )
+    assert exc_info.value.code == "budget_exceeded"
+
+
 @respx.mock
 def test_requested_model_class_maps_to_model_class() -> None:
     respx.post(f"{BASE_URL}/v1/chat").mock(

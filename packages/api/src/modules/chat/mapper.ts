@@ -120,6 +120,12 @@ export interface PolicyMeta {
   configHash?: string;
   policyVersion?: string;
   tenantId?: string;
+  /**
+   * Business transaction key for cost attribution — the caller's reused
+   * `x-request-id` (`ctx.requestId`). Assembled per-request alongside tenantId
+   * and stamped on every audit row via {@link baseLog}.
+   */
+  correlationId?: string;
 }
 
 export function baseLog(
@@ -144,5 +150,6 @@ export function baseLog(
     hostMetadata: request.metadata,
     configHash: meta?.configHash,
     policyVersion: meta?.policyVersion,
+    correlationId: meta?.correlationId,
   };
 }

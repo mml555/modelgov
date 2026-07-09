@@ -24,6 +24,7 @@ from .types import (
     ChatMessage,
     ChatResult,
     ChatStreamDone,
+    DocumentExtractResult,
     EmbeddingsResult,
     ExplainResult,
     UsageResult,
@@ -389,6 +390,66 @@ class ModelgovClient:
         response = self._client.post(
             f"{self.base_url}/v1/embeddings",
             headers=self._headers(),
+            json=body,
+        )
+        return self._handle_json(response)  # type: ignore[return-value]
+
+    def extract_document(
+        self,
+        *,
+        user_id: str,
+        user_type: str,
+        feature: str,
+        provider: str,
+        document: Mapping[str, str],
+        model_class: Optional[str] = None,
+        pages: Optional[int] = None,
+        project_id: Optional[str] = None,
+        environment: Optional[str] = None,
+        metadata: Optional[Mapping[str, Any]] = None,
+        idempotency_key: Optional[str] = None,
+    ) -> DocumentExtractResult:
+        """Extract text from a document through a governed provider
+        (``POST /v1/documents/extract``).
+
+        The gateway calls the OCR/extraction provider itself (Textract, Azure
+        Document Intelligence, or a self-hosted Tesseract sidecar), reserves
+        budget per page, masks PII in the extracted text, and audits the call —
+        exactly like :meth:`chat`. Raises the same typed errors on a ``403``
+        policy/budget/safety block.
+
+        Args:
+            provider: Governed provider slug (``"tesseract"``, ``"azure-di"``,
+                ``"textract"``). Must be configured server-side, else ``400``.
+            document: Exactly one source — ``{"base64": ...}``, ``{"url": ...}``
+                (https), or ``{"s3": "s3://bucket/key"}`` (Textract only).
+            pages: Caller estimate of page count for the pre-call budget reserve.
+            idempotency_key: Sent as the ``Idempotency-Key`` header. Retrying
+                with the same key + body replays the first result instead of
+                re-calling the provider or re-charging.
+        """
+        body: Dict[str, Any] = {
+            "userId": user_id,
+            "userType": user_type,
+            "feature": feature,
+            "provider": provider,
+            "document": dict(document),
+        }
+        if model_class is not None:
+            body["modelClass"] = model_class
+        if pages is not None:
+            body["pages"] = pages
+        if project_id is not None:
+            body["projectId"] = project_id
+        if environment is not None:
+            body["environment"] = environment
+        if metadata is not None:
+            body["metadata"] = dict(metadata)
+
+        extra = {"idempotency-key": idempotency_key} if idempotency_key else None
+        response = self._client.post(
+            f"{self.base_url}/v1/documents/extract",
+            headers=self._headers(extra),
             json=body,
         )
         return self._handle_json(response)  # type: ignore[return-value]

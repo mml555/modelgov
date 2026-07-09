@@ -9,6 +9,7 @@ export const requestListQuerySchema = z.object({
   since: z.string().min(1).optional(),
   limit: z.coerce.number().int().min(1).max(100).optional(),
   projectId: z.string().min(1).optional(),
+  correlationId: z.string().min(1).max(128).optional(),
 });
 
 export const requestRecordJsonSchema = {
@@ -33,6 +34,7 @@ export const requestRecordJsonSchema = {
     actualCostUsd: { type: "number" },
     inputTokens: { type: "integer" },
     outputTokens: { type: "integer" },
+    correlationId: { type: "string" },
     safety: {
       type: "object",
       required: ["pii", "promptInjection"],

@@ -83,6 +83,96 @@ describe("createModelgovClient", () => {
     await expect(client.chat(baseRequest)).rejects.toBeInstanceOf(SafetyBlockedError);
   });
 
+  it("extractDocument posts to /v1/documents/extract and returns the parsed response", async () => {
+    let capturedUrl = "";
+    let capturedBody: Record<string, unknown> = {};
+    let idempotencyHeader: string | null = null;
+    const fetchImpl: typeof fetch = async (url, init) => {
+      capturedUrl = String(url);
+      capturedBody = JSON.parse(String(init?.body));
+      idempotencyHeader = new Headers(init?.headers).get("idempotency-key");
+      return jsonResponse({
+        text: "extracted text",
+        pages: 2,
+        provider: "azure-di",
+        decision: "allow",
+        cost: { estimatedUsd: 0.003, actualUsd: 0.003 },
+        budgetRemaining: null,
+        safety: { piiMasked: false },
+        requestId: "req_9",
+      });
+    };
+    const client = createModelgovClient({ baseUrl: "http://api/", fetchImpl });
+    const res = await client.extractDocument(
+      {
+        provider: "azure-di",
+        userId: "u1",
+        userType: "logged_in",
+        feature: "doc_review",
+        document: { base64: "ZmFrZQ==" },
+        pages: 2,
+      },
+      { idempotencyKey: "idem-doc-1" },
+    );
+
+    expect(capturedUrl).toBe("http://api/v1/documents/extract");
+    expect(capturedBody).toMatchObject({ provider: "azure-di", document: { base64: "ZmFrZQ==" } });
+    expect(idempotencyHeader).toBe("idem-doc-1");
+    expect(res.text).toBe("extracted text");
+    expect(res.pages).toBe(2);
+  });
+
+  it("extractDocument throws PolicyBlockedError on a 403 budget_exceeded", async () => {
+    const fetchImpl: typeof fetch = async () =>
+      jsonResponse(
+        { error: { code: "budget_exceeded", message: "over budget", details: {}, requestId: "req_1" } },
+        403,
+      );
+    const client = createModelgovClient({ baseUrl: "http://api", fetchImpl });
+    await expect(
+      client.extractDocument({
+        provider: "tesseract",
+        userId: "u1",
+        userType: "logged_in",
+        feature: "doc_review",
+        document: { url: "https://example.com/doc.pdf" },
+      }),
+    ).rejects.toBeInstanceOf(PolicyBlockedError);
+  });
+
+  it("embed posts to /v1/embeddings and returns the parsed response", async () => {
+    let capturedUrl = "";
+    const fetchImpl: typeof fetch = async (url) => {
+      capturedUrl = String(url);
+      return jsonResponse({
+        embeddings: [[0.1, 0.2]],
+        model: "openai/text-embedding-3-small",
+        provider: "openai",
+        decision: "allow",
+        usage: { inputTokens: 3 },
+        cost: { estimatedUsd: 0, actualUsd: 0 },
+        budgetRemaining: null,
+        requestId: "req_e1",
+      });
+    };
+    const client = createModelgovClient({ baseUrl: "http://api", fetchImpl });
+    const res = await client.embed({ userId: "u1", userType: "logged_in", feature: "rag_ingest", input: "hi" });
+    expect(capturedUrl).toBe("http://api/v1/embeddings");
+    expect(res.model).toBe("openai/text-embedding-3-small");
+  });
+
+  it("explain posts to /v1/explain and returns the parsed response", async () => {
+    let capturedUrl = "";
+    const fetchImpl: typeof fetch = async (url) => {
+      capturedUrl = String(url);
+      return jsonResponse({ decision: "allow", requested: {}, resolved: {}, budget: {} });
+    };
+    const client = createModelgovClient({ baseUrl: "http://api", fetchImpl });
+    const res = await client.explain({ userId: "u1", userType: "logged_in", feature: "support_chat" });
+    expect(capturedUrl).toBe("http://api/v1/explain");
+    expect(res.decision).toBe("allow");
+  });
+
   it("exposes typed fields on the thrown error", async () => {
     const fetchImpl: typeof fetch = async () =>
       jsonResponse(

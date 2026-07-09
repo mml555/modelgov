@@ -10,6 +10,17 @@ export function requestHash(body: unknown): string {
   return createHash("sha256").update(stableStringify(body)).digest("hex");
 }
 
+/**
+ * Read an `Idempotency-Key` header: trimmed, ≤256 chars, else undefined (a
+ * too-long or non-string value is treated as absent). Shared by the embeddings
+ * and documents routes so the length bound can't drift between them.
+ */
+export function parseIdempotencyKey(header: unknown): string | undefined {
+  return typeof header === "string" && header.trim() !== "" && header.length <= 256
+    ? header.trim()
+    : undefined;
+}
+
 export interface IdempotentHttpResult {
   ok: boolean;
   status?: number;
@@ -124,6 +135,11 @@ function redactForStorage<T extends IdempotentHttpResult>(result: T): T {
   // Embeddings: drop the generated vectors (the produced content for that route).
   if ("embeddings" in next) {
     next.embeddings = [];
+    changed = true;
+  }
+  // Documents: drop the extracted text (the produced content for that route).
+  if ("text" in next) {
+    next.text = "";
     changed = true;
   }
   if (!changed) return result;

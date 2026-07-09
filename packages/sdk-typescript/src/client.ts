@@ -2,6 +2,8 @@ import type {
   BudgetRemaining,
   ChatRequest,
   ChatResponse,
+  DocumentExtractRequest,
+  DocumentExtractResponse,
   EmbeddingsRequest,
   EmbeddingsResponse,
   ExplainRequest,
@@ -139,6 +141,17 @@ export interface ModelgovClient {
    * typed errors on 403 policy/budget blocks.
    */
   embed(request: EmbeddingsRequest, options?: RequestOptions): Promise<EmbeddingsResponse>;
+  /**
+   * Extract text from a document through a governed provider (Textract, Azure
+   * DI, Tesseract). Policy-checked (feature + userType), budget-reserved per
+   * page, PII-masked on the extracted text, and audited exactly like `chat`.
+   * Honors an `Idempotency-Key` (a retry replays instead of re-charging). Throws
+   * the same typed errors on 403 policy/budget/safety blocks.
+   */
+  extractDocument(
+    request: DocumentExtractRequest,
+    options?: ChatOptions,
+  ): Promise<DocumentExtractResponse>;
 }
 
 const DEFAULT_TIMEOUT_MS = 60_000;
@@ -317,6 +330,38 @@ export function createModelgovClient(
       }
 
       return body as unknown as EmbeddingsResponse;
+    },
+
+    async extractDocument(request, opts) {
+      warnUntrustedUserId(request.userId);
+      const signal = scopedSignal(defaultTimeoutMs, opts);
+      let res: Response;
+      try {
+        res = await doFetch(`${baseUrl}/v1/documents/extract`, {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            ...(options.apiKey ? { authorization: `Bearer ${options.apiKey}` } : {}),
+            ...(opts?.idempotencyKey ? { "idempotency-key": opts.idempotencyKey } : {}),
+          },
+          body: JSON.stringify(request),
+          signal: signal.signal,
+        });
+      } finally {
+        signal.cleanup();
+      }
+
+      const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+      if (!res.ok) {
+        const code = errorCode(body);
+        if (code === "safety_blocked") throw new SafetyBlockedError(res.status, code, body);
+        if (code === "policy_blocked" || code === "budget_exceeded") {
+          throw new PolicyBlockedError(res.status, code, body);
+        }
+        throw new ModelgovError(res.status, code, body);
+      }
+
+      return body as unknown as DocumentExtractResponse;
     },
   };
 }

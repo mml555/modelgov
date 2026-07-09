@@ -1,5 +1,6 @@
 import type { Pool } from "pg";
 import { appendRequestLogTenantScope } from "../../db/requestLogScope";
+import { parseSince } from "../../util/timeWindow";
 import { apiStatusToDbStatus, inferReasonCode, mapDbStatus, providerFromModel } from "./reasonCode";
 import type { RequestListQuery, RequestRecord } from "./types";
 
@@ -27,6 +28,7 @@ interface RequestLogDbRow {
   host_metadata: Record<string, unknown> | null;
   config_hash: string | null;
   policy_version: string | null;
+  correlation_id: string | null;
 }
 
 const SELECT_FIELDS = `
@@ -34,7 +36,7 @@ const SELECT_FIELDS = `
   model_class, requested_model_class, resolved_model, decision, status,
   estimated_cost_usd, actual_cost_usd, input_tokens, output_tokens,
   pii_masked, injection_blocked,   error, reason_code, host_metadata,
-  config_hash, policy_version
+  config_hash, policy_version, correlation_id
 `;
 
 export function parseRequestId(raw: string): number {
@@ -84,6 +86,7 @@ export function rowToRecord(row: RequestLogDbRow): RequestRecord {
     timestamps: {
       createdAt: row.created_at.toISOString(),
     },
+    correlationId: row.correlation_id ?? undefined,
     metadata: row.host_metadata ?? undefined,
     policy: {
       configHash: row.config_hash ?? undefined,
@@ -146,6 +149,16 @@ export async function listRequests(
     values.push(params.reasonCode);
     conditions.push(`reason_code = $${values.length}`);
   }
+  if (params.correlationId) {
+    values.push(params.correlationId);
+    conditions.push(`correlation_id = $${values.length}`);
+  } else {
+    // Externally-ingested cost rows (decision='external') are not LLM requests;
+    // exclude them from the default list so they don't masquerade as 'completed'
+    // requests (parity with /v1/usage/summary). They remain visible when drilling
+    // into a specific transaction via correlationId, where the line items matter.
+    conditions.push("decision <> 'external'");
+  }
   if (params.status) {
     const dbStatuses = apiStatusToDbStatus(params.status);
     if (dbStatuses.length > 0) {
@@ -171,18 +184,4 @@ export async function listRequests(
 
   const { rows } = await pool.query<RequestLogDbRow>(sql, values);
   return rows.map(rowToRecord);
-}
-
-function parseSince(raw: string): Date {
-  const now = Date.now();
-  const match = /^(\d+)(h|d)$/.exec(raw.trim());
-  if (match) {
-    const amount = Number(match[1]);
-    const unit = match[2];
-    const ms = unit === "h" ? amount * 60 * 60 * 1000 : amount * 24 * 60 * 60 * 1000;
-    return new Date(now - ms);
-  }
-  const parsed = Date.parse(raw);
-  if (Number.isFinite(parsed)) return new Date(parsed);
-  throw new Error("invalid_since");
 }

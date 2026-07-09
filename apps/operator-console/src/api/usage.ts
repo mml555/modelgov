@@ -27,8 +27,32 @@ export interface BudgetCounters {
   recentRequests: { last24h: number; last24hFailed: number };
 }
 
+/** One row of GET /v1/usage/transactions — cost for a single business transaction. */
+export interface Transaction {
+  correlationId: string;
+  requests: number;
+  externalEvents: number;
+  actualCostUsd: number;
+  llmCostUsd: number;
+  externalCostUsd: number;
+  estimatedCostUsd: number;
+  firstSeen: string;
+  lastSeen: string;
+}
+
+export interface TransactionRollup {
+  since: string;
+  limit: number;
+  transactions: Transaction[];
+}
+
 export const fetchUsageSummary = (since: string): Promise<UsageSummary> =>
   apiFetch<UsageSummary>(`/v1/usage/summary?since=${encodeURIComponent(since)}`);
 
 export const fetchBudgetCounters = (): Promise<BudgetCounters> =>
   apiFetch<BudgetCounters>("/v1/usage");
+
+export const fetchTransactions = (since: string, limit = 50): Promise<TransactionRollup> =>
+  apiFetch<TransactionRollup>(
+    `/v1/usage/transactions?since=${encodeURIComponent(since)}&limit=${limit}`,
+  );

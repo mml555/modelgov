@@ -6,6 +6,8 @@ import { AppError, sendError } from "./errors";
 import { registerExplainRoute } from "./modules/explain/routes";
 import { registerChatRoute, type ChatRouteDeps } from "./modules/chat/routes";
 import { registerEmbeddingsRoute } from "./modules/embeddings/routes";
+import { registerDocumentsRoute } from "./modules/documents/routes";
+import { createDocumentClient, type DocumentAiClient } from "./services/documents";
 import { registerHealthRoute } from "./modules/health/routes";
 import type { HealthDeps } from "./modules/health/service";
 import { registerUsageRoute } from "./modules/usage/routes";
@@ -71,6 +73,20 @@ export interface BuildServerOptions extends ChatRouteDeps {
   bodyLimitBytes?: number;
   /** Max time to receive a full request (slow-client / slowloris backstop). 0 disables. */
   requestTimeoutMs?: number;
+  /**
+   * External (non-LLM) cost ingestion config for POST /v1/usage/external.
+   * `sources` is the accepted-source allowlist; empty disables the endpoint.
+   * `maxUsd` is the per-row sanity cap.
+   */
+  externalCost?: { sources: readonly string[]; maxUsd: number };
+  /**
+   * Governed document-AI providers for POST /v1/documents/extract. Defaults to an
+   * empty client (endpoint registered but every provider returns 400) so the
+   * route always appears in the OpenAPI spec.
+   */
+  documentClient?: DocumentAiClient;
+  /** Worst-case pages reserved per document extract (budget-cap floor). */
+  documentMaxPages?: number;
   /**
    * How much to trust `X-Forwarded-For`. Default `false` — do NOT derive the
    * client IP from a client-controlled header (that lets callers spoof it to
@@ -252,6 +268,7 @@ export function buildServer(opts: BuildServerOptions): FastifyInstance {
       // Per-tenant / hot-reloaded cap: resolve the effective tenant's active
       // policy cap instead of the static boot cap when a resolver is present.
       tenantPolicy: opts.tenantPolicy,
+      externalCost: opts.externalCost,
     });
     registerRequestsRoute(scope, opts.pool, { defaultProjectId: opts.config.project.name });
     registerBillingRoutes(scope, opts.pool, opts.billing);
@@ -308,6 +325,21 @@ export function buildServer(opts: BuildServerOptions): FastifyInstance {
       // Embeddings incur real provider spend — they ride the same credit
       // wallet / usage meter as chat, or billing modes would have a bypass.
       billing: opts.billing,
+    });
+    registerDocumentsRoute(scope, {
+      config: opts.config,
+      pool: opts.pool,
+      // Default to an empty client so the route (and OpenAPI spec) always exist;
+      // every provider then returns 400 until one is configured.
+      documentClient: opts.documentClient ?? createDocumentClient({}),
+      safety: opts.safety,
+      observability,
+      hierarchicalBudgets: opts.hierarchicalBudgets,
+      policyMeta: opts.policyMeta,
+      tenantPolicy: opts.tenantPolicy,
+      billing: opts.billing,
+      idempotencyCaptureContent: opts.idempotencyCaptureContent,
+      maxPages: opts.documentMaxPages ?? 30,
     });
   });
 

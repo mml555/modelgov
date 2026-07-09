@@ -26,6 +26,9 @@ from .types import (
     ChatStreamDone,
     ContentPart,
     Cost,
+    DocumentExtractResponse,
+    DocumentExtractResult,
+    DocumentSafety,
     EmbeddingsResponse,
     EmbeddingsResult,
     EmbeddingsUsage,
@@ -47,7 +50,7 @@ from .types import (
     UsageResult,
 )
 
-__version__ = "1.3.0"
+__version__ = "1.4.0"
 
 __all__ = [
     "ModelgovClient",
@@ -66,6 +69,9 @@ __all__ = [
     "EmbeddingsResponse",
     "EmbeddingsResult",
     "EmbeddingsUsage",
+    "DocumentExtractResponse",
+    "DocumentExtractResult",
+    "DocumentSafety",
     "Usage",
     "Cost",
     "BudgetRemaining",

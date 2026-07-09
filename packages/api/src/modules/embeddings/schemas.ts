@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { budgetRemainingJsonSchema, costJsonSchema } from "../chat/schemas";
 
 // Bounds on caller-supplied size. Embeddings batch many chunks per call (an
 // ingestion pass over a doc corpus), so the item cap is higher than chat's
@@ -76,31 +77,8 @@ export const embeddingsSuccessJsonSchema = {
         inputTokens: { anyOf: [{ type: "integer" }, { type: "null" }] },
       },
     },
-    cost: {
-      type: "object",
-      required: ["estimatedUsd", "actualUsd"],
-      properties: {
-        estimatedUsd: { type: "number" },
-        actualUsd: { type: "number" },
-      },
-    },
-    budgetRemaining: {
-      anyOf: [
-        {
-          type: "object",
-          required: ["userDailyUsd", "featureMonthlyUsd", "globalMonthlyUsd"],
-          properties: {
-            userDailyUsd: { type: "number" },
-            featureMonthlyUsd: { anyOf: [{ type: "number" }, { type: "null" }] },
-            globalMonthlyUsd: { anyOf: [{ type: "number" }, { type: "null" }] },
-            userDailyTokens: { anyOf: [{ type: "number" }, { type: "null" }] },
-            featureMonthlyTokens: { anyOf: [{ type: "number" }, { type: "null" }] },
-            globalMonthlyTokens: { anyOf: [{ type: "number" }, { type: "null" }] },
-          },
-        },
-        { type: "null" },
-      ],
-    },
+    cost: costJsonSchema,
+    budgetRemaining: budgetRemainingJsonSchema,
     requestId: { type: "string" },
   },
 } as const;

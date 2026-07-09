@@ -78,6 +78,38 @@ const baseEnvSchema = z.object({
   LITELLM_TIMEOUT_MS: z.coerce.number().int().positive().default(60_000),
   PRESIDIO_ANALYZER_URL: z.string().url().optional(),
   PRESIDIO_ANONYMIZER_URL: z.string().url().optional(),
+  // ── Document-AI providers (governed OCR / extraction) ──────────────────────
+  // Each provider is enabled iff its endpoint/credentials are set. A provider
+  // that isn't configured returns 400 provider_unavailable at /v1/documents/extract.
+  /** Self-hosted Tesseract OCR sidecar (POST {url}/extract). */
+  TESSERACT_URL: z.string().url().optional(),
+  /** Azure Document Intelligence resource endpoint + key. */
+  AZURE_DI_ENDPOINT: z.string().url().optional(),
+  AZURE_DI_KEY: z.string().min(1).optional(),
+  AZURE_DI_API_VERSION: z.string().min(1).optional(),
+  /** Amazon Textract. Enabled iff TEXTRACT_REGION + AWS creds are set. AWS creds
+   *  are read from the standard env vars (shared with any AWS tooling). */
+  TEXTRACT_REGION: z.string().min(1).optional(),
+  AWS_ACCESS_KEY_ID: z.string().min(1).optional(),
+  AWS_SECRET_ACCESS_KEY: z.string().min(1).optional(),
+  AWS_SESSION_TOKEN: z.string().min(1).optional(),
+  /**
+   * Comma-separated allowlist of S3 buckets a caller may reference via a
+   * `document.s3` source. The gateway reads S3 with ITS OWN AWS credentials, so
+   * without an allowlist any caller could read arbitrary internal/tenant buckets
+   * (confused deputy) — unset ⇒ `s3` sources are rejected (fail closed).
+   */
+  TEXTRACT_S3_ALLOWED_BUCKETS: z.string().optional(),
+  /** Per-page USD prices (the reserve/settle cost basis). Tesseract is 0 (self-hosted). */
+  DOCUMENT_PRICE_PER_PAGE_TESSERACT: z.coerce.number().nonnegative().default(0),
+  DOCUMENT_PRICE_PER_PAGE_AZURE_DI: z.coerce.number().nonnegative().default(0.0015),
+  DOCUMENT_PRICE_PER_PAGE_TEXTRACT: z.coerce.number().nonnegative().default(0.0015),
+  /**
+   * Worst-case pages reserved per document request — the budget cap is checked
+   * against this floor so a caller can't under-report `pages` to bypass a cap.
+   * The caller's `pages` may raise the reserve above it, never below.
+   */
+  DOCUMENT_MAX_PAGES: z.coerce.number().int().positive().default(30),
   OBSERVABILITY_PROVIDER: z.enum(["none", "langfuse", "otel"]).optional(),
   LANGFUSE_PUBLIC_KEY: z.string().optional(),
   LANGFUSE_SECRET_KEY: z.string().optional(),
@@ -131,6 +163,14 @@ const baseEnvSchema = z.object({
   IDEMPOTENCY_STALE_MS: z.coerce.number().int().positive().default(900_000),
   /** Completed idempotency replay rows older than this are pruned (default 7d). */
   IDEMPOTENCY_COMPLETED_RETENTION_MS: z.coerce.number().int().positive().default(604_800_000),
+  /**
+   * Cost attribution: allowlist of non-LLM cost sources accepted by
+   * POST /v1/usage/external (comma-separated, e.g. "azure-di,textract"). Empty
+   * or unset = external cost ingestion is disabled (endpoint returns 400).
+   */
+  EXTERNAL_COST_SOURCES: z.string().optional(),
+  /** Per-row sanity cap (USD) on externally-ingested cost — rejects fat-finger amounts. */
+  EXTERNAL_COST_MAX_USD: z.coerce.number().positive().default(100),
   RESERVATION_STALE_MS: z.coerce.number().int().positive().default(900_000),
   // request_logs retention; the maintenance sweep prunes rows older than this.
   REQUEST_LOG_RETENTION_MS: z.coerce.number().int().positive().default(2_592_000_000),

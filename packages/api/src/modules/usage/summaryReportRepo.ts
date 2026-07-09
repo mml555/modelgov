@@ -96,7 +96,11 @@ function usageSummaryWhere(filters: UsageSummaryFilters): {
   where: string;
   values: unknown[];
 } {
-  const conditions = ["created_at >= $1::timestamptz"];
+  // Exclude externally-ingested cost rows (decision='external'): this is the
+  // LLM-governance summary. Combined LLM+external cost per transaction lives in
+  // the /v1/usage/transactions rollup so external cost never inflates the
+  // request/completed counts here. No-op on pre-ingest data (no such rows).
+  const conditions = ["created_at >= $1::timestamptz", "decision <> 'external'"];
   const values: unknown[] = [filters.since.toISOString()];
 
   appendRequestLogTenantScope(conditions, values, filters.tenantScope);

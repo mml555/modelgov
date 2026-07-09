@@ -19,8 +19,10 @@ export interface RequestLogRow {
   tenantId?: string;
   projectId?: string;
   environment?: string;
-  userId: string;
-  userType: string;
+  // Optional: LLM requests always set these (from the chat/embeddings body), but
+  // externally-ingested cost rows (decision='external') are not user-scoped.
+  userId?: string;
+  userType?: string;
   feature: string;
   modelClass?: string;
   requestedModelClass?: string;
@@ -37,6 +39,14 @@ export interface RequestLogRow {
   reasonCode?: RequestReasonCode;
   traceTags?: unknown;
   safetyFindings?: unknown;
+  /**
+   * Business transaction key — the `x-request-id` the caller reused across a
+   * multi-call transaction (see docs/design/cost-attribution.md). Powers the
+   * per-transaction rollup and the `/v1/requests?correlationId` filter. Always
+   * set for new rows (falls back to the per-call request id); NULL only on
+   * pre-migration rows.
+   */
+  correlationId?: string;
   /** Host-app metadata from the chat request (non-authoritative). */
   hostMetadata?: Record<string, unknown>;
   /** SHA-256 of the effective config that produced this decision. */
@@ -55,9 +65,9 @@ const LOG_SQL = `
     requested_model_class, resolved_model, decision, status, estimated_cost_usd,
     actual_cost_usd, input_tokens, output_tokens, pii_masked, injection_blocked,
     error, reason_code, trace_tags, safety_findings, host_metadata,
-    config_hash, policy_version
+    config_hash, policy_version, correlation_id
   ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25
   )
   RETURNING id
 `;
@@ -133,7 +143,9 @@ export async function getRecentRequestStats(
   since: Date,
   scope?: { projectId?: string; tenantId?: string },
 ): Promise<{ total: number; failed: number }> {
-  const conditions = ["created_at >= $1::timestamptz"];
+  // Externally-ingested cost rows (decision='external') are not LLM requests;
+  // exclude them so the operator "recent requests" count stays LLM-only.
+  const conditions = ["created_at >= $1::timestamptz", "decision <> 'external'"];
   const values: unknown[] = [since.toISOString()];
   appendRequestLogTenantScope(conditions, values, scope?.tenantId);
   if (scope?.projectId) {
@@ -161,8 +173,8 @@ export async function logRequest(pool: Pool, row: RequestLogRow): Promise<string
     row.tenantId ?? null,
     row.projectId ?? null,
     row.environment ?? null,
-    row.userId,
-    row.userType,
+    row.userId ?? null,
+    row.userType ?? null,
     row.feature,
     row.modelClass ?? null,
     row.requestedModelClass ?? null,
@@ -182,6 +194,7 @@ export async function logRequest(pool: Pool, row: RequestLogRow): Promise<string
     row.hostMetadata != null ? JSON.stringify(row.hostMetadata) : null,
     row.configHash ?? null,
     row.policyVersion ?? null,
+    row.correlationId ?? null,
   ]);
   const id = res.rows[0]?.id;
   if (!id) throw new Error("request audit log insert returned no row");

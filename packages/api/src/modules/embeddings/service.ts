@@ -42,7 +42,7 @@ export interface EmbeddingsDeps {
   /** Prepaid-credit / metered billing. Embeddings incur real provider spend, so
    * they must ride the same wallet/meter as chat or they'd be a billing bypass. */
   billing?: BillingService;
-  policyMeta?: { configHash?: string; policyVersion?: string; tenantId?: string };
+  policyMeta?: { configHash?: string; policyVersion?: string; tenantId?: string; correlationId?: string };
   log?: FastifyBaseLogger;
 }
 
@@ -497,9 +497,11 @@ export async function handleEmbeddings(
     });
   } catch {
     // The provider ran (spend is real) but the audit write failed — settle the
-    // reservation anyway (meter keyed by a synthetic id in metered mode).
+    // reservation anyway (meter keyed by a synthetic id in metered mode). Mark
+    // NOT retryable so the idempotency layer caches this failure rather than
+    // releasing the key, which would let a retry re-call the provider + re-charge.
     await settleBilling("");
-    return { ok: false, status: 503, code: "audit_unavailable", details: {}, message: "Audit log unavailable" };
+    return { ok: false, status: 503, code: "audit_unavailable", details: {}, message: "Audit log unavailable", retryable: false };
   }
 
   await settleBilling(auditRequestId);

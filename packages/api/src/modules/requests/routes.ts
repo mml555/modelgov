@@ -23,6 +23,7 @@ export function registerRequestsRoute(
           userType: { type: "string" },
           status: { type: "string", enum: ["completed", "blocked", "safety_blocked", "error"] },
           reasonCode: { type: "string" },
+          correlationId: { type: "string", description: "Business transaction key (the reused x-request-id)." },
           since: { type: "string", description: "e.g. 24h, 7d, or ISO-8601" },
           limit: { type: "integer", minimum: 1, maximum: 100 },
           projectId: { type: "string" },

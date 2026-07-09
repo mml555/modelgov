@@ -8,6 +8,10 @@
 export const KNOWN_PERMISSIONS = [
   "chat:create",
   "usage:read",
+  // Post externally-tracked (non-LLM) cost against a transaction via
+  // POST /v1/usage/external. A recording capability, not budget enforcement —
+  // kept distinct from usage:read so read-only viewers can't write cost.
+  "usage:write",
   "requests:read",
   "keys:admin",
   "policy:read",
@@ -33,7 +37,7 @@ export const ROLE_PERMISSIONS: Record<string, Permission[]> = {
   viewer: ["usage:read", "requests:read"],
   // FinOps: spend + audit visibility (same reads today; a distinct role so
   // policy can diverge later and so audit shows intent).
-  finops: ["usage:read", "requests:read", "audit:read", "billing:write"],
+  finops: ["usage:read", "usage:write", "requests:read", "audit:read", "billing:write"],
   // Manage API keys, with the reads needed to see their effect.
   "key-admin": ["keys:admin", "usage:read", "requests:read", "audit:read"],
   // Author policy without touching keys. Intentionally lacks policy:approve so

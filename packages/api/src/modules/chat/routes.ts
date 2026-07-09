@@ -20,10 +20,16 @@ import type { FastifyReply, FastifyRequest } from "fastify";
 
 function withRequestPolicyMeta(
   deps: ChatRouteDeps,
-  tenantId?: string,
+  ctx: FastifyRequest["ctx"],
 ): ChatRouteDeps["policyMeta"] {
-  if (!tenantId) return deps.policyMeta;
-  return { ...deps.policyMeta, tenantId };
+  // Always stamp the correlation key (the reused x-request-id) so every audit
+  // row this request writes is attributable to its transaction; add tenantId
+  // only when the request is tenant-scoped.
+  return {
+    ...deps.policyMeta,
+    correlationId: ctx.requestId,
+    ...(ctx.tenantId ? { tenantId: ctx.tenantId } : {}),
+  };
 }
 
 function chatDepsForRequest(
@@ -34,7 +40,7 @@ function chatDepsForRequest(
   return {
     ...deps,
     log,
-    policyMeta: withRequestPolicyMeta(deps, request.ctx.tenantId),
+    policyMeta: withRequestPolicyMeta(deps, request.ctx),
   };
 }
 
@@ -50,7 +56,7 @@ export interface ChatRouteDeps {
   /** Opt-in hierarchical (node-tree) budgets for requests carrying a budgetNodeId. */
   hierarchicalBudgets?: boolean;
   /** Config identity stamped on every request log. */
-  policyMeta?: { configHash?: string; policyVersion?: string; tenantId?: string };
+  policyMeta?: { configHash?: string; policyVersion?: string; tenantId?: string; correlationId?: string };
   /**
    * When set (MULTI_TENANT_POLICY), the request is evaluated against its tenant's
    * active policy version instead of the boot config. Absent = single boot config.

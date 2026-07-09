@@ -165,6 +165,37 @@ export const chatBodyJsonSchema = {
   },
 } as const;
 
+// Shared response fragments — chat, embeddings, and documents all return the
+// same `cost` and `budgetRemaining` shapes (BudgetRemaining is one engine type),
+// so they reference these instead of re-declaring the block (which drifts).
+export const costJsonSchema = {
+  type: "object",
+  required: ["estimatedUsd", "actualUsd"],
+  properties: {
+    estimatedUsd: { type: "number" },
+    actualUsd: { type: "number" },
+  },
+} as const;
+
+export const budgetRemainingJsonSchema = {
+  // null under hierarchical budgets (the node tree is the authority).
+  anyOf: [
+    {
+      type: "object",
+      required: ["userDailyUsd", "featureMonthlyUsd", "globalMonthlyUsd"],
+      properties: {
+        userDailyUsd: { type: "number" },
+        featureMonthlyUsd: { anyOf: [{ type: "number" }, { type: "null" }] },
+        globalMonthlyUsd: { anyOf: [{ type: "number" }, { type: "null" }] },
+        userDailyTokens: { anyOf: [{ type: "number" }, { type: "null" }] },
+        featureMonthlyTokens: { anyOf: [{ type: "number" }, { type: "null" }] },
+        globalMonthlyTokens: { anyOf: [{ type: "number" }, { type: "null" }] },
+      },
+    },
+    { type: "null" },
+  ],
+} as const;
+
 export const chatSuccessJsonSchema = {
   type: "object",
   required: ["message", "model", "provider", "decision", "usage", "cost", "budgetRemaining", "safety", "requestId"],
@@ -189,32 +220,8 @@ export const chatSuccessJsonSchema = {
         outputTokens: { anyOf: [{ type: "integer" }, { type: "null" }] },
       },
     },
-    cost: {
-      type: "object",
-      required: ["estimatedUsd", "actualUsd"],
-      properties: {
-        estimatedUsd: { type: "number" },
-        actualUsd: { type: "number" },
-      },
-    },
-    budgetRemaining: {
-      // null under hierarchical budgets (the node tree is the authority).
-      anyOf: [
-        {
-          type: "object",
-          required: ["userDailyUsd", "featureMonthlyUsd", "globalMonthlyUsd"],
-          properties: {
-            userDailyUsd: { type: "number" },
-            featureMonthlyUsd: { anyOf: [{ type: "number" }, { type: "null" }] },
-            globalMonthlyUsd: { anyOf: [{ type: "number" }, { type: "null" }] },
-            userDailyTokens: { anyOf: [{ type: "number" }, { type: "null" }] },
-            featureMonthlyTokens: { anyOf: [{ type: "number" }, { type: "null" }] },
-            globalMonthlyTokens: { anyOf: [{ type: "number" }, { type: "null" }] },
-          },
-        },
-        { type: "null" },
-      ],
-    },
+    cost: costJsonSchema,
+    budgetRemaining: budgetRemainingJsonSchema,
     safety: {
       type: "object",
       required: ["piiMasked", "injectionBlocked"],

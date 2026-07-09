@@ -1,4 +1,5 @@
 import type { Pool } from "pg";
+import { parseSince } from "../../util/timeWindow";
 import {
   getTopModelUsed,
   getTopReasonCode,
@@ -72,18 +73,4 @@ async function mapTopReasonCode(pool: Pool, filters: UsageSummaryFilters) {
 async function mapTopModel(pool: Pool, filters: UsageSummaryFilters) {
   const row = await getTopModelUsed(pool, filters);
   return row ? { model: row.model, count: Number(row.count) } : undefined;
-}
-
-function parseSince(raw: string): Date {
-  const now = Date.now();
-  const match = /^(\d+)(h|d)$/.exec(raw.trim());
-  if (match) {
-    const amount = Number(match[1]);
-    const unit = match[2];
-    const ms = unit === "h" ? amount * 60 * 60 * 1000 : amount * 24 * 60 * 60 * 1000;
-    return new Date(now - ms);
-  }
-  const parsed = Date.parse(raw);
-  if (Number.isFinite(parsed)) return new Date(parsed);
-  throw new Error("invalid_since");
 }

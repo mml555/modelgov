@@ -26,6 +26,8 @@ export interface RequestRecord {
   timestamps: {
     createdAt: string;
   };
+  /** Business transaction key (the reused x-request-id) this row rolls up under. */
+  correlationId?: string;
   /** Host-app metadata attached to the original chat call. */
   metadata?: Record<string, unknown>;
   /** Which policy produced this decision. */
@@ -44,6 +46,8 @@ export interface RequestListQuery {
   since?: string;
   limit?: number;
   projectId?: string;
+  /** Filter to one business transaction (the reused x-request-id). */
+  correlationId?: string;
 }
 
 export interface RequestListResponse {

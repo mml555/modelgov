@@ -45,6 +45,7 @@ const sampleRow = {
   host_metadata: { app: "my_app", recordId: "draft_1" },
   config_hash: "abc123",
   policy_version: "file",
+  correlation_id: "review_8821",
 };
 
 function poolWithRows() {
