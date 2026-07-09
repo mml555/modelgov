@@ -555,6 +555,210 @@ def test_get_usage_summary_passes_since() -> None:
     assert params["since"] == "7d"
 
 
+TRANSACTIONS_BODY = {
+    "since": "24h",
+    "limit": 50,
+    "transactions": [
+        {
+            "correlationId": "req-abc",
+            "requests": 2,
+            "externalEvents": 1,
+            "actualCostUsd": 0.0123,
+            "llmCostUsd": 0.0100,
+            "externalCostUsd": 0.0023,
+            "estimatedCostUsd": 0.0150,
+            "firstSeen": "2026-07-09T00:00:00.000Z",
+            "lastSeen": "2026-07-09T00:00:02.000Z",
+        }
+    ],
+}
+
+
+@respx.mock
+def test_get_usage_transactions_passes_query_and_parses_rollup() -> None:
+    route = respx.get(f"{BASE_URL}/v1/usage/transactions").mock(
+        return_value=httpx.Response(200, json=TRANSACTIONS_BODY)
+    )
+
+    with make_client() as client:
+        res = client.get_usage_transactions(since="7d", limit=50, project_id="proj_1")
+
+    assert res == TRANSACTIONS_BODY
+    assert res["transactions"][0]["correlationId"] == "req-abc"
+    assert res["transactions"][0]["externalCostUsd"] == 0.0023
+    params = route.calls.last.request.url.params
+    assert params["since"] == "7d"
+    assert params["limit"] == "50"  # int coerced to str for the query string
+    assert params["projectId"] == "proj_1"
+    assert route.calls.last.request.headers["authorization"] == f"Bearer {API_KEY}"
+
+
+@respx.mock
+def test_get_usage_transactions_omits_absent_params() -> None:
+    route = respx.get(f"{BASE_URL}/v1/usage/transactions").mock(
+        return_value=httpx.Response(200, json={"since": "24h", "limit": 20, "transactions": []})
+    )
+
+    with make_client() as client:
+        client.get_usage_transactions()
+
+    params = route.calls.last.request.url.params
+    assert "since" not in params
+    assert "limit" not in params
+    assert "projectId" not in params
+
+
+PROVIDER_HEALTH_BODY = {
+    "status": "degraded",
+    "models": [
+        {"model": "openai/gpt-4o-mini", "provider": "openai", "healthy": True},
+        {
+            "model": "anthropic/claude",
+            "provider": "anthropic",
+            "healthy": False,
+            "error": "timeout",
+        },
+    ],
+}
+
+
+@respx.mock
+def test_get_provider_health_returns_body_and_auth() -> None:
+    route = respx.get(f"{BASE_URL}/v1/admin/providers/health").mock(
+        return_value=httpx.Response(200, json=PROVIDER_HEALTH_BODY)
+    )
+
+    with make_client() as client:
+        res = client.get_provider_health()
+
+    assert res == PROVIDER_HEALTH_BODY
+    assert res["status"] == "degraded"
+    assert res["models"][1]["healthy"] is False
+    assert res["models"][1]["error"] == "timeout"
+    assert route.calls.last.request.headers["authorization"] == f"Bearer {API_KEY}"
+
+
+@respx.mock
+def test_get_provider_health_maps_forbidden() -> None:
+    respx.get(f"{BASE_URL}/v1/admin/providers/health").mock(
+        return_value=httpx.Response(403, json={"error": {"code": "forbidden"}})
+    )
+
+    with make_client() as client, pytest.raises(ModelgovError) as exc:
+        client.get_provider_health()
+
+    assert exc.value.status == 403
+    assert exc.value.code == "forbidden"
+
+
+@respx.mock
+def test_request_id_sent_as_correlation_header_across_calls() -> None:
+    """The same request_id rolls related calls into one transaction server-side."""
+    chat_route = respx.post(f"{BASE_URL}/v1/chat").mock(
+        return_value=httpx.Response(200, json=CHAT_SUCCESS_BODY)
+    )
+    doc_route = respx.post(f"{BASE_URL}/v1/documents/extract").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "text": "ok",
+                "pages": 1,
+                "provider": "tesseract",
+                "decision": "allow",
+                "cost": {"estimatedUsd": 0.0, "actualUsd": 0.0},
+                "budgetRemaining": None,
+                "safety": {"piiMasked": False},
+                "requestId": "req_doc",
+            },
+        )
+    )
+
+    with make_client() as client:
+        client.chat(
+            user_id="user_123",
+            user_type="logged_in",
+            feature="support_chat",
+            messages=[{"role": "user", "content": "Hi"}],
+            request_id="txn-42",
+        )
+        client.extract_document(
+            user_id="user_123",
+            user_type="logged_in",
+            feature="doc_review",
+            provider="tesseract",
+            document={"base64": "ZmFrZQ=="},
+            request_id="txn-42",
+        )
+
+    assert chat_route.calls.last.request.headers["x-request-id"] == "txn-42"
+    assert doc_route.calls.last.request.headers["x-request-id"] == "txn-42"
+
+
+@respx.mock
+def test_request_id_forwarded_by_embed_explain_and_stream() -> None:
+    """embed / explain / chat_stream also forward x-request-id (all 5 covered)."""
+    embed_route = respx.post(f"{BASE_URL}/v1/embeddings").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "embeddings": [[0.1]],
+                "model": "m",
+                "provider": "p",
+                "decision": "allow",
+                "usage": {"inputTokens": 1},
+                "cost": {"estimatedUsd": 0.0, "actualUsd": 0.0},
+                "budgetRemaining": None,
+                "requestId": "req_e",
+            },
+        )
+    )
+    explain_route = respx.post(f"{BASE_URL}/v1/explain").mock(
+        return_value=httpx.Response(200, json={"decision": "allow", "summary": "ok"})
+    )
+    stream_route = respx.post(f"{BASE_URL}/v1/chat").mock(
+        return_value=httpx.Response(
+            200, headers={"content-type": "text/event-stream"}, content=SSE_STREAM
+        )
+    )
+
+    with make_client() as client:
+        client.embed(
+            user_id="u", user_type="logged_in", feature="rag_ingest",
+            input="x", request_id="rid",
+        )
+        client.explain(
+            user_id="u", user_type="logged_in", feature="support_chat",
+            request_id="rid",
+        )
+        list(
+            client.chat_stream(
+                user_id="u", user_type="logged_in", feature="support_chat",
+                messages=[{"role": "user", "content": "hi"}], request_id="rid",
+            )
+        )
+
+    assert embed_route.calls.last.request.headers["x-request-id"] == "rid"
+    assert explain_route.calls.last.request.headers["x-request-id"] == "rid"
+    assert stream_route.calls.last.request.headers["x-request-id"] == "rid"
+
+
+@respx.mock
+def test_no_request_id_header_when_absent() -> None:
+    route = respx.post(f"{BASE_URL}/v1/chat").mock(
+        return_value=httpx.Response(200, json=CHAT_SUCCESS_BODY)
+    )
+
+    with make_client() as client:
+        client.chat(
+            user_id="user_123",
+            user_type="logged_in",
+            feature="support_chat",
+            messages=[{"role": "user", "content": "Hi"}],
+        )
+
+    assert "x-request-id" not in route.calls.last.request.headers
+
+
 # --- Streaming --------------------------------------------------------------
 
 SSE_STREAM = b"""data: {"choices":[{"delta":{"content":"Hello"}}]}

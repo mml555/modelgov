@@ -6,6 +6,7 @@ export {
   type ModelgovClient,
   type ModelgovClientOptions,
   type ChatOptions,
+  type RequestOptions,
 } from "./client";
 export type {
   ChatMessage,
@@ -26,6 +27,14 @@ export type {
   ExplainRequest,
   ExplainResponse,
   BudgetRemaining,
+  UsageQuery,
+  UsageSummaryQuery,
+  UsageResponse,
+  TransactionsQuery,
+  Transaction,
+  TransactionsResponse,
+  ProviderModelHealth,
+  ProviderHealthResponse,
   FeatureName,
   ModelClassName,
   UserTypeName,

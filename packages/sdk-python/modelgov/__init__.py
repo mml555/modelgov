@@ -46,15 +46,21 @@ from .types import (
     ExplainSafety,
     ImagePart,
     ImageUrl,
+    ProviderHealthResponse,
+    ProviderHealthResult,
+    ProviderModelHealth,
     ResponseMessage,
     Safety,
     TextPart,
+    Transaction,
+    TransactionsResponse,
+    TransactionsResult,
     Usage,
     UsageResponse,
     UsageResult,
 )
 
-__version__ = "1.5.0"
+__version__ = "1.6.0"
 
 __all__ = [
     "ModelgovClient",
@@ -95,5 +101,11 @@ __all__ = [
     "ExplainResult",
     "UsageResponse",
     "UsageResult",
+    "Transaction",
+    "TransactionsResponse",
+    "TransactionsResult",
+    "ProviderModelHealth",
+    "ProviderHealthResponse",
+    "ProviderHealthResult",
     "__version__",
 ]

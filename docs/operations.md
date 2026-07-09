@@ -93,7 +93,7 @@ For Kubernetes, use the **Helm chart** ([deploy/helm/modelgov](../deploy/helm/mo
 
 ```bash
 helm install modelgov ./deploy/helm/modelgov -n modelgov --create-namespace \
-  --set image.repository=ghcr.io/your-org/modelgov-api --set image.tag=v1.3.0 \
+  --set image.repository=ghcr.io/your-org/modelgov-api --set image.tag=v1.5.0 \
   --set secret.aiGuardApiKey=... --set secret.databaseUrl=postgres://...
 ```
 
@@ -295,13 +295,13 @@ immutable reference in production:
 
 ```text
 # Release tag (preferred)
-ghcr.io/<owner>/<repo>/modelgov-api:v1.3.0
+ghcr.io/<owner>/<repo>/modelgov-api:v1.5.0
 
 # Or commit SHA (also published on each build)
 ghcr.io/<owner>/<repo>/modelgov-api:<git-sha>
 
 # Best: resolve the tag to a digest and set MODELGOV_API_IMAGE=...@sha256:...
-docker buildx imagetools inspect ghcr.io/<owner>/<repo>/modelgov-api:v1.3.0
+docker buildx imagetools inspect ghcr.io/<owner>/<repo>/modelgov-api:v1.5.0
 ```
 
 Production without a registry:

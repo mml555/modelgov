@@ -230,3 +230,73 @@ export interface ExplainResponse {
   wouldCallModel: boolean;
   summary: string;
 }
+
+// --- Usage / transactions / provider health --------------------------------
+
+/** Query for `getUsage` (`GET /v1/usage`). */
+export interface UsageQuery {
+  userId?: string;
+  feature?: string;
+  projectId?: string;
+}
+
+/** Query for `getUsageSummary` (`GET /v1/usage/summary`). */
+export interface UsageSummaryQuery {
+  feature?: string;
+  userType?: string;
+  /** "24h", "7d", or an ISO-8601 timestamp (default "24h" server-side). */
+  since?: string;
+  projectId?: string;
+}
+
+/**
+ * The `/v1/usage` and `/v1/usage/summary` bodies are operator-facing and not
+ * fully fixed in the OpenAPI spec, so they are typed as a loose record.
+ */
+export type UsageResponse = Record<string, unknown>;
+
+/** Query for `getUsageTransactions` (`GET /v1/usage/transactions`). */
+export interface TransactionsQuery {
+  /** "24h", "7d", or an ISO-8601 timestamp (default "24h" server-side). */
+  since?: string;
+  /** Max transactions to return (1-200; top-N by cost). */
+  limit?: number;
+  projectId?: string;
+}
+
+/**
+ * One correlation-id transaction in the cost rollup. Groups every request and
+ * externally-ingested cost event sharing an `x-request-id` (the
+ * `correlationId`), with LLM vs external cost broken out.
+ */
+export interface Transaction {
+  correlationId: string;
+  requests: number;
+  externalEvents: number;
+  actualCostUsd: number;
+  llmCostUsd: number;
+  externalCostUsd: number;
+  estimatedCostUsd: number;
+  firstSeen: string;
+  lastSeen: string;
+}
+
+/** `200` body of `GET /v1/usage/transactions`. */
+export interface TransactionsResponse {
+  since: string;
+  limit: number;
+  transactions: Transaction[];
+}
+
+export interface ProviderModelHealth {
+  model: string;
+  provider: string;
+  healthy: boolean;
+  error?: string;
+}
+
+/** `200` body of `GET /v1/admin/providers/health`. */
+export interface ProviderHealthResponse {
+  status: "ok" | "degraded" | "fail" | "skipped";
+  models: ProviderModelHealth[];
+}

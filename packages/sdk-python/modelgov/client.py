@@ -27,6 +27,8 @@ from .types import (
     DocumentExtractResult,
     EmbeddingsResult,
     ExplainResult,
+    ProviderHealthResult,
+    TransactionsResult,
     UsageResult,
 )
 
@@ -103,6 +105,26 @@ class ModelgovClient:
             headers.update({k: v for k, v in extra.items() if v is not None})
         return headers
 
+    @staticmethod
+    def _extra_headers(
+        *, idempotency_key: Optional[str] = None, request_id: Optional[str] = None
+    ) -> Optional[Dict[str, str]]:
+        """Per-call header overrides: ``Idempotency-Key`` and the ``x-request-id``
+        correlation id.
+
+        Pass the same ``request_id`` across several calls to roll them up into
+        one transaction in ``get_usage_transactions`` (the server reuses a
+        bounded inbound ``x-request-id``, max 128 chars, as the correlation id
+        and echoes it back on ``x-modelgov-request-id``). Returns ``None`` when
+        neither is set so the default headers are used unchanged.
+        """
+        extra: Dict[str, str] = {}
+        if idempotency_key:
+            extra["idempotency-key"] = idempotency_key
+        if request_id:
+            extra["x-request-id"] = request_id
+        return extra or None
+
     # -- public API ---------------------------------------------------------
 
     def chat(
@@ -120,6 +142,7 @@ class ModelgovClient:
         project_id: Optional[str] = None,
         environment: Optional[str] = None,
         idempotency_key: Optional[str] = None,
+        request_id: Optional[str] = None,
         metadata: Optional[Mapping[str, Any]] = None,
     ) -> ChatResult:
         """Run a guarded chat completion (``POST /v1/chat``).
@@ -147,6 +170,12 @@ class ModelgovClient:
             idempotency_key: Sent as the ``Idempotency-Key`` header. Retrying
                 with the same key + body replays the first result instead of
                 re-charging budget or re-calling the model.
+            request_id: Sent as the ``x-request-id`` header (the transaction
+                correlation id). Pass the same value across related calls — e.g.
+                a chat plus a document extraction for one user action — so they
+                roll up as one transaction in :meth:`get_usage_transactions`.
+                Bounded to 128 chars server-side; omit to let the gateway mint
+                a per-request UUID.
             metadata: Arbitrary key/value data stored on the audit log
                 (max 32 keys). Does not affect policy.
 
@@ -172,7 +201,9 @@ class ModelgovClient:
             environment=environment,
             metadata=metadata,
         )
-        extra = {"idempotency-key": idempotency_key} if idempotency_key else None
+        extra = self._extra_headers(
+            idempotency_key=idempotency_key, request_id=request_id
+        )
         response = self._client.post(
             f"{self.base_url}/v1/chat",
             headers=self._headers(extra),
@@ -195,6 +226,7 @@ class ModelgovClient:
         project_id: Optional[str] = None,
         environment: Optional[str] = None,
         idempotency_key: Optional[str] = None,
+        request_id: Optional[str] = None,
         metadata: Optional[Mapping[str, Any]] = None,
     ) -> "ChatStream":
         """Stream a guarded chat completion as incremental text chunks.
@@ -230,6 +262,10 @@ class ModelgovClient:
         Policy/safety blocks that happen *before* streaming starts are returned
         as a normal non-2xx JSON response and raised as the usual typed errors.
 
+        ``idempotency_key`` and ``request_id`` behave exactly as in :meth:`chat`
+        (the ``Idempotency-Key`` and ``x-request-id`` headers respectively); pass
+        the same ``request_id`` to correlate this stream with related calls.
+
         Returns:
             A :class:`ChatStream` yielding ``str`` chunks of assistant text, in
             order, exposing ``.done`` once fully consumed.
@@ -255,8 +291,11 @@ class ModelgovClient:
         body["stream"] = True
 
         extra: Dict[str, str] = {"accept": "text/event-stream"}
-        if idempotency_key:
-            extra["idempotency-key"] = idempotency_key
+        merged = self._extra_headers(
+            idempotency_key=idempotency_key, request_id=request_id
+        )
+        if merged:
+            extra.update(merged)
 
         return ChatStream(self, body, extra)
 
@@ -312,12 +351,14 @@ class ModelgovClient:
         input_tokens_estimate: Optional[int] = None,
         project_id: Optional[str] = None,
         environment: Optional[str] = None,
+        request_id: Optional[str] = None,
     ) -> ExplainResult:
         """Dry-run policy evaluation (``POST /v1/explain``).
 
         Returns the decision, resolved model, safety plan, and a live budget
         snapshot *without* calling the model or reserving budget. Same identity
-        fields as :meth:`chat`, but no ``messages``.
+        fields as :meth:`chat`, but no ``messages``. ``request_id`` sets the
+        ``x-request-id`` correlation header (see :meth:`chat`).
         """
         body: Dict[str, Any] = {
             "userId": user_id,
@@ -336,7 +377,7 @@ class ModelgovClient:
 
         response = self._client.post(
             f"{self.base_url}/v1/explain",
-            headers=self._headers(),
+            headers=self._headers(self._extra_headers(request_id=request_id)),
             json=body,
         )
         return self._handle_json(response)  # type: ignore[return-value]
@@ -353,6 +394,7 @@ class ModelgovClient:
         input_tokens_estimate: Optional[int] = None,
         project_id: Optional[str] = None,
         environment: Optional[str] = None,
+        request_id: Optional[str] = None,
         metadata: Optional[Mapping[str, Any]] = None,
     ) -> EmbeddingsResult:
         """Embed one or more texts through the gateway (``POST /v1/embeddings``).
@@ -364,6 +406,8 @@ class ModelgovClient:
         Args:
             input: A single text, or a batch of texts to embed. A list is sent
                 as a JSON array (one vector is returned per input, in order).
+            request_id: Sets the ``x-request-id`` correlation header — see
+                :meth:`chat` — to roll this call up with related requests.
 
         Returns:
             The decoded :class:`~modelgov.types.EmbeddingsResponse` body, whose
@@ -389,7 +433,7 @@ class ModelgovClient:
 
         response = self._client.post(
             f"{self.base_url}/v1/embeddings",
-            headers=self._headers(),
+            headers=self._headers(self._extra_headers(request_id=request_id)),
             json=body,
         )
         return self._handle_json(response)  # type: ignore[return-value]
@@ -409,6 +453,7 @@ class ModelgovClient:
         environment: Optional[str] = None,
         metadata: Optional[Mapping[str, Any]] = None,
         idempotency_key: Optional[str] = None,
+        request_id: Optional[str] = None,
     ) -> DocumentExtractResult:
         """Extract text from a document through a governed provider
         (``POST /v1/documents/extract``).
@@ -433,6 +478,9 @@ class ModelgovClient:
             idempotency_key: Sent as the ``Idempotency-Key`` header. Retrying
                 with the same key + body replays the first result instead of
                 re-calling the provider or re-charging.
+            request_id: Sets the ``x-request-id`` correlation header — see
+                :meth:`chat` — so an extraction rolls up with the chat/embed
+                calls of the same user action in :meth:`get_usage_transactions`.
         """
         body: Dict[str, Any] = {
             "userId": user_id,
@@ -454,7 +502,9 @@ class ModelgovClient:
         if metadata is not None:
             body["metadata"] = dict(metadata)
 
-        extra = {"idempotency-key": idempotency_key} if idempotency_key else None
+        extra = self._extra_headers(
+            idempotency_key=idempotency_key, request_id=request_id
+        )
         response = self._client.post(
             f"{self.base_url}/v1/documents/extract",
             headers=self._headers(extra),
@@ -516,6 +566,60 @@ class ModelgovClient:
             f"{self.base_url}/v1/usage/summary",
             headers=self._headers(),
             params=params,
+        )
+        return self._handle_json(response)  # type: ignore[return-value]
+
+    def get_usage_transactions(
+        self,
+        *,
+        since: Optional[str] = None,
+        limit: Optional[int] = None,
+        project_id: Optional[str] = None,
+    ) -> TransactionsResult:
+        """Per-transaction cost rollup (``GET /v1/usage/transactions``).
+
+        Groups every request and externally-ingested cost event by
+        ``correlationId`` (the ``x-request-id``), returning the top-N by cost
+        with LLM vs external cost broken out — so an LLM call and a document
+        extraction issued under the same ``request_id`` appear as one
+        transaction. Requires an API key with the ``usage:read`` permission.
+
+        Args:
+            since: ``"24h"``, ``"7d"``, or an ISO-8601 timestamp (default
+                ``"24h"`` server-side).
+            limit: Max transactions to return (1-200; top-N by cost).
+            project_id: Restrict to a single project.
+        """
+        params: Dict[str, str] = {}
+        if since is not None:
+            params["since"] = since
+        if limit is not None:
+            params["limit"] = str(limit)
+        if project_id is not None:
+            params["projectId"] = project_id
+
+        response = self._client.get(
+            f"{self.base_url}/v1/usage/transactions",
+            headers=self._headers(),
+            params=params,
+        )
+        return self._handle_json(response)  # type: ignore[return-value]
+
+    def get_provider_health(self) -> ProviderHealthResult:
+        """Per-provider/model health from the LiteLLM proxy
+        (``GET /v1/admin/providers/health``).
+
+        A read-only operator view — surfaces which provider/model is down
+        without affecting readiness. Requires an API key with the ``usage:read``
+        permission. The server serves a short-lived cached result, so it is safe
+        to poll.
+
+        Returns:
+            ``{"status": "ok"|"degraded"|"fail"|"skipped", "models": [...]}``.
+        """
+        response = self._client.get(
+            f"{self.base_url}/v1/admin/providers/health",
+            headers=self._headers(),
         )
         return self._handle_json(response)  # type: ignore[return-value]
 

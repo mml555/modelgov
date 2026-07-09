@@ -145,7 +145,7 @@ MODELGOV_API_KEY=sk-modelgov-api-local \
 | `make up-prod` | Small self-hosted production (**not HA**) |
 | **Helm** | [Enterprise production](./docs/production-deploy.md) — recommended |
 
-**Current release:** `v1.3.0` — pin `ghcr.io/mml555/modelgov/modelgov-api:v1.3.0` in production.
+**Current release:** `v1.5.0` — pin `ghcr.io/mml555/modelgov/modelgov-api:v1.5.0` in production.
 
 | Command | Stack |
 | --- | --- |

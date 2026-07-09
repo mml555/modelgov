@@ -10,9 +10,9 @@ cd my-project
 ./setup                          # creates .env if needed, starts, waits, smoke-tests
 ```
 
-> Note: the packages (`create-modelgov`, `@modelgov/sdk`, `modelgov`) are not
-> yet published to npm/PyPI. Until then, run from source — see
-> [self-host.md](./self-host.md).
+> The packages are published: `create-modelgov` and `@modelgov/sdk` on npm,
+> `modelgov` on PyPI. To develop against local changes instead, run from source —
+> see [self-host.md](./self-host.md).
 
 Stack: Modelgov API + LiteLLM + Postgres + Presidio.
 

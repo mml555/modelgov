@@ -30,7 +30,7 @@ This guide walks from empty infrastructure to a running production Modelgov depl
 | **Postgres** | 16+, managed (RDS, Cloud SQL, Azure Database), TLS enabled |
 | **Redis** | 7+, managed, reachable from API pods |
 | **TLS** | Terminated at ingress / load balancer (cert-manager or cloud LB) |
-| **Container registry** | Pull `ghcr.io/<org>/modelgov-api:v1.3.0` (pin digest in values) |
+| **Container registry** | Pull `ghcr.io/<org>/modelgov-api:v1.5.0` (pin digest in values) |
 | **Secrets store** | K8s Secrets, Vault, or cloud secret manager for API keys and DB URL |
 
 ### Network diagram
@@ -62,7 +62,7 @@ helm upgrade --install modelgov deploy/helm/modelgov \
   --namespace modelgov --create-namespace \
   --set production=true \
   --set image.repository=ghcr.io/your-org/modelgov-api \
-  --set image.tag=v1.3.0 \
+  --set image.tag=v1.5.0 \
   --set api.replicas=2 \
   --set-string api.extraEnv[0].name=MODELGOV_PRODUCTION \
   --set-string api.extraEnv[0].value=true \
@@ -124,13 +124,13 @@ Pin every image to a **version tag or `@sha256:` digest**:
 
 ```yaml
 image:
-  tag: v1.3.0   # or sha256:...
+  tag: v1.5.0   # or sha256:...
 ```
 
 Verify artifacts after release:
 
 ```bash
-scripts/verify-release-artifacts.sh v1.3.0 your-org/Modelgov
+scripts/verify-release-artifacts.sh v1.5.0 your-org/Modelgov
 ```
 
 ### Image architecture

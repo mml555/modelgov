@@ -319,4 +319,143 @@ describe("createModelgovClient", () => {
     expect(capturedUrl).toBe("http://api/v1/explain");
     expect(res.decision).toBe("block");
   });
+
+  it("getUsage builds the query string and sends auth", async () => {
+    let capturedUrl = "";
+    let auth: string | null = null;
+    const fetchImpl: typeof fetch = async (url, init) => {
+      capturedUrl = String(url);
+      auth = new Headers(init?.headers).get("authorization");
+      return jsonResponse({ userDailyUsd: 0.24 });
+    };
+    const client = createModelgovClient({ baseUrl: "http://api", apiKey: "k", fetchImpl });
+    const res = await client.getUsage({ userId: "u1", feature: "support_chat" });
+
+    expect(capturedUrl).toBe("http://api/v1/usage?userId=u1&feature=support_chat");
+    expect(auth).toBe("Bearer k");
+    expect(res).toMatchObject({ userDailyUsd: 0.24 });
+  });
+
+  it("getUsageSummary passes since + feature and returns the body", async () => {
+    let capturedUrl = "";
+    const fetchImpl: typeof fetch = async (url) => {
+      capturedUrl = String(url);
+      return jsonResponse({ totalUsd: 1.23 });
+    };
+    const client = createModelgovClient({ baseUrl: "http://api", fetchImpl });
+    const res = await client.getUsageSummary({ feature: "support_chat", since: "7d" });
+
+    expect(capturedUrl).toBe("http://api/v1/usage/summary?feature=support_chat&since=7d");
+    expect(res).toMatchObject({ totalUsd: 1.23 });
+  });
+
+  it("getUsageTransactions coerces limit and parses the rollup", async () => {
+    let capturedUrl = "";
+    const fetchImpl: typeof fetch = async (url) => {
+      capturedUrl = String(url);
+      return jsonResponse({
+        since: "7d",
+        limit: 50,
+        transactions: [
+          {
+            correlationId: "req-abc",
+            requests: 2,
+            externalEvents: 1,
+            actualCostUsd: 0.0123,
+            llmCostUsd: 0.01,
+            externalCostUsd: 0.0023,
+            estimatedCostUsd: 0.015,
+            firstSeen: "2026-07-09T00:00:00.000Z",
+            lastSeen: "2026-07-09T00:00:02.000Z",
+          },
+        ],
+      });
+    };
+    const client = createModelgovClient({ baseUrl: "http://api", fetchImpl });
+    const res = await client.getUsageTransactions({ since: "7d", limit: 50 });
+
+    expect(capturedUrl).toBe("http://api/v1/usage/transactions?since=7d&limit=50");
+    const [txn] = res.transactions;
+    expect(txn?.correlationId).toBe("req-abc");
+    expect(txn?.externalCostUsd).toBe(0.0023);
+  });
+
+  it("getProviderHealth returns the parsed health and maps 403", async () => {
+    const okFetch: typeof fetch = async (url) => {
+      expect(String(url)).toBe("http://api/v1/admin/providers/health");
+      return jsonResponse({
+        status: "degraded",
+        models: [
+          { model: "openai/gpt-4o-mini", provider: "openai", healthy: true },
+          { model: "anthropic/claude", provider: "anthropic", healthy: false, error: "timeout" },
+        ],
+      });
+    };
+    const client = createModelgovClient({ baseUrl: "http://api", fetchImpl: okFetch });
+    const res = await client.getProviderHealth();
+    expect(res.status).toBe("degraded");
+    const [, second] = res.models;
+    expect(second?.healthy).toBe(false);
+    expect(second?.error).toBe("timeout");
+
+    const forbidden = createModelgovClient({
+      baseUrl: "http://api",
+      fetchImpl: async () => jsonResponse({ error: { code: "forbidden" } }, 403),
+    });
+    await expect(forbidden.getProviderHealth()).rejects.toBeInstanceOf(ModelgovError);
+  });
+
+  it("sends x-request-id from options as the correlation header", async () => {
+    const seen: (string | null)[] = [];
+    const fetchImpl: typeof fetch = async (_url, init) => {
+      seen.push(new Headers(init?.headers).get("x-request-id"));
+      return jsonResponse({ message: { role: "assistant", content: "x" } });
+    };
+    const client = createModelgovClient({ baseUrl: "http://api", fetchImpl });
+    await client.chat(baseRequest, { requestId: "txn-42" });
+    await client.chat(baseRequest); // no requestId -> header absent
+
+    expect(seen[0]).toBe("txn-42");
+    expect(seen[1]).toBeNull();
+  });
+
+  it("forwards requestId on embed, explain, extractDocument, and chatStream", async () => {
+    const seen: Record<string, string | null> = {};
+    const fetchImpl: typeof fetch = async (url, init) => {
+      const headers = new Headers(init?.headers);
+      const path = new URL(String(url)).pathname;
+      seen[path] = headers.get("x-request-id");
+      if (headers.get("accept") === "text/event-stream") return sseResponse(["[DONE]"]);
+      return jsonResponse({
+        embeddings: [[0.1]],
+        decision: "allow",
+        text: "t",
+        pages: 1,
+        provider: "p",
+      });
+    };
+    const client = createModelgovClient({ baseUrl: "http://api", fetchImpl });
+    const rid = "txn-99";
+    await client.embed(
+      { userId: "u1", userType: "logged_in", feature: "rag_ingest", input: "x" },
+      { requestId: rid },
+    );
+    await client.explain(
+      { userId: "u1", userType: "logged_in", feature: "support_chat" },
+      { requestId: rid },
+    );
+    await client.extractDocument(
+      { userId: "u1", userType: "logged_in", feature: "doc_review", provider: "tesseract", document: { base64: "eA==" } },
+      { requestId: rid },
+    );
+    const it = client.chatStream(baseRequest, { requestId: rid });
+    while (!(await it.next()).done) {
+      /* drain the stream */
+    }
+
+    expect(seen["/v1/embeddings"]).toBe(rid);
+    expect(seen["/v1/explain"]).toBe(rid);
+    expect(seen["/v1/documents/extract"]).toBe(rid);
+    expect(seen["/v1/chat"]).toBe(rid); // chatStream
+  });
 });

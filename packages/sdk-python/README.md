@@ -201,7 +201,42 @@ Requires an API key with `usage:read`.
 ```python
 usage = ai.get_usage(user_id="user_123")
 summary = ai.get_usage_summary(feature="support_chat", since="7d")
+
+# Per-transaction cost rollup (grouped by correlationId), top-N by cost, with
+# LLM vs externally-ingested cost broken out:
+txns = ai.get_usage_transactions(since="7d", limit=50)
+for t in txns["transactions"]:
+    print(t["correlationId"], t["actualCostUsd"], t["llmCostUsd"], t["externalCostUsd"])
+
+# Per-provider/model health from the LiteLLM proxy (read-only operator view):
+health = ai.get_provider_health()
+print(health["status"])   # "ok" | "degraded" | "fail" | "skipped"
+for m in health["models"]:
+    print(m["provider"], m["model"], m["healthy"], m.get("error"))
 ```
+
+## Correlating related calls
+
+The gateway groups audit rows and cost by `x-request-id`. Pass the same
+`request_id` to every call that belongs to one user action — e.g. a document
+extraction feeding a chat answer — so they roll up as a single transaction in
+`get_usage_transactions()`:
+
+```python
+rid = f"txn-{user_id}-{session_id}"   # any stable id, <= 128 chars
+doc = ai.extract_document(
+    user_id="user_123", user_type="logged_in", feature="doc_review",
+    provider="azure-di", document={"url": scan_url}, request_id=rid,
+)
+answer = ai.chat(
+    user_id="user_123", user_type="logged_in", feature="support_chat",
+    messages=[{"role": "user", "content": doc["text"]}], request_id=rid,
+)
+```
+
+`request_id` is accepted by `chat`, `chat_stream`, `embed`, `explain`, and
+`extract_document`. Omit it to let the gateway mint a per-request UUID. The id
+is echoed back on the `x-modelgov-request-id` response header.
 
 ## Errors
 

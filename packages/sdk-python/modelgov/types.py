@@ -266,6 +266,51 @@ class DocumentExtractResponse(TypedDict):
 UsageResponse = Dict[str, Any]
 
 
+class Transaction(TypedDict):
+    """One correlation-id transaction in the cost rollup.
+
+    Groups every request and externally-ingested cost event that shares an
+    ``x-request-id`` (the ``correlationId``), so a chat call and a document
+    extraction issued under the same id roll up together, with LLM vs external
+    cost broken out.
+    """
+
+    correlationId: str
+    requests: int
+    externalEvents: int
+    actualCostUsd: float
+    llmCostUsd: float
+    externalCostUsd: float
+    estimatedCostUsd: float
+    firstSeen: str  # ISO-8601
+    lastSeen: str  # ISO-8601
+
+
+class TransactionsResponse(TypedDict):
+    """``200`` body of ``GET /v1/usage/transactions``."""
+
+    since: str
+    limit: int
+    transactions: List[Transaction]  # top-N by cost
+
+
+# --- Provider health --------------------------------------------------------
+
+
+class ProviderModelHealth(TypedDict):
+    model: str
+    provider: str
+    healthy: bool
+    error: NotRequired[str]  # present when the model probe failed
+
+
+class ProviderHealthResponse(TypedDict):
+    """``200`` body of ``GET /v1/admin/providers/health``."""
+
+    status: str  # "ok" | "degraded" | "fail" | "skipped"
+    models: List[ProviderModelHealth]
+
+
 # --- Public aliases (match the naming used in the task/client signatures) ---
 
 ChatResult = ChatResponse
@@ -273,6 +318,8 @@ ExplainResult = ExplainResponse
 EmbeddingsResult = EmbeddingsResponse
 DocumentExtractResult = DocumentExtractResponse
 UsageResult = UsageResponse
+TransactionsResult = TransactionsResponse
+ProviderHealthResult = ProviderHealthResponse
 
 
 __all__ = [
@@ -309,4 +356,10 @@ __all__ = [
     "ExplainResult",
     "UsageResponse",
     "UsageResult",
+    "Transaction",
+    "TransactionsResponse",
+    "TransactionsResult",
+    "ProviderModelHealth",
+    "ProviderHealthResponse",
+    "ProviderHealthResult",
 ]
