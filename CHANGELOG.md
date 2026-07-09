@@ -15,6 +15,20 @@ guarantees in `docs/versioning.md` apply.
 
 ## [Unreleased]
 
+### Added
+
+- **First-run browser setup wizard.** A guided, no-YAML setup for non-technical
+  operators, reached automatically on first run of the operator console
+  (`/setup`). Pick a use case, an AI source (built-in demo — no keys — or a real
+  provider, or local Ollama), a spend cap, and a safety level; the wizard writes
+  and activates the policy, and for cloud providers saves keys to `.env`,
+  generates the LiteLLM config, and **auto-restarts the model proxy** (via the
+  Docker socket on the local dev stack) so keys go live with no terminal command
+  — falling back to a one-line `pnpm modelgov reload-providers` (with a copy
+  button) if the socket isn't available. The done step auto-runs a test message
+  so you see the AI reply, and `./setup` opens the console in your browser. This
+  is a candidate **minor** milestone whenever the next release is cut.
+
 ### Changed
 
 - **Versioning is now patch-by-default.** Backward-compatible changes — including
