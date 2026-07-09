@@ -8,6 +8,12 @@ import type {
   EmbeddingsResponse,
   ExplainRequest,
   ExplainResponse,
+  ProviderHealthResponse,
+  TransactionsQuery,
+  TransactionsResponse,
+  UsageQuery,
+  UsageResponse,
+  UsageSummaryQuery,
 } from "./types";
 import { warnUntrustedUserId } from "./integration";
 
@@ -101,6 +107,14 @@ export interface ChatOptions {
    * the first result instead of re-charging budget / re-calling the model.
    */
   idempotencyKey?: string;
+  /**
+   * Sent as the `x-request-id` header (the transaction correlation id). Pass
+   * the same value across related calls — e.g. a chat plus a document
+   * extraction for one user action — so they roll up as one transaction in
+   * `getUsageTransactions`. Bounded to 128 chars server-side; omit to let the
+   * gateway mint a per-request UUID.
+   */
+  requestId?: string;
   /** Per-request timeout in milliseconds. Set null to disable. */
   timeoutMs?: number | null;
   /** Optional caller cancellation signal. */
@@ -108,6 +122,8 @@ export interface ChatOptions {
 }
 
 export interface RequestOptions {
+  /** Sent as the `x-request-id` correlation header. See {@link ChatOptions.requestId}. */
+  requestId?: string;
   /** Per-request timeout in milliseconds. Set null to disable. */
   timeoutMs?: number | null;
   /** Optional caller cancellation signal. */
@@ -152,6 +168,29 @@ export interface ModelgovClient {
     request: DocumentExtractRequest,
     options?: ChatOptions,
   ): Promise<DocumentExtractResponse>;
+  /** Current budget counters for a user and/or feature (`GET /v1/usage`). Requires `usage:read`. */
+  getUsage(query?: UsageQuery, options?: RequestOptions): Promise<UsageResponse>;
+  /** Aggregated cost/request summary (`GET /v1/usage/summary`). Requires `usage:read`. */
+  getUsageSummary(
+    query?: UsageSummaryQuery,
+    options?: RequestOptions,
+  ): Promise<UsageResponse>;
+  /**
+   * Per-transaction cost rollup grouped by `correlationId` (`GET
+   * /v1/usage/transactions`), top-N by cost, with LLM vs externally-ingested
+   * cost broken out. Requires `usage:read`. Pair with a shared
+   * {@link ChatOptions.requestId} to correlate related calls.
+   */
+  getUsageTransactions(
+    query?: TransactionsQuery,
+    options?: RequestOptions,
+  ): Promise<TransactionsResponse>;
+  /**
+   * Per-provider/model health from the LiteLLM proxy (`GET
+   * /v1/admin/providers/health`). Read-only operator view; requires
+   * `usage:read`. Server-cached, so safe to poll.
+   */
+  getProviderHealth(options?: RequestOptions): Promise<ProviderHealthResponse>;
 }
 
 const DEFAULT_TIMEOUT_MS = 60_000;
@@ -177,6 +216,7 @@ export function createModelgovClient(
             ...(opts?.idempotencyKey
               ? { "idempotency-key": opts.idempotencyKey }
               : {}),
+            ...(opts?.requestId ? { "x-request-id": opts.requestId } : {}),
           },
           body: JSON.stringify(request),
           signal: signal.signal,
@@ -211,6 +251,7 @@ export function createModelgovClient(
             "content-type": "application/json",
             accept: "text/event-stream",
             ...(options.apiKey ? { authorization: `Bearer ${options.apiKey}` } : {}),
+            ...(opts?.requestId ? { "x-request-id": opts.requestId } : {}),
           },
           body: JSON.stringify({ ...request, stream: true }),
           signal: signal.signal,
@@ -286,6 +327,7 @@ export function createModelgovClient(
           headers: {
             "content-type": "application/json",
             ...(options.apiKey ? { authorization: `Bearer ${options.apiKey}` } : {}),
+            ...(opts?.requestId ? { "x-request-id": opts.requestId } : {}),
           },
           body: JSON.stringify(request),
           signal: signal.signal,
@@ -312,6 +354,7 @@ export function createModelgovClient(
           headers: {
             "content-type": "application/json",
             ...(options.apiKey ? { authorization: `Bearer ${options.apiKey}` } : {}),
+            ...(opts?.requestId ? { "x-request-id": opts.requestId } : {}),
           },
           body: JSON.stringify(request),
           signal: signal.signal,
@@ -343,6 +386,7 @@ export function createModelgovClient(
             "content-type": "application/json",
             ...(options.apiKey ? { authorization: `Bearer ${options.apiKey}` } : {}),
             ...(opts?.idempotencyKey ? { "idempotency-key": opts.idempotencyKey } : {}),
+            ...(opts?.requestId ? { "x-request-id": opts.requestId } : {}),
           },
           body: JSON.stringify(request),
           signal: signal.signal,
@@ -363,7 +407,64 @@ export function createModelgovClient(
 
       return body as unknown as DocumentExtractResponse;
     },
+
+    async getUsage(query, opts) {
+      return getJson(`/v1/usage`, query, opts) as Promise<UsageResponse>;
+    },
+
+    async getUsageSummary(query, opts) {
+      return getJson(`/v1/usage/summary`, query, opts) as Promise<UsageResponse>;
+    },
+
+    async getUsageTransactions(query, opts) {
+      return getJson(`/v1/usage/transactions`, query, opts) as Promise<TransactionsResponse>;
+    },
+
+    async getProviderHealth(opts) {
+      return getJson(`/v1/admin/providers/health`, undefined, opts) as Promise<ProviderHealthResponse>;
+    },
   };
+
+  /** Shared GET helper: builds the query string, sends auth, maps errors. */
+  async function getJson(
+    path: string,
+    query?: QueryParams,
+    opts?: RequestOptions,
+  ): Promise<unknown> {
+    const qs = buildQuery(query);
+    const signal = scopedSignal(defaultTimeoutMs, opts);
+    let res: Response;
+    try {
+      res = await doFetch(`${baseUrl}${path}${qs}`, {
+        method: "GET",
+        headers: {
+          ...(options.apiKey ? { authorization: `Bearer ${options.apiKey}` } : {}),
+        },
+        signal: signal.signal,
+      });
+    } finally {
+      signal.cleanup();
+    }
+    const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+    if (!res.ok) {
+      throw new ModelgovError(res.status, errorCode(body), body);
+    }
+    return body;
+  }
+}
+
+/** Union of the typed query shapes the GET helpers accept. */
+type QueryParams = UsageQuery | UsageSummaryQuery | TransactionsQuery;
+
+/** Serialize defined query params to a `?a=1&b=2` string (empty when none). */
+function buildQuery(query?: QueryParams): string {
+  if (!query) return "";
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(query)) {
+    if (value !== undefined) params.set(key, String(value));
+  }
+  const s = params.toString();
+  return s ? `?${s}` : "";
 }
 
 function scopedSignal(

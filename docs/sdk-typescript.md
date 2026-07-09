@@ -163,6 +163,40 @@ await ai.chat(request, { idempotencyKey: `chat-${userId}-${sessionId}` });
 
 The API returns `x-idempotent-replay: true` on cache hits.
 
+## Usage & operations
+
+Read endpoints (require an API key with `usage:read`):
+
+```typescript
+const usage = await ai.getUsage({ userId: "user_123" });
+const summary = await ai.getUsageSummary({ feature: "support_chat", since: "7d" });
+
+// Per-transaction cost rollup (grouped by correlationId), LLM vs external split:
+const { transactions } = await ai.getUsageTransactions({ since: "7d", limit: 50 });
+for (const t of transactions) {
+  console.log(t.correlationId, t.actualCostUsd, t.llmCostUsd, t.externalCostUsd);
+}
+
+// Per-provider/model health from the LiteLLM proxy (read-only, server-cached):
+const health = await ai.getProviderHealth(); // { status, models: [{ provider, model, healthy, error? }] }
+```
+
+## Correlating related calls
+
+The gateway groups audit rows and cost by `x-request-id`. Pass the same
+`requestId` to every call in one user action so they roll up as a single
+transaction in `getUsageTransactions`:
+
+```typescript
+const requestId = `txn-${userId}-${sessionId}`; // any stable id, <= 128 chars
+const doc = await ai.extractDocument(docRequest, { requestId });
+const answer = await ai.chat(chatRequest, { requestId });
+```
+
+`requestId` is accepted by `chat`, `chatStream`, `embed`, `explain`, and
+`extractDocument`. Omit it to let the gateway mint a per-request UUID; the id is
+echoed back on the `x-modelgov-request-id` response header.
+
 ## Timeouts and cancellation
 
 Requests time out after 60 seconds by default. Override globally on the client or

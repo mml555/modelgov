@@ -15,20 +15,27 @@ guarantees in `docs/versioning.md` apply.
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-07-09
+
 ### Added
 
-- **Python SDK — admin/usage API coverage + request correlation.** The client
-  gained `get_usage_transactions()` (`GET /v1/usage/transactions` — the
-  per-transaction cost rollup grouped by `correlationId`, LLM vs external cost
-  broken out) and `get_provider_health()` (`GET /v1/admin/providers/health` —
-  per-provider/model health from the LiteLLM proxy). Both require `usage:read`.
-  New typed results `TransactionsResult` / `Transaction` and
-  `ProviderHealthResult` / `ProviderModelHealth` are exported.
-- **Python SDK — `request_id` correlation.** `chat`, `chat_stream`, `embed`,
-  `explain`, and `extract_document` accept an optional `request_id` that sets the
-  `x-request-id` header. Passing the same value across related calls rolls them
-  up into one transaction in `get_usage_transactions` (the gateway reuses a
-  bounded inbound `x-request-id`, ≤128 chars, as the correlation id).
+- **SDKs — admin/usage API coverage + request correlation (Python + TypeScript).**
+  Both clients gained `getUsageTransactions` / `get_usage_transactions`
+  (`GET /v1/usage/transactions` — the per-transaction cost rollup grouped by
+  `correlationId`, LLM vs externally-ingested cost broken out) and
+  `getProviderHealth` / `get_provider_health` (`GET /v1/admin/providers/health` —
+  per-provider/model health from the LiteLLM proxy). The TypeScript SDK also
+  gained `getUsage` / `getUsageSummary` (previously Python-only). All require the
+  `usage:read` permission. New typed results are exported:
+  `Transaction`/`TransactionsResponse` and `ProviderModelHealth`/
+  `ProviderHealthResponse` (TS), and the `TransactionsResult` /
+  `ProviderHealthResult` aliases (Python).
+- **SDKs — request correlation.** `chat`, `chat_stream`/`chatStream`, `embed`,
+  `explain`, and `extract_document`/`extractDocument` accept an optional
+  `request_id` / `requestId` that sets the `x-request-id` header. Passing the
+  same value across related calls rolls them up into one transaction in the
+  transactions rollup (the gateway reuses a bounded inbound `x-request-id`,
+  ≤128 chars, as the correlation id, echoed on `x-modelgov-request-id`).
 
 ### Fixed
 
