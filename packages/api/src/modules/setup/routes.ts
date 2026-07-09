@@ -3,15 +3,26 @@ import type { FastifyInstance } from "fastify";
 import { writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { z } from "zod";
+import { PROVIDER_REGISTRY } from "@modelgov/policy-engine";
 import { sendError } from "../../errors";
 import type { RequestContext } from "../../plugins/requestContext";
-import { mergeEnvFile } from "./envFile";
+import { EnvFileError, mergeEnvFile } from "./envFile";
 
 const GENERATED_LITELLM_CONFIG = "litellm_config.generated.yaml";
 const DOCKER_SOCKET_PATH = "/var/run/docker.sock";
+const DOCKER_TIMEOUT_MS = 5000;
+
+// Only provider credential env vars may be written via setup — never arbitrary
+// keys like DATABASE_URL or MODELGOV_API_KEY. Derived from the provider registry.
+const ALLOWED_SECRET_ENV_VARS = new Set(
+  Object.values(PROVIDER_REGISTRY).flatMap((p) => p.credentialEnvVars ?? []),
+);
 
 const secretsBodySchema = z.object({
-  secrets: z.record(z.string(), z.string()),
+  secrets: z.record(
+    z.string(),
+    z.string().refine((v) => !/[\r\n]/.test(v), "secret values must not contain newlines"),
+  ),
   useCloud: z.boolean().optional(),
   litellmYaml: z.string().min(1).optional(),
 });
@@ -37,6 +48,7 @@ async function dockerRequest<T>(method: string, path: string): Promise<T> {
         path,
         method,
         headers: { host: "docker" },
+        timeout: DOCKER_TIMEOUT_MS,
       },
       (res) => {
         let body = "";
@@ -51,6 +63,8 @@ async function dockerRequest<T>(method: string, path: string): Promise<T> {
         });
       },
     );
+    // Without this, a stuck docker daemon would hang the setup request forever.
+    req.on("timeout", () => req.destroy(new Error("Docker API timeout")));
     req.on("error", reject);
     req.end();
   });
@@ -94,21 +108,36 @@ export function registerSetupRoutes(app: FastifyInstance, deps: SetupRouteDeps):
     }
 
     const filtered = Object.fromEntries(
-      Object.entries(parsed.data.secrets).filter(([, v]) => v.trim().length > 0),
+      Object.entries(parsed.data.secrets).filter(
+        ([k, v]) => v.trim().length > 0 && ALLOWED_SECRET_ENV_VARS.has(k),
+      ),
     );
     if (Object.keys(filtered).length === 0) {
-      return sendError(reply, 400, "invalid_request", {}, "No secrets provided");
+      return sendError(
+        reply,
+        400,
+        "invalid_request",
+        {},
+        "No recognized provider secrets provided (only provider credential env vars are accepted)",
+      );
     }
 
-    const envPath = `${deps.projectRoot}/.env`;
-    mergeEnvFile(envPath, filtered);
-
+    const envPath = resolve(deps.projectRoot, ".env");
     let litellmConfigPath: string | undefined;
-    if (parsed.data.litellmYaml) {
-      const configPath = resolve(deps.projectRoot, GENERATED_LITELLM_CONFIG);
-      writeFileSync(configPath, parsed.data.litellmYaml.endsWith("\n") ? parsed.data.litellmYaml : `${parsed.data.litellmYaml}\n`, "utf8");
-      mergeEnvFile(envPath, { LITELLM_CONFIG_PATH: `./${GENERATED_LITELLM_CONFIG}` });
-      litellmConfigPath = GENERATED_LITELLM_CONFIG;
+    try {
+      mergeEnvFile(envPath, filtered);
+
+      if (parsed.data.litellmYaml) {
+        const configPath = resolve(deps.projectRoot, GENERATED_LITELLM_CONFIG);
+        writeFileSync(configPath, parsed.data.litellmYaml.endsWith("\n") ? parsed.data.litellmYaml : `${parsed.data.litellmYaml}\n`, "utf8");
+        mergeEnvFile(envPath, { LITELLM_CONFIG_PATH: `./${GENERATED_LITELLM_CONFIG}` });
+        litellmConfigPath = GENERATED_LITELLM_CONFIG;
+      }
+    } catch (e) {
+      if (e instanceof EnvFileError) {
+        return sendError(reply, 400, "invalid_request", {}, e.message);
+      }
+      throw e;
     }
 
     const restarted = parsed.data.useCloud

@@ -41,7 +41,7 @@ describe("nextStep", () => {
 });
 
 describe("backStep", () => {
-  const base = { backend: "cloud" as const, templateLocalOnly: false, useCloud: true, quickStart: false };
+  const base = { backend: "cloud" as const, templateLocalOnly: false, quickStart: false };
 
   it("quick-start jumps review → welcome", () => {
     expect(backStep("review", { ...base, quickStart: true })).toBe("welcome");
@@ -52,14 +52,10 @@ describe("backStep", () => {
   });
 
   it("limits goes back to backend for demo (no key steps)", () => {
-    expect(backStep("limits", { backend: "demo", templateLocalOnly: false, useCloud: false, quickStart: false })).toBe(
-      "backend",
-    );
+    expect(backStep("limits", { backend: "demo", templateLocalOnly: false, quickStart: false })).toBe("backend");
   });
 
   it("limits goes back to template for a local-only template", () => {
-    expect(backStep("limits", { backend: "local", templateLocalOnly: true, useCloud: false, quickStart: false })).toBe(
-      "template",
-    );
+    expect(backStep("limits", { backend: "local", templateLocalOnly: true, quickStart: false })).toBe("template");
   });
 });

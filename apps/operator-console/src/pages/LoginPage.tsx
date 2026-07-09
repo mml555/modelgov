@@ -13,9 +13,24 @@ function isLocalDevGateway(url: string): boolean {
 }
 
 async function probeLogin(url: string, token: string): Promise<string | null> {
-  const res = await fetch(`${url.replace(/\/$/, "")}/v1/usage/summary?since=24h`, {
-    headers: { authorization: `Bearer ${token}` },
-  });
+  // Time-box the probe so a hung gateway doesn't leave the user stuck on the
+  // "Opening your local console…" screen indefinitely.
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 8000);
+  let res: Response;
+  try {
+    res = await fetch(`${url.replace(/\/$/, "")}/v1/usage/summary?since=24h`, {
+      headers: { authorization: `Bearer ${token}` },
+      signal: controller.signal,
+    });
+  } catch (e) {
+    if (e instanceof DOMException && e.name === "AbortError") {
+      return "The gateway didn't respond in time. Is the stack running? Try: make status";
+    }
+    return `Could not reach the API. Is the stack running? Try: make status`;
+  } finally {
+    clearTimeout(timer);
+  }
   if (res.status === 401 || res.status === 403) {
     return "Could not connect. Run ./setup again and click the link it prints.";
   }

@@ -89,6 +89,18 @@ describe("POST /v1/setup/secrets", () => {
     );
   });
 
+  it("rejects a secret value containing a newline (no .env injection)", async () => {
+    const root = tempRoot();
+    const app = buildApp({ permissions: ["policy:write"], projectRoot: root });
+    const res = await post(app, {
+      secrets: { OPENAI_API_KEY: "sk-x\nMODELGOV_API_KEY=attacker" },
+    });
+    expect(res.statusCode).toBe(400);
+    if (existsSync(join(root, ".env"))) {
+      expect(readFileSync(join(root, ".env"), "utf8")).not.toContain("attacker");
+    }
+  });
+
   it("is not registered when disabled", async () => {
     const app = buildApp({ permissions: ["policy:write"], projectRoot: tempRoot(), enabled: false });
     const res = await post(app, { secrets: { OPENAI_API_KEY: "sk-x" } });

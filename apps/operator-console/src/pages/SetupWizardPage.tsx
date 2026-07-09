@@ -98,7 +98,7 @@ export function SetupWizardPage() {
   }
 
   function goBack(from: Step) {
-    setStep(backStep(from, { backend, templateLocalOnly, useCloud, quickStart }));
+    setStep(backStep(from, { backend, templateLocalOnly, quickStart }));
     setError("");
   }
 
@@ -121,8 +121,10 @@ export function SetupWizardPage() {
       if (!preview.valid) throw new Error(preview.error ?? "Policy validation failed");
 
       const saved = await saveVersion(yaml, "Initial setup wizard");
-      await activateVersion(saved.id);
 
+      // Persist provider secrets + LiteLLM config BEFORE activating the policy, so
+      // a failed secret save can't leave a policy active that points at providers
+      // with no credentials. Activation is the last, committing step.
       if (useCloud) {
         const scaffoldOpts = {
           projectName: "my-app",
@@ -138,6 +140,8 @@ export function SetupWizardPage() {
       } else if (useLocal) {
         setNextCommand("make start-local");
       }
+
+      await activateVersion(saved.id);
 
       markSetupComplete();
       setStep("done");

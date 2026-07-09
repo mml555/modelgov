@@ -29,9 +29,34 @@ services:
     # the dev stack under everyone without a commit). Bump this intentionally.
     image: ghcr.io/berriai/litellm:main-v1.72.0-stable
     command: ["--config", "/app/config.yaml", "--port", "4000"]
-    env_file: .env
+    # Pass ONLY provider credentials + the master key to this third-party image —
+    # not `env_file: .env`, which would also hand it DATABASE_URL, MODELGOV_API_KEY,
+    # and Postgres creds. The setup wizard writes provider keys into .env; compose
+    # substitutes them here (absent ones resolve to empty). Add a line when you
+    # enable a new provider that needs an env credential.
     environment:
       LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:-sk-modelgov-local}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      MISTRAL_API_KEY: ${MISTRAL_API_KEY:-}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      XAI_API_KEY: ${XAI_API_KEY:-}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      COHERE_API_KEY: ${COHERE_API_KEY:-}
+      AZURE_API_KEY: ${AZURE_API_KEY:-}
+      AZURE_API_BASE: ${AZURE_API_BASE:-}
+      AZURE_API_VERSION: ${AZURE_API_VERSION:-}
+      AZURE_AI_API_KEY: ${AZURE_AI_API_KEY:-}
+      AZURE_AI_API_BASE: ${AZURE_AI_API_BASE:-}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN:-}
+      AWS_REGION_NAME: ${AWS_REGION_NAME:-}
+      VERTEX_PROJECT: ${VERTEX_PROJECT:-}
+      VERTEX_LOCATION: ${VERTEX_LOCATION:-}
+      GITHUB_COPILOT_TOKEN: ${GITHUB_COPILOT_TOKEN:-}
     volumes:
       - ${LITELLM_CONFIG_PATH:-./litellm_config.yaml}:/app/config.yaml:ro
     deploy:

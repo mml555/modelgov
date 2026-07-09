@@ -38,8 +38,12 @@ export function getVisibleSteps(backend: BackendMode, templateLocalOnly: boolean
 interface FlowOpts {
   backend: BackendMode;
   templateLocalOnly: boolean;
-  useCloud: boolean;
   quickStart: boolean;
+}
+
+/** True when the wizard will collect provider keys (cloud, non-local template). */
+function isCloud(backend: BackendMode, templateLocalOnly: boolean): boolean {
+  return backend === "cloud" && !templateLocalOnly;
 }
 
 /** The next step from `from`, skipping provider/key steps for non-cloud backends. */
@@ -60,13 +64,14 @@ export function nextStep(from: Step, opts: Pick<FlowOpts, "backend" | "templateL
 /** The previous step from `from` (quick-start jumps review → welcome). */
 export function backStep(from: Step, opts: FlowOpts): Step {
   if (from === "review" && opts.quickStart) return "welcome";
+  const useCloud = isCloud(opts.backend, opts.templateLocalOnly);
   const flow: Record<Step, Step> = {
     welcome: "welcome",
     template: "welcome",
     backend: "template",
     providers: "backend",
     keys: "providers",
-    limits: opts.useCloud ? "keys" : opts.templateLocalOnly ? "template" : "backend",
+    limits: useCloud ? "keys" : opts.templateLocalOnly ? "template" : "backend",
     review: "limits",
     done: "review",
   };

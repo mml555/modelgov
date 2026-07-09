@@ -7,16 +7,22 @@ const SETUP_KEY = "modelgov-setup-v1-complete";
 const WIZARD_STATE_KEY = "modelgov-setup-wizard-state-v1";
 
 export function isSetupComplete(): boolean {
-  return localStorage.getItem(SETUP_KEY) === "1";
+  // Guarded: a throwing localStorage (private mode / disabled) must not crash the
+  // App setup gate. Treat unavailable storage as "not yet complete".
+  try {
+    return localStorage.getItem(SETUP_KEY) === "1";
+  } catch {
+    return false;
+  }
 }
 
 export function markSetupComplete(): void {
-  localStorage.setItem(SETUP_KEY, "1");
-  // Drop the in-progress wizard state once setup is finished.
   try {
+    localStorage.setItem(SETUP_KEY, "1");
+    // Drop the in-progress wizard state once setup is finished.
     sessionStorage.removeItem(WIZARD_STATE_KEY);
   } catch {
-    /* ignore storage errors */
+    /* ignore storage errors (private mode, quota, disabled) */
   }
 }
 
