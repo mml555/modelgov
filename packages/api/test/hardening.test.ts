@@ -185,7 +185,7 @@ describe("production hardening", () => {
       payload: "",
     });
     expect(res.statusCode).toBe(400);
-    expect(res.json().error.code).not.toBe("internal_error");
+    expect(res.json().error.code).toBe("invalid_request");
   });
 
   it("maps a malformed JSON body to 400, not 500", async () => {
@@ -196,6 +196,6 @@ describe("production hardening", () => {
       payload: "{ not valid json",
     });
     expect(res.statusCode).toBe(400);
-    expect(res.json().error.code).not.toBe("internal_error");
+    expect(res.json().error.code).toBe("invalid_request");
   });
 });
