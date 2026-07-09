@@ -15,3 +15,6 @@ allowBuilds:
 
 overrides:
   postcss: 8.5.16
+  # esbuild <0.28.1 dev-server arbitrary file read (GHSA-g7r4-m6w7-qqqr); only
+  # tsup pulled the vulnerable 0.27.7, tsx already uses 0.28.1 — dedupe onto it.
+  "tsup>esbuild": "^0.28.1"
