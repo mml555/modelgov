@@ -1,5 +1,6 @@
 import { parseConfig } from "@modelgov/policy-engine";
 import { describe, expect, it } from "vitest";
+import { renderLitellmConfig } from "../src/litellm";
 import { composeFileFor, renderModelgovYaml, renderEnv, type ScaffoldOptions } from "../src/render";
 import { TEMPLATES, TEMPLATE_IDS } from "../src/templates";
 import { adapterFor, type Framework } from "../src/adapters";
@@ -30,6 +31,29 @@ describe("renderModelgovYaml (support_chat)", () => {
   it("omits fallback for a single provider", () => {
     const cfg = parseConfig(renderModelgovYaml({ ...base, providers: ["openai"] }));
     expect(cfg.modelClasses.cheap?.fallback).toBeUndefined();
+  });
+
+  it("uses hybrid injection model for cloud dev when hybridInjection is set", () => {
+    const cfg = parseConfig(
+      renderModelgovYaml({ ...base, providers: ["gemini"], hybridInjection: true }),
+    );
+    expect(cfg.safety.injectionModel).toBe("openai/gpt-4o-mini");
+    expect(cfg.modelClasses.cheap?.primary).toBe("gemini/gemini-flash");
+  });
+
+  it("keeps provider cheap model for injection when hybridInjection is off", () => {
+    const cfg = parseConfig(renderModelgovYaml({ ...base, providers: ["gemini"] }));
+    expect(cfg.safety.injectionModel).toBe("gemini/gemini-flash");
+  });
+});
+
+describe("renderLitellmConfig hybrid injection", () => {
+  it("adds demo route for openai/gpt-4o-mini when hybridInjection is enabled", () => {
+    const yaml = renderLitellmConfig(["gemini/gemini-flash"], { hybridInjection: true });
+    expect(yaml).toContain("model_name: gemini/gemini-flash");
+    expect(yaml).toContain("model_name: openai/gpt-4o-mini");
+    expect(yaml).toContain("api_base: http://demo-llm:8080/v1");
+    expect(yaml).toContain("Hybrid injection");
   });
 });
 

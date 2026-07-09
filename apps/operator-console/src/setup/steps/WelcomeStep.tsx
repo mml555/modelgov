@@ -1,10 +1,13 @@
-/** First wizard step: explain Modelgov + offer the beginner quick-start path. */
+/** First wizard step: explain Modelgov + offer the recommended real-provider
+ *  quick-start, with a demo escape hatch for people who only want to look. */
 export function WelcomeStep({
   onQuickStart,
   onCustomize,
+  onTryDemo,
 }: {
   onQuickStart: () => void;
   onCustomize: () => void;
+  onTryDemo: () => void;
 }) {
   return (
     <section className="setup-step">
@@ -19,7 +22,7 @@ export function WelcomeStep({
           <h3>What you will choose</h3>
           <ul>
             <li>What your product does (support chat, SaaS tiers, etc.)</li>
-            <li>Where AI runs (demo, OpenAI, Azure, local Ollama, …)</li>
+            <li>Which AI provider to connect (OpenAI, Anthropic, Azure, …)</li>
             <li>Monthly spend cap and safety level</li>
           </ul>
         </div>
@@ -28,23 +31,25 @@ export function WelcomeStep({
           <ul>
             <li>Editing YAML or config files by hand</li>
             <li>Understanding LiteLLM or gateway internals</li>
-            <li>An OpenAI account to try the demo</li>
+            <li>A key just to look around — a built-in demo runs with no account</li>
           </ul>
         </div>
       </div>
       <div className="setup-quickstart-card">
         <div className="setup-quickstart-head">
-          <span className="setup-badge setup-badge-accent">Recommended for beginners</span>
-          <h2>Quick start — try Modelgov in 2 minutes</h2>
+          <span className="setup-badge setup-badge-accent">Recommended</span>
+          <h2>Quick start — connect your AI in a couple of minutes</h2>
         </div>
         <p>
-          Built-in demo AI (no sign-ups), customer support chat template, balanced safety, and a
-          $200/month spend cap. You can switch to real providers later.
+          Sensible defaults for a real setup: OpenAI, a customer-support-chat template, balanced
+          safety, and a $200/month spend cap — so budgets and cost tracking are real from the
+          first request. You just paste your OpenAI API key; change anything later.
         </p>
         <ul className="setup-quickstart-list">
-          <li>Demo AI — works immediately, no API keys</li>
+          <li>OpenAI — paste one API key (swap providers anytime)</li>
           <li>Support chat — typical starter rules for a help widget</li>
           <li>Balanced safety — masks personal data in logs</li>
+          <li>$200/month spend cap — real cost governance from request one</li>
         </ul>
         <button type="button" className="setup-btn-primary" onClick={onQuickStart}>
           Use recommended settings
@@ -53,6 +58,9 @@ export function WelcomeStep({
       <div className="setup-actions setup-actions-split">
         <button type="button" className="setup-btn-secondary" onClick={onCustomize}>
           Customize step by step
+        </button>
+        <button type="button" className="setup-link-btn" onClick={onTryDemo}>
+          Just exploring? Try the demo (no API key) →
         </button>
       </div>
     </section>

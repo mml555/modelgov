@@ -5,9 +5,15 @@ import { TEMPLATE_IDS, TEMPLATES, type TemplateId } from "create-modelgov/templa
 export type BackendMode = "demo" | "cloud" | "local";
 
 /** One-click preset for first-time users: demo AI + support chat template. */
+// Recommended starting point for a real setup: connect a real provider (OpenAI
+// by default) with a support-chat template, balanced safety, and a spend cap —
+// so budgets and cost governance are real from the first request. The operator
+// only needs to paste a key. (Demo mode stays available as a secondary
+// "just exploring" option, but it isn't the recommendation — with fake tokens
+// there is no cost to govern, which is the whole point of the gateway.)
 export const BEGINNER_PRESET = {
   templateId: "support_chat" as TemplateId,
-  backend: "demo" as BackendMode,
+  backend: "cloud" as BackendMode,
   safety: "balanced" as const,
   monthlyBudget: 200,
 };
@@ -70,22 +76,45 @@ export const BACKEND_OPTIONS: {
   badge?: string;
 }[] = [
   {
-    id: "demo",
-    title: "Try the built-in demo",
-    description: "No sign-ups, no API keys. A fake AI runs locally so you can explore Modelgov in minutes.",
-    badge: "Recommended to start",
-  },
-  {
     id: "cloud",
     title: "Connect a real AI provider",
-    description: "OpenAI, Anthropic, Google, Azure, AWS, Groq, and 10+ more — pick one or several on the next step.",
+    description: "OpenAI, Anthropic, Google, Azure, AWS, Groq, and 10+ more — real models with real spend governance. Pick one or several on the next step.",
+    badge: "Recommended",
   },
   {
     id: "local",
     title: "Run models on this computer (Ollama)",
     description: "Free local models via Ollama. Requires Ollama installed; we will show the one terminal command to enable it.",
   },
+  {
+    id: "demo",
+    title: "Just exploring? Use the built-in demo",
+    description: "No sign-ups, no API keys — a fake AI runs locally. Good for a quick look or offline dev, but budgets and cost tracking aren't meaningful (the tokens are free).",
+  },
 ];
+
+/** Providers where tight free tiers make hybrid injection especially helpful. */
+export const FREE_TIER_INJECTION_PROVIDERS: Provider[] = ["gemini", "groq"];
+
+export function shouldShowHybridInjectionGuidance(opts: {
+  useCloud: boolean;
+  safety: "dev" | "balanced" | "strict";
+  providers: Provider[];
+}): boolean {
+  return (
+    opts.useCloud
+    && opts.safety !== "dev"
+    && opts.providers.some((p) => FREE_TIER_INJECTION_PROVIDERS.includes(p))
+  );
+}
+
+export const HYBRID_INJECTION_GUIDANCE = {
+  title: "Free-tier tip: hybrid injection screening",
+  summary:
+    "With safety on, each message normally needs two model calls (injection check + reply). On tight free tiers that adds up fast during setup.",
+  detail:
+    "For local development we route the injection check through the built-in demo model, so only your real chats hit your API key. This applies automatically when you finish the wizard.",
+};
 
 export const SAFETY_OPTIONS: {
   id: "dev" | "balanced" | "strict";
@@ -134,7 +163,7 @@ export const CREDENTIAL_FIELDS: Record<
   },
   GEMINI_API_KEY: {
     label: "Google Gemini API key",
-    help: "aistudio.google.com → Get API key",
+    help: "aistudio.google.com → Get API key. Free tier is tight (~20 requests/day per model); the wizard uses hybrid injection screening to save quota.",
     placeholder: "AIza...",
   },
   OPENROUTER_API_KEY: {

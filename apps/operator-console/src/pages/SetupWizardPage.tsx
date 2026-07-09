@@ -11,8 +11,10 @@ import {
   BACKEND_OPTIONS,
   BEGINNER_PRESET,
   BUDGET_PRESETS,
+  HYBRID_INJECTION_GUIDANCE,
   PROVIDER_GROUPS,
   SAFETY_OPTIONS,
+  shouldShowHybridInjectionGuidance,
   TEMPLATE_CHOICES,
   type BackendMode,
   credentialFieldsForProviders,
@@ -59,6 +61,12 @@ export function SetupWizardPage() {
   const templateLocalOnly = template.localOnly === true;
   const useCloud = backend === "cloud" && !templateLocalOnly;
   const useLocal = backend === "local" || templateLocalOnly;
+  const hybridInjection = useCloud && safety !== "dev";
+  const showHybridInjectionGuidance = shouldShowHybridInjectionGuidance({
+    useCloud,
+    safety,
+    providers,
+  });
 
   const credentialFields = useMemo(
     () => credentialFieldsForProviders(providers),
@@ -77,6 +85,23 @@ export function SetupWizardPage() {
     setBackend(BEGINNER_PRESET.backend);
     setSafety(BEGINNER_PRESET.safety);
     setMonthlyBudget(BEGINNER_PRESET.monthlyBudget);
+    setCustomBudget(false);
+    setProviders(["openai"]);
+    setSecrets({});
+    setQuickStart(true);
+    setError("");
+    // Recommended path is a real provider (OpenAI preset), so the only thing left
+    // is the key — drop the operator on the keys step rather than review.
+    setStep("keys");
+  }
+
+  // Secondary "just exploring" path: demo AI needs no key, so it can jump
+  // straight to review. Budgets/cost tracking won't be meaningful here.
+  function startDemoPath() {
+    setTemplateId("support_chat");
+    setBackend("demo");
+    setSafety("balanced");
+    setMonthlyBudget(200);
     setCustomBudget(false);
     setProviders(["openai"]);
     setSecrets({});
@@ -115,6 +140,7 @@ export function SetupWizardPage() {
         mode: "simple",
         safetyPreset: useLocal ? "dev" : safety,
         monthlyBudgetUsd: monthlyBudget,
+        hybridInjection,
       });
 
       // Preserve the running gateway's boot-only fields (routing.retry, pricing,
@@ -138,8 +164,9 @@ export function SetupWizardPage() {
           mode: "simple" as const,
           safetyPreset: safety,
           monthlyBudgetUsd: monthlyBudget,
+          hybridInjection,
         };
-        const litellmYaml = renderLitellmConfig(modelStringsFor(scaffoldOpts));
+        const litellmYaml = renderLitellmConfig(modelStringsFor(scaffoldOpts), { hybridInjection });
         const result = await saveSetupSecrets(secrets, { useCloud: true, litellmYaml });
         setNextCommand(result.nextCommand);
       } else if (useLocal) {
@@ -250,7 +277,11 @@ export function SetupWizardPage() {
 
         <main className="setup-card">
           {step === "welcome" && (
-            <WelcomeStep onQuickStart={startBeginnerPath} onCustomize={() => goNext("welcome")} />
+            <WelcomeStep
+              onQuickStart={startBeginnerPath}
+              onCustomize={() => goNext("welcome")}
+              onTryDemo={startDemoPath}
+            />
           )}
 
           {step === "template" && (
@@ -401,6 +432,13 @@ export function SetupWizardPage() {
                   </div>
                 ))}
               </div>
+              {showHybridInjectionGuidance && (
+                <p className="setup-callout">
+                  <strong>{HYBRID_INJECTION_GUIDANCE.title}.</strong>{" "}
+                  {HYBRID_INJECTION_GUIDANCE.summary}{" "}
+                  {HYBRID_INJECTION_GUIDANCE.detail}
+                </p>
+              )}
               <p className="setup-callout">
                 Clicking Apply will save these keys and switch the local stack to your real provider
                 automatically.
@@ -433,6 +471,13 @@ export function SetupWizardPage() {
                       </button>
                     ))}
                   </div>
+                  {showHybridInjectionGuidance && (
+                    <p className="setup-callout">
+                      <strong>{HYBRID_INJECTION_GUIDANCE.title}.</strong>{" "}
+                      {HYBRID_INJECTION_GUIDANCE.summary}{" "}
+                      {HYBRID_INJECTION_GUIDANCE.detail}
+                    </p>
+                  )}
                 </>
               )}
 
@@ -510,6 +555,12 @@ export function SetupWizardPage() {
                   <dt>Safety</dt>
                   <dd>{useLocal ? "Development (off)" : SAFETY_OPTIONS.find((s) => s.id === safety)?.title}</dd>
                 </div>
+                {showHybridInjectionGuidance && (
+                  <div className="setup-review-row">
+                    <dt>Injection screening</dt>
+                    <dd>Hybrid (demo model locally — saves free-tier quota)</dd>
+                  </div>
+                )}
                 <div className="setup-review-row">
                   <dt>Monthly spend cap</dt>
                   <dd>${monthlyBudget.toLocaleString()} USD</dd>
@@ -558,6 +609,12 @@ export function SetupWizardPage() {
               {useCloud && !nextCommand && (
                 <div className="setup-callout setup-callout-success">
                   Your provider keys are live. The model proxy was restarted automatically.
+                  {showHybridInjectionGuidance && (
+                    <>
+                      {" "}
+                      {HYBRID_INJECTION_GUIDANCE.detail}
+                    </>
+                  )}
                 </div>
               )}
 

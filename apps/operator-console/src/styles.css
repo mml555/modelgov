@@ -555,10 +555,28 @@ input, textarea {
 }
 
 .setup-actions-split {
-  justify-content: center;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
   border-top: none;
   margin-top: 0.75rem;
   padding-top: 0;
+}
+
+/* Understated text link for the secondary "just exploring" demo path. */
+.setup-link-btn {
+  background: none;
+  border: none;
+  color: #9ca3af;
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+  padding: 0.25rem;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.setup-link-btn:hover {
+  color: #d1d5db;
 }
 
 .setup-quickstart-card {
