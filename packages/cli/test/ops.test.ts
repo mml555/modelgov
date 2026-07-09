@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { modeConfig, parseOpsFlags, securityConfigWarnings, assertProductionDeploy } from "../src/ops.js";
+import { buildAutoconnectConsoleUrl, hasAnyProviderCredentials, modeConfig, parseOpsFlags, securityConfigWarnings, assertProductionDeploy } from "../src/ops.js";
+
+describe("hasAnyProviderCredentials", () => {
+  it("accepts Gemini and other non-OpenAI keys", () => {
+    expect(hasAnyProviderCredentials({ GEMINI_API_KEY: "AIza-real-key-value" })).toBe(true);
+    expect(hasAnyProviderCredentials({ OPENAI_API_KEY: "sk-..." })).toBe(false);
+    expect(hasAnyProviderCredentials({})).toBe(false);
+  });
+});
 
 describe("securityConfigWarnings", () => {
   it("warns on dev API keys and OIDC without audience", () => {
@@ -56,7 +64,7 @@ describe("securityConfigWarnings", () => {
 
 describe("parseOpsFlags", () => {
   it("defaults to simple mode", () => {
-    expect(parseOpsFlags([])).toEqual({ mode: "simple", yes: false, follow: true, strict: false });
+    expect(parseOpsFlags([])).toEqual({ mode: "simple", yes: false, follow: true, strict: false, json: false });
   });
 
   it("parses mode and yes flags", () => {
@@ -65,7 +73,12 @@ describe("parseOpsFlags", () => {
       yes: true,
       follow: false,
       strict: false,
+      json: false,
     });
+  });
+
+  it("parses --json", () => {
+    expect(parseOpsFlags(["--json"]).json).toBe(true);
   });
 
   it("parses cloud mode", () => {
@@ -82,6 +95,15 @@ describe("parseOpsFlags", () => {
 
   it("rejects unknown arguments", () => {
     expect(() => parseOpsFlags(["--bogus"])).toThrow(/Unknown ops argument/);
+  });
+});
+
+describe("buildAutoconnectConsoleUrl", () => {
+  it("builds a console URL with encoded url and token query params", () => {
+    const url = buildAutoconnectConsoleUrl("http://localhost:3090", "sk-modelgov-api-local");
+    expect(url).toBe(
+      "http://localhost:5174/login?url=http%3A%2F%2Flocalhost%3A3090&token=sk-modelgov-api-local",
+    );
   });
 });
 

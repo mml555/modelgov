@@ -1,4 +1,6 @@
+import { KNOWN_DEV_API_KEYS } from "@modelgov/policy-engine";
 import { z } from "zod";
+import { ROLE_PERMISSIONS } from "../modules/authz/roles.js";
 import { expandFileSecrets } from "./secrets";
 
 const baseEnvSchema = z.object({
@@ -166,6 +168,10 @@ const baseEnvSchema = z.object({
   // Declared by the production compose/Helm deployments (mirrors the Helm
   // chart's `production` flag). Turns known dev-only defaults into boot errors.
   MODELGOV_PRODUCTION: z.enum(["true", "false"]).default("false"),
+  /** Dev-only browser setup wizard: allow writing provider secrets to .env. */
+  MODELGOV_SETUP_API: z.enum(["true", "false"]).default("false"),
+  /** Host project directory (mounted in dev compose for setup secret writes). */
+  MODELGOV_PROJECT_ROOT: z.string().optional(),
   MAINTENANCE_ENABLED: z.enum(["true", "false"]).default("true"),
   IDEMPOTENCY_STALE_MS: z.coerce.number().int().positive().default(900_000),
   /** Completed idempotency replay rows older than this are pruned (default 7d). */
@@ -309,7 +315,11 @@ function parseApiKeys(env: z.infer<typeof envSchema>): ApiKeyEnvPrincipal[] {
       {
         name: "default",
         key: env.MODELGOV_API_KEY,
-        permissions: ["chat:create"],
+        // Local ./setup uses a well-known dev key; grant console permissions so
+        // the operator UI can autoconnect without a separate MODELGOV_API_KEYS block.
+        permissions: KNOWN_DEV_API_KEYS.has(env.MODELGOV_API_KEY)
+          ? [...(ROLE_PERMISSIONS.owner ?? [])]
+          : ["chat:create"],
       },
     ];
   }

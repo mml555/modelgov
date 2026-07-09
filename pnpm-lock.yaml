@@ -45,6 +45,12 @@ importers:
 
   apps/operator-console:
     dependencies:
+      '@modelgov/policy-engine':
+        specifier: workspace:*
+        version: link:../../packages/policy-engine
+      create-modelgov:
+        specifier: workspace:*
+        version: link:../../packages/create-modelgov
       react:
         specifier: ^19.0.0
         version: 19.2.7

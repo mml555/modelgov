@@ -14,6 +14,7 @@ import { AuditPage } from "./pages/AuditPage";
 import { PrivacyPage } from "./pages/PrivacyPage";
 import { MetricsPage } from "./pages/MetricsPage";
 import { HealthPage } from "./pages/HealthPage";
+import { SetupWizardPage, isSetupComplete } from "./pages/SetupWizardPage";
 
 interface TenantSwitcher {
   tenants: string[];
@@ -70,6 +71,12 @@ function Shell({ children, tenantSwitcher }: { children: React.ReactNode; tenant
   );
 }
 
+function SetupGate({ children }: { children: React.ReactNode }) {
+  const location = useLocation();
+  if (!getToken()) return <Navigate to={`/login${location.search}`} replace />;
+  return <>{children}</>;
+}
+
 /**
  * Auth gate + one-time whoami fetch for the whole session. A platform (unbound)
  * operator also gets a tenant switcher; changing it re-keys the page subtree so
@@ -77,6 +84,7 @@ function Shell({ children, tenantSwitcher }: { children: React.ReactNode; tenant
  * each request via the api client).
  */
 function ProtectedLayout() {
+  const location = useLocation();
   const [whoami, setWhoami] = useState<Whoami | null>(null);
   const [tenants, setTenants] = useState<string[]>([]);
   const [tenant, setTenant] = useState(() => getTenant());
@@ -91,7 +99,13 @@ function ProtectedLayout() {
       .catch(() => setWhoami(null));
   }, []);
 
-  if (!getToken()) return <Navigate to="/login" replace />;
+  // First-run: guided setup before the operational dashboard.
+  if (getToken() && !isSetupComplete()) {
+    return <Navigate to="/setup" replace />;
+  }
+
+  // Keep ?url=&token= from ./setup autoconnect links when bouncing to login.
+  if (!getToken()) return <Navigate to={`/login${location.search}`} replace />;
 
   const onTenantChange = (t: string) => {
     persistTenant(t);
@@ -116,6 +130,7 @@ export function App() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/setup" element={<SetupGate><SetupWizardPage /></SetupGate>} />
       <Route element={<ProtectedLayout />}>
         <Route path="/" element={<Navigate to="/overview" replace />} />
         <Route path="/overview" element={<OverviewPage />} />

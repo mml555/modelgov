@@ -13,11 +13,27 @@ pnpm install
 pnpm --filter @modelgov/operator-console dev
 ```
 
-Set the API URL (defaults to `http://127.0.0.1:3000`):
+Set the API URL (defaults to `http://127.0.0.1:3090` when using `./setup`):
 
 ```bash
-VITE_MODELGOV_URL=http://127.0.0.1:3000 pnpm --filter @modelgov/operator-console dev
+VITE_MODELGOV_URL=http://127.0.0.1:3090 pnpm --filter @modelgov/operator-console dev
 ```
+
+### First-run setup wizard (`/setup`)
+
+When the stack is started via `./setup`, the autoconnect login link redirects new
+sessions to **`/setup`** until setup is marked complete.
+
+- **Quick start for beginners** — demo AI + support chat template (no provider keys).
+- **Customize** — all templates, 14+ providers (OpenAI, Anthropic, Gemini, Azure,
+  AWS Bedrock, Vertex, Groq, Mistral, OpenRouter, GitHub Copilot, …), credential
+  help text, spend caps, and safety presets.
+
+Provider logos and plain-language copy are shown in the wizard; cloud keys are written
+via `POST /v1/setup/secrets` to the mounted project `.env` (dev compose only).
+
+Re-run: `localStorage.removeItem('modelgov-setup-v1-complete')` in the browser, then
+reload `/setup`.
 
 ## Production build
 
@@ -53,6 +69,7 @@ so a single build/image serves any deployment — no rebuild per environment. Th
 | `/policy` | `/v1/admin/policy/*` (validate, diff, save, approve/reject, activate/rollback, version history) | `policy:read` |
 | `/audit` | `GET /v1/admin/audit` + `/verify` (hash-chain integrity) | `audit:read` |
 | `/privacy` | `POST /v1/admin/erasure` (DSAR / GDPR erasure) | `data:erase` |
+| `/setup` | Guided first-run wizard (policy + optional provider keys) | autoconnect / `usage:read` |
 | `/metrics` | Prometheus `/metrics` (own `METRICS_AUTH_TOKEN`, not RBAC) | none |
 | `/health` | `/health`, `/ready` | none |
 

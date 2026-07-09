@@ -11,6 +11,8 @@
     "test": "vitest run test"
   },
   "dependencies": {
+    "@modelgov/policy-engine": "workspace:*",
+    "create-modelgov": "workspace:*",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-router-dom": "^7.1.1"

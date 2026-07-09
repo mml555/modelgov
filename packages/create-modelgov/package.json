@@ -13,8 +13,16 @@
     "create-modelgov": "./dist/index.js"
   },
   "files": [
-    "dist"
+    "dist",
+    "src/render.ts",
+    "src/templates.ts"
   ],
+  "exports": {
+    ".": "./dist/index.js",
+    "./render": "./src/render.ts",
+    "./templates": "./src/templates.ts",
+    "./litellm": "./src/litellm.ts"
+  },
   "scripts": {
     "build": "tsup src/index.ts --format esm --clean",
     "typecheck": "tsc --noEmit",

@@ -20,6 +20,7 @@ Commands:
   doctor production  Production env posture (pass/fail + fixes)
   smoke         Run an authenticated chat smoke test
   reset         Stop and remove local compose volumes
+  reload-providers  Restart the model proxy with keys from .env (after setup wizard)
   explain       Dry-run a policy decision
   validate      Validate modelgov.yaml
   test-policy   Run policy regression tests from a YAML file
@@ -75,6 +76,8 @@ async function dispatch(command: string, rest: string[]): Promise<number | void>
     case "logs":
     case "smoke":
     case "reset":
+      return runOpsCommand(command, rest);
+    case "reload-providers":
       return runOpsCommand(command, rest);
     case "explain":
       return runExplainCommand(rest);
@@ -160,7 +163,7 @@ Options:
 const OPS_USAGE = `modelgov ops commands
 
 Usage:
-  modelgov setup [simple|full|local|cloud|azure]
+  modelgov setup [simple|full|local|cloud|azure] [--json]
   modelgov up [simple|full|local|cloud|azure|prod]
   modelgov down [simple|full|local|cloud|azure|prod]
   modelgov status [simple|full|local|cloud|azure|prod]

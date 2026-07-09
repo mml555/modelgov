@@ -1,3 +1,4 @@
+import { deployProfileChecks, PROVIDER_REGISTRY } from "@modelgov/policy-engine";
 import { copyFileSync, existsSync, readFileSync, unlinkSync } from "node:fs";
 import { basename, resolve } from "node:path";
 import { spawn } from "node:child_process";
@@ -7,6 +8,7 @@ export type OpsCommand =
   | "doctor"
   | "down"
   | "logs"
+  | "reload-providers"
   | "reset"
   | "setup"
   | "smoke"
@@ -20,7 +22,10 @@ interface OpsFlags {
   yes: boolean;
   follow: boolean;
   strict: boolean;
+  json: boolean;
 }
+
+const DEFAULT_CONSOLE_PORT = 5174;
 
 interface ModeConfig {
   apiPort: number;
@@ -36,8 +41,6 @@ const ROOT = resolveUserPath(".");
 const LOCAL_API_KEY = "sk-modelgov-api-local";
 
 const KNOWN_DEV_API_KEYS = new Set(["sk-modelgov-api-local", "smoke-test-key"]);
-
-import { deployProfileChecks } from "@modelgov/policy-engine";
 
 /**
  * Security posture checks for operator env files. Returns human-readable lines
@@ -101,10 +104,10 @@ export async function runOps(command: OpsCommand, args: string[]): Promise<void>
   const flags = parseOpsFlags(args);
   switch (command) {
     case "setup":
-      await up(flags, { strictSmoke: true });
+      await up(flags, { strictSmoke: true, json: flags.json });
       return;
     case "up":
-      await up(flags, { strictSmoke: false });
+      await up(flags, { strictSmoke: false, json: flags.json });
       return;
     case "down":
       await dockerCompose(flags.mode, ["down"]);
@@ -114,6 +117,9 @@ export async function runOps(command: OpsCommand, args: string[]): Promise<void>
       return;
     case "status":
       await status(flags.mode);
+      return;
+    case "reload-providers":
+      await reloadProviders();
       return;
     case "doctor":
       await doctor(flags.mode, flags.strict);
@@ -128,10 +134,14 @@ export async function runOps(command: OpsCommand, args: string[]): Promise<void>
 }
 
 export function parseOpsFlags(args: string[]): OpsFlags {
-  const flags: OpsFlags = { mode: "simple", yes: false, follow: true, strict: false };
+  const flags: OpsFlags = { mode: "simple", yes: false, follow: true, strict: false, json: false };
   for (const arg of args) {
     if (arg === "--yes" || arg === "-y") {
       flags.yes = true;
+      continue;
+    }
+    if (arg === "--json") {
+      flags.json = true;
       continue;
     }
     if (arg === "--no-follow") {
@@ -155,7 +165,17 @@ function isMode(value: string): value is Mode {
   return value === "simple" || value === "full" || value === "local" || value === "cloud" || value === "azure" || value === "prod";
 }
 
-async function up(flags: OpsFlags, opts: { strictSmoke: boolean }): Promise<void> {
+/** Console URL with ?url=&token= so the operator UI can auto-sign-in after setup. */
+export function buildAutoconnectConsoleUrl(
+  apiUrl: string,
+  apiKey: string,
+  consolePort = DEFAULT_CONSOLE_PORT,
+): string {
+  const params = new URLSearchParams({ url: apiUrl, token: apiKey });
+  return `http://localhost:${consolePort}/login?${params.toString()}`;
+}
+
+async function up(flags: OpsFlags, opts: { strictSmoke: boolean; json: boolean }): Promise<void> {
   if (flags.mode === "prod") {
     if (!existsSync(resolve(ROOT, "scripts/up-prod.sh"))) {
       throw new Error(
@@ -179,7 +199,7 @@ async function up(flags: OpsFlags, opts: { strictSmoke: boolean }): Promise<void
   await dockerCompose(flags.mode, ["up", "--build", "-d"]);
   await waitForReady(modeConfig(flags.mode).apiPort);
   await smoke(flags.mode, { strict: opts.strictSmoke });
-  printSuccess(flags.mode);
+  printSuccess(flags.mode, opts.json);
 }
 
 function ensureEnv(mode: Mode): void {
@@ -215,13 +235,42 @@ function ensureEnv(mode: Mode): void {
 }
 
 function ensureProviderKeys(): void {
-  const env = readEnvFile(".env");
-  const openAi = env.OPENAI_API_KEY;
-  const anthropic = env.ANTHROPIC_API_KEY;
-  if (isRealSecret(openAi) || isRealSecret(anthropic)) return;
+  if (hasAnyProviderCredentials(readEnvFile(".env"))) return;
   throw new Error(
-    "Set OPENAI_API_KEY or ANTHROPIC_API_KEY in .env, then rerun. Use `./setup` for the zero-secret demo stack.",
+    "Add a provider API key to .env (e.g. OPENAI_API_KEY, GEMINI_API_KEY, GROQ_API_KEY), then rerun. Use `./setup` for the zero-secret demo stack.",
   );
+}
+
+/** True when .env contains at least one non-placeholder provider credential. */
+export function hasAnyProviderCredentials(env: Record<string, string>): boolean {
+  const optionalOnly = new Set(["AWS_SESSION_TOKEN", "GITHUB_COPILOT_TOKEN"]);
+  for (const spec of Object.values(PROVIDER_REGISTRY)) {
+    for (const key of spec.credentialEnvVars ?? []) {
+      if (optionalOnly.has(key)) continue;
+      if (isRealSecret(env[key])) return true;
+    }
+  }
+  return false;
+}
+
+async function reloadProviders(): Promise<void> {
+  const env = readEnvFile(".env");
+  if (!hasAnyProviderCredentials(env)) {
+    throw new Error(
+      "No provider credentials in .env. Paste keys in the setup wizard or add them to .env first.",
+    );
+  }
+  const configPath = env.LITELLM_CONFIG_PATH ?? `./litellm_config.generated.yaml`;
+  const relative = configPath.replace(/^\.\//, "");
+  if (!existsSync(resolve(ROOT, relative))) {
+    throw new Error(
+      `Missing ${relative}. Finish the setup wizard's cloud-provider step first (it writes this file), or run make start-cloud.`,
+    );
+  }
+  console.log("Reloading the model proxy with your provider keys...");
+  await dockerCompose("simple", ["up", "-d", "litellm", "--force-recreate"]);
+  await waitForReady(modeConfig("simple").apiPort);
+  console.log("ok model proxy reloaded — real provider calls are enabled");
 }
 
 function ensureAzureKeys(): void {
@@ -281,9 +330,9 @@ async function doctor(mode: Mode, strict: boolean): Promise<void> {
           ? "ok Azure credentials present"
           : "missing Azure credentials; set AZURE_API_KEY, AZURE_API_BASE, AZURE_API_VERSION");
       } else {
-        console.log(isRealSecret(env.OPENAI_API_KEY) || isRealSecret(env.ANTHROPIC_API_KEY)
-          ? "ok provider key present"
-          : "missing provider key; set OPENAI_API_KEY or ANTHROPIC_API_KEY");
+        console.log(hasAnyProviderCredentials(env)
+          ? "ok provider credentials present"
+          : "missing provider credentials — add a key from your AI provider to .env");
       }
       securityLines.push(...securityConfigWarnings(env));
       for (const line of securityLines) console.log(line);
@@ -369,7 +418,7 @@ function assertComposeFilesExist(composeArgs: string[]): void {
     if (!file || existsSync(resolve(ROOT, file))) continue;
     throw new Error(
       `Could not find ${file} in ${ROOT}. Run this from your Modelgov project directory ` +
-        `(the folder that holds your docker-compose files), or scaffold one with \`modelgov init\`.`,
+        `(the folder that holds your docker-compose files), or scaffold one with \`create-modelgov\`.`,
     );
   }
 }
@@ -465,14 +514,27 @@ async function checkOllamaForDoctor(): Promise<void> {
   }
 }
 
-function printSuccess(mode: Mode): void {
+function printSuccess(mode: Mode, json: boolean): void {
   const port = modeConfig(mode).apiPort;
+  const env = readEnvFile(mode === "prod" ? ".env.production" : ".env");
+  const apiKey = env.MODELGOV_API_KEY ?? LOCAL_API_KEY;
+  const apiUrl = env.MODELGOV_URL ?? `http://localhost:${port}`;
+  const consolePort = Number(env.MODELGOV_CONSOLE_PORT ?? DEFAULT_CONSOLE_PORT);
+  const consoleUrl = buildAutoconnectConsoleUrl(apiUrl, apiKey, consolePort);
+
+  if (json) {
+    console.log(JSON.stringify({ status: "ready", consoleUrl }));
+    return;
+  }
+
   console.log("");
-  console.log(`Modelgov API: http://localhost:${port}`);
-  if (mode === "full") console.log("Langfuse UI: http://localhost:3001");
-  console.log(`Status: ${rerunCommand("status", mode)}`);
-  console.log(`Logs:   ${rerunCommand("logs", mode)}`);
-  console.log(`Stop:   ${rerunCommand("down", mode)}`);
+  console.log("✓ Ready — demo stack is running (no OpenAI key or signup needed).");
+  console.log("  Click this link to finish setup in your browser:");
+  console.log("");
+  console.log(`  ${consoleUrl}`);
+  console.log("");
+  if (mode === "full") console.log("  Langfuse UI: http://localhost:3001");
+  console.log(`  ${rerunCommand("status", mode)} · ${rerunCommand("down", mode)}`);
 }
 
 function rerunCommand(commandOrMode: Mode | OpsCommand, mode?: Mode): string {
@@ -480,6 +542,7 @@ function rerunCommand(commandOrMode: Mode | OpsCommand, mode?: Mode): string {
   if (commandOrMode === "full") return "make start-full";
   if (commandOrMode === "local") return "make start-local";
   if (commandOrMode === "cloud") return "make start-cloud";
+  if (commandOrMode === "reload-providers") return "pnpm modelgov reload-providers";
   if (commandOrMode === "azure") return "make start-azure";
   if (commandOrMode === "prod") return "make up-prod";
   const suffix = mode && mode !== "simple" ? `-${mode}` : "";

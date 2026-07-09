@@ -83,11 +83,4 @@ if [ ! -d node_modules ]; then
   pnpm install
 fi
 
-pnpm --filter @modelgov/cli dev -- setup simple
-
-printf '\nReady.\n'
-printf 'API:    http://localhost:%s\n' "$api_port"
-printf 'Env:    MODELGOV_URL=http://localhost:%s\n' "$api_port"
-printf 'Status: make status\n'
-printf 'Stop:   make stop\n'
-printf 'Cloud providers later: make start-cloud\n'
+pnpm --filter @modelgov/cli dev -- setup simple "$@"

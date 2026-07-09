@@ -1,6 +1,6 @@
 // Build-time default; overridable at login and persisted, so one static build
 // serves any deployment (no rebuild per API URL — important for the nginx image).
-const DEFAULT_BASE = import.meta.env.VITE_MODELGOV_URL ?? "http://127.0.0.1:3000";
+const DEFAULT_BASE = import.meta.env.VITE_MODELGOV_URL ?? "http://127.0.0.1:3090";
 const TOKEN_KEY = "modelgov-console-token";
 const BASE_KEY = "modelgov-console-url";
 const TENANT_KEY = "modelgov-console-tenant";

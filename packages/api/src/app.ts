@@ -19,6 +19,7 @@ import { registerBillingRoutes } from "./modules/billing/routes";
 import { registerEmergencyRoutes } from "./modules/emergency/routes";
 import { registerGovernanceRoutes } from "./modules/governance/routes";
 import { registerPolicyRoutes } from "./modules/policy/routes";
+import { registerSetupRoutes } from "./modules/setup/routes";
 import { registerWhoamiRoute, registerTenantsRoute } from "./modules/identity/routes";
 import { registerMetrics } from "./plugins/metrics";
 import { createDomainMetrics, MetricsObservability } from "./plugins/domainMetrics";
@@ -107,6 +108,8 @@ export interface BuildServerOptions extends ChatRouteDeps {
    * otherwise half-apply). See frozenPolicyFieldsFingerprint.
    */
   policyFrozenFieldsFingerprint?: string;
+  /** Dev-only setup wizard: write provider secrets to the host .env. */
+  setupApi?: { projectRoot: string };
 }
 
 /**
@@ -194,7 +197,7 @@ export function buildServer(opts: BuildServerOptions): FastifyInstance {
       reply.header("access-control-allow-methods", "GET, POST, OPTIONS");
       reply.header(
         "access-control-allow-headers",
-        "authorization, content-type, idempotency-key",
+        "authorization, content-type, idempotency-key, x-modelgov-tenant",
       );
       reply.header("access-control-max-age", "600");
     }
@@ -291,8 +294,14 @@ export function buildServer(opts: BuildServerOptions): FastifyInstance {
           : undefined,
         approvalRequired: opts.policyApprovalRequired,
         frozenFieldsFingerprint: opts.policyFrozenFieldsFingerprint,
+        setupBypassFrozenGuard: !!opts.setupApi && opts.production !== true,
       });
     }
+    registerSetupRoutes(scope, {
+      enabled: !!opts.setupApi,
+      projectRoot: opts.setupApi?.projectRoot ?? ".",
+      production: opts.production === true,
+    });
     registerExplainRoute(scope, {
       config: opts.config,
       pool: opts.pool,

@@ -45,6 +45,25 @@ describe("loadEnv", () => {
     expect(env.apiKeys[0]?.key).toBe("secret");
   });
 
+  it("grants owner permissions to known local dev keys", () => {
+    const env = loadEnv({
+      ...requiredEnv,
+      MODELGOV_API_KEY: "sk-modelgov-api-local",
+    });
+
+    expect(env.apiKeys[0]?.permissions).toContain("usage:read");
+    expect(env.apiKeys[0]?.permissions).toContain("keys:admin");
+  });
+
+  it("keeps chat:create only for non-dev single keys", () => {
+    const env = loadEnv({
+      ...requiredEnv,
+      MODELGOV_API_KEY: "sk-production-secret-key-12345",
+    });
+
+    expect(env.apiKeys[0]?.permissions).toEqual(["chat:create"]);
+  });
+
   it("fails fast when no API credential source is configured", () => {
     expect(() =>
       loadEnv({

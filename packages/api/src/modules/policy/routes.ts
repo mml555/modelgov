@@ -36,6 +36,8 @@ export interface PolicyRouteDeps {
    * can't half-apply. See frozenPolicyFieldsFingerprint.
    */
   frozenFieldsFingerprint?: string;
+  /** Dev setup wizard: allow activating configs that change boot-only fields. */
+  setupBypassFrozenGuard?: boolean;
 }
 
 function requirePerm(ctx: RequestContext, perm: string) {
@@ -214,7 +216,7 @@ export function registerPolicyRoutes(
           // Only guard boot-only fields when hot reload is active (onActivated set):
           // on the restart path a restart applies them, so no guard is needed.
           frozenGuard:
-            deps.onActivated && deps.frozenFieldsFingerprint
+            deps.onActivated && deps.frozenFieldsFingerprint && !deps.setupBypassFrozenGuard
               ? { bootFingerprint: deps.frozenFieldsFingerprint }
               : undefined,
         },

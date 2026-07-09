@@ -33,6 +33,7 @@
     "up:full": "pnpm modelgov up full",
     "up:local": "pnpm modelgov up local",
     "up:cloud": "pnpm modelgov up cloud",
+    "reload-providers": "pnpm modelgov reload-providers",
     "up:azure": "pnpm modelgov up azure",
     "status": "pnpm modelgov status simple",
     "doctor": "pnpm modelgov doctor simple",

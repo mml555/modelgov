@@ -29,9 +29,27 @@ Successful setup ends with:
 ```text
 ok smoke chat succeeded
 API:    http://localhost:3090
+Console: http://localhost:5174/login?url=...&token=...
 Status: make status
 Stop:   make stop
 ```
+
+### Browser setup wizard
+
+After `./setup`, open the **console link** printed in your terminal (it signs you in
+automatically on localhost). First visit launches a guided setup wizard at `/setup`:
+
+| Path | What it does |
+| --- | --- |
+| **Quick start (recommended)** | Built-in demo AI + support chat template — no API keys, ~2 minutes |
+| **Customize step by step** | Pick use case, backend (demo / 14+ cloud providers / local Ollama), keys, limits |
+
+The wizard writes `modelgov.yaml` policy and (for cloud providers) saves API keys to
+your local `.env`. When you pick real providers, run `make start-cloud` afterward so
+the gateway loads the keys.
+
+To run the wizard again: open the browser console and run
+`localStorage.removeItem('modelgov-setup-v1-complete')`, then reload `/setup`.
 
 After setup:
 

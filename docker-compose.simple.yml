@@ -29,12 +29,11 @@ services:
     # the dev stack under everyone without a commit). Bump this intentionally.
     image: ghcr.io/berriai/litellm:main-v1.72.0-stable
     command: ["--config", "/app/config.yaml", "--port", "4000"]
+    env_file: .env
     environment:
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-demo-unused}
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-demo-unused}
       LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:-sk-modelgov-local}
     volumes:
-      - ./litellm_config.yaml:/app/config.yaml:ro
+      - ${LITELLM_CONFIG_PATH:-./litellm_config.yaml}:/app/config.yaml:ro
     deploy:
       resources:
         limits:
@@ -97,8 +96,14 @@ services:
       MODELGOV_CONFIG: /app/modelgov.yaml
       PRESIDIO_ANALYZER_URL: http://presidio-analyzer:3000
       PRESIDIO_ANONYMIZER_URL: http://presidio-anonymizer:3000
+      CORS_ALLOW_ORIGINS: ${CORS_ALLOW_ORIGINS:-http://localhost:5174,http://127.0.0.1:5174}
+      POLICY_STORE_ENABLED: "true"
+      POLICY_HOT_RELOAD: "true"
+      MODELGOV_SETUP_API: "true"
+      MODELGOV_PROJECT_ROOT: /project
     volumes:
       - ./modelgov.yaml:/app/modelgov.yaml:ro
+      - ./.env:/project/.env
     ports: ["127.0.0.1:${MODELGOV_PUBLIC_PORT:-3090}:3000"]
     healthcheck:
       # Node-based (no dependency on wget/busybox being present in the image).
@@ -114,6 +119,19 @@ services:
       resources:
         limits:
           memory: 512M
+
+  console:
+    build:
+      context: .
+      dockerfile: apps/operator-console/Dockerfile
+    depends_on:
+      api:
+        condition: service_healthy
+    ports: ["127.0.0.1:${MODELGOV_CONSOLE_PORT:-5174}:8080"]
+    deploy:
+      resources:
+        limits:
+          memory: 128M
 
 volumes:
   pgdata:

@@ -154,6 +154,10 @@ async function main(): Promise<void> {
       presidioAnalyzerUrl: env.PRESIDIO_ANALYZER_URL,
       presidioAnonymizerUrl: env.PRESIDIO_ANONYMIZER_URL,
     },
+    setupApi:
+      env.MODELGOV_SETUP_API === "true" && env.MODELGOV_PROJECT_ROOT
+        ? { projectRoot: env.MODELGOV_PROJECT_ROOT }
+        : undefined,
     budgetAlert,
     billing,
   });
