@@ -21,9 +21,9 @@ import {
   providerSummary,
 } from "../setup/catalog";
 import { ProviderLogo } from "../setup/ProviderLogo";
-import { CopyButton } from "../setup/CopyButton";
 import { SetupNav } from "../setup/SetupNav";
 import { WelcomeStep } from "../setup/steps/WelcomeStep";
+import { DoneStep } from "../setup/steps/DoneStep";
 import { keyFormatWarning, parseSetupError } from "../setup/validation";
 import { stepIndex, getVisibleSteps, nextStep, backStep, type Step } from "../setup/flow";
 import {
@@ -581,84 +581,17 @@ export function SetupWizardPage() {
           )}
 
           {step === "done" && (
-            <section className="setup-step">
-              <h1 className="setup-success-title">You&apos;re all set</h1>
-              <p className="setup-lead">
-                Configuration is saved and active. {useLocal ? "One more step below, then " : ""}try a
-                test message to confirm everything works.
-              </p>
-
-              {nextCommand && (
-                <div className="setup-terminal-card">
-                  <h2>{useLocal ? "Start local models" : "Connect real providers"}</h2>
-                  <p>
-                    {useLocal
-                      ? "Run this in your project folder (requires Ollama installed):"
-                      : "Run this once in your project folder so the model proxy loads your API keys:"}
-                  </p>
-                  <div className="setup-terminal-row">
-                    <pre className="setup-terminal">{nextCommand}</pre>
-                    <CopyButton text={nextCommand} className="setup-btn-secondary setup-copy-btn" />
-                  </div>
-                  <p className="setup-field-help">
-                    Wait until services are healthy — we&apos;ll check for you below.
-                  </p>
-                </div>
-              )}
-
-              {useCloud && !nextCommand && (
-                <div className="setup-callout setup-callout-success">
-                  Your provider keys are live. The model proxy was restarted automatically.
-                  {showHybridInjectionGuidance && (
-                    <>
-                      {" "}
-                      {HYBRID_INJECTION_GUIDANCE.detail}
-                    </>
-                  )}
-                </div>
-              )}
-
-              {!useCloud && !useLocal && (
-                <div className="setup-callout setup-callout-success">
-                  Demo mode is live — no terminal commands needed. Send a test message now.
-                </div>
-              )}
-
-              <div className="setup-test-block">
-                <div className="setup-test-head">
-                  <button
-                    type="button"
-                    className="setup-btn-secondary"
-                    onClick={() => void sendTest({ retries: useCloud || useLocal ? 4 : 0 })}
-                    disabled={testStatus === "checking"}
-                  >
-                    {testStatus === "checking" ? "Checking…" : "Test again"}
-                  </button>
-                  {testStatus === "checking" && (
-                    <span className="setup-test-status" aria-live="polite">
-                      Checking that AI responds…
-                    </span>
-                  )}
-                  {testStatus === "ok" && (
-                    <span className="setup-test-status setup-test-status-ok" aria-live="polite">
-                      ✓ AI responded
-                    </span>
-                  )}
-                </div>
-                {testReply && (
-                  <div className="setup-test-reply">
-                    <span className="setup-test-label">AI replied:</span>
-                    <p>{testReply}</p>
-                  </div>
-                )}
-              </div>
-              {error && testStatus === "error" && <p className="setup-error">{error}</p>}
-              <div className="setup-actions setup-actions-end">
-                <button type="button" className="setup-btn-primary" onClick={() => nav("/overview")}>
-                  Open dashboard
-                </button>
-              </div>
-            </section>
+            <DoneStep
+              useCloud={useCloud}
+              useLocal={useLocal}
+              nextCommand={nextCommand}
+              hybridGuidance={showHybridInjectionGuidance ? HYBRID_INJECTION_GUIDANCE.detail : undefined}
+              testStatus={testStatus}
+              testReply={testReply}
+              error={error}
+              onTest={() => void sendTest({ retries: useCloud || useLocal ? 4 : 0 })}
+              onOpenDashboard={() => nav("/overview")}
+            />
           )}
         </main>
       </div>
