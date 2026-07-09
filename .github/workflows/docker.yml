@@ -128,9 +128,13 @@ jobs:
       # Newly-disclosed HIGH/CRITICAL advisories would otherwise turn CI red and
       # block merges until upstream rebuilds, which is outside our control. So
       # this scan is informational: it still runs and prints findings in the log,
-      # but does not fail the job (exit-code 0). The shipped API image is scanned
-      # as a blocking gate in the build job.
+      # but never fails the job. `exit-code: 0` suppresses a VULNERABILITY-based
+      # failure; `continue-on-error` additionally tolerates a transient scan/pull
+      # error (e.g. the upstream registry returning 5xx, which reddens the step
+      # independently of exit-code). The shipped API image is scanned as a
+      # blocking gate in the build job.
       - name: Scan sidecar image
+        continue-on-error: true
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           scan-type: image
