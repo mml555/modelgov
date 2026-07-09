@@ -108,9 +108,11 @@ export function registerSetupRoutes(app: FastifyInstance, deps: SetupRouteDeps):
     }
 
     const filtered = Object.fromEntries(
-      Object.entries(parsed.data.secrets).filter(
-        ([k, v]) => v.trim().length > 0 && ALLOWED_SECRET_ENV_VARS.has(k),
-      ),
+      Object.entries(parsed.data.secrets)
+        // Trim before storing — a key pasted with surrounding whitespace would
+        // otherwise be written verbatim and break provider auth downstream.
+        .map(([k, v]) => [k, v.trim()] as const)
+        .filter(([k, v]) => v.length > 0 && ALLOWED_SECRET_ENV_VARS.has(k)),
     );
     if (Object.keys(filtered).length === 0) {
       return sendError(
