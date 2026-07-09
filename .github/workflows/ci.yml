@@ -6,6 +6,12 @@ on:
     tags: ["v*"]
   pull_request:
 
+# Least privilege: every job here only reads the repo (checkout/build/test) —
+# none comment on PRs, upload SARIF, or publish. Setting the token to read-only
+# at the top level applies to all jobs (a job may widen it locally if ever needed).
+permissions:
+  contents: read
+
 # One live run per ref: a force-push or rapid re-push cancels the superseded
 # run instead of stacking duplicates (and a PR branch no longer runs twice via
 # push + pull_request).
