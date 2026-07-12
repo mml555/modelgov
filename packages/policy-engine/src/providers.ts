@@ -93,7 +93,9 @@ export const PROVIDER_REGISTRY: Record<string, ProviderSpec> = {
     authKind: "api_key",
     billingKind: "per_token",
     credentialEnvVars: ["GEMINI_API_KEY"],
-    defaultModels: { cheap: "gemini/gemini-flash", standard: "gemini/gemini-pro", premium: "gemini/gemini-ultra" },
+    // Premium is the real top model (gemini-2.5-pro); "gemini-ultra" was never a
+    // shipped API model. gemini-flash-lite covers the value tier.
+    defaultModels: { cheap: "gemini/gemini-flash", standard: "gemini/gemini-pro", premium: "gemini/gemini-pro" },
     prices: {
       "gemini/gemini-flash": { inputPer1k: 0.000075, outputPer1k: 0.0003 },
       "gemini/gemini-pro": { inputPer1k: 0.00125, outputPer1k: 0.005 },

@@ -1,4 +1,8 @@
-import { parseConfig } from "@modelgov/policy-engine";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { parseConfig, PROVIDER_REGISTRY } from "@modelgov/policy-engine";
+import { parse as parseYaml } from "yaml";
 import { describe, expect, it } from "vitest";
 import { renderLitellmConfig } from "../src/litellm";
 import { composeFileFor, renderModelgovYaml, renderEnv, type ScaffoldOptions } from "../src/render";
@@ -82,6 +86,60 @@ describe("renderLitellmConfig hybrid injection", () => {
     );
     expect(yaml).toContain("Hybrid injection");
   });
+
+  it("gives Gemini a real, priced premium model (no phantom gemini-ultra tier)", () => {
+    const premium = PROVIDER_REGISTRY.gemini!.defaultModels!.premium!;
+    expect(premium).not.toBe("gemini/gemini-ultra");
+    // A real premium model must be in the built-in price table so budgets estimate.
+    expect(PROVIDER_REGISTRY.gemini!.prices?.[premium]).toBeDefined();
+  });
+
+  it("routes openai/gpt-5 to the real gpt-5 model, not a gpt-4o substitute", () => {
+    const yaml = renderLitellmConfig(["openai/gpt-5"]);
+    expect(yaml).toContain("model_name: openai/gpt-5");
+    expect(yaml).toContain("model: openai/gpt-5");
+    expect(yaml).not.toContain("model: openai/gpt-4o");
+  });
+
+  // Bedrock: rely on boto's default credential chain (reads key/secret/session
+  // token from env) so temporary STS (ASIA…) credentials work — passing static
+  // keys explicitly makes boto ignore the ambient session token.
+  it("renders Bedrock via the boto credential chain (region only, no static keys)", () => {
+    const yaml = renderLitellmConfig(["bedrock/anthropic.claude-3-5-haiku-20241022-v1:0"]);
+    expect(yaml).toContain("model: bedrock/anthropic.claude-3-5-haiku-20241022-v1:0");
+    expect(yaml).toContain("aws_region_name: os.environ/AWS_REGION_NAME");
+    expect(yaml).not.toContain("aws_access_key_id");
+    expect(yaml).not.toContain("aws_secret_access_key");
+  });
+});
+
+// The committed cloud config powers `make start-cloud`. It must cover every
+// direct key-based provider (not just OpenAI/Anthropic) so the "14+ providers"
+// claim holds for the non-wizard path. Azure/Bedrock/Vertex are excluded (their
+// own overlays / extra params) and Copilot is subscription (no key).
+describe("litellm_config.cloud.yaml covers the key-based providers", () => {
+  const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
+  const cloud = parseYaml(readFileSync(join(repoRoot, "litellm_config.cloud.yaml"), "utf8")) as {
+    model_list: { model_name: string }[];
+  };
+  const names = new Set(cloud.model_list.map((m) => m.model_name));
+  const EXCLUDED = new Set(["azure", "azure_ai", "bedrock", "vertex_ai", "github_copilot"]);
+
+  const directKeyProviders = Object.values(PROVIDER_REGISTRY).filter(
+    (p) => p.authKind === "api_key" && !EXCLUDED.has(p.slug) && p.defaultModels,
+  );
+
+  it("is valid YAML with a non-empty model_list", () => {
+    expect(Array.isArray(cloud.model_list)).toBe(true);
+    expect(cloud.model_list.length).toBeGreaterThan(6);
+  });
+
+  for (const p of directKeyProviders) {
+    it(`routes ${p.slug}'s default cheap model`, () => {
+      const cheap = p.defaultModels!.cheap!;
+      expect(names.has(cheap), `litellm_config.cloud.yaml missing model_name ${cheap}`).toBe(true);
+    });
+  }
 });
 
 describe("every template renders a valid config", () => {
@@ -226,10 +284,14 @@ describe("providers (openrouter / azure / azure_ai)", () => {
     expect(cfg.providers.bedrock?.auth).toBe("aws");
     expect(cfg.providers.bedrock?.apiKey).toBeUndefined();
     const litellm = files.get("litellm_config.yaml")!;
-    expect(litellm).toContain("aws_access_key_id: os.environ/AWS_ACCESS_KEY_ID");
+    // Boto's default credential chain reads key/secret/session-token from the
+    // env (all listed in .env below); passing static keys explicitly would make
+    // it ignore the ambient STS session token, so only the region is named.
     expect(litellm).toContain("aws_region_name: os.environ/AWS_REGION_NAME");
+    expect(litellm).not.toContain("aws_access_key_id");
     const env = files.get(".env")!;
     expect(env).toContain("AWS_ACCESS_KEY_ID=");
+    expect(env).toContain("AWS_SESSION_TOKEN=");
     expect(env).toContain("AWS_REGION_NAME=us-east-1");
   });
 

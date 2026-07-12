@@ -4,13 +4,14 @@ import { PROVIDER_REGISTRY, providerOf } from "@modelgov/policy-engine";
 const LITELLM_MAP: Record<string, { model: string; keyEnv?: string; apiBase?: string }> = {
   "openai/gpt-4o-mini": { model: "openai/gpt-4o-mini", keyEnv: "OPENAI_API_KEY" },
   "openai/gpt-4o": { model: "openai/gpt-4o", keyEnv: "OPENAI_API_KEY" },
-  "openai/gpt-5": { model: "openai/gpt-4o", keyEnv: "OPENAI_API_KEY" },
+  "openai/gpt-5": { model: "openai/gpt-5", keyEnv: "OPENAI_API_KEY" },
   "anthropic/claude-haiku": { model: "anthropic/claude-3-5-haiku-latest", keyEnv: "ANTHROPIC_API_KEY" },
   "anthropic/claude-sonnet": { model: "anthropic/claude-3-5-sonnet-latest", keyEnv: "ANTHROPIC_API_KEY" },
   "anthropic/claude-opus": { model: "anthropic/claude-3-opus-latest", keyEnv: "ANTHROPIC_API_KEY" },
   "gemini/gemini-flash": { model: "gemini/gemini-2.5-flash", keyEnv: "GEMINI_API_KEY" },
   "gemini/gemini-flash-lite": { model: "gemini/gemini-2.0-flash-lite", keyEnv: "GEMINI_API_KEY" },
   "gemini/gemini-pro": { model: "gemini/gemini-2.5-pro", keyEnv: "GEMINI_API_KEY" },
+  // Legacy alias (no longer a default tier) → real top model, kept for back-compat.
   "gemini/gemini-ultra": { model: "gemini/gemini-2.5-pro", keyEnv: "GEMINI_API_KEY" },
   "ollama/llama3.2:3b": { model: "ollama/llama3.2:3b", apiBase: "http://host.docker.internal:11434" },
 };
@@ -41,10 +42,13 @@ function litellmParamsFor(m: string): string[] {
   const spec = PROVIDER_REGISTRY[providerOf(m)];
   switch (spec?.authKind) {
     case "aws":
+      // Let boto's default credential chain read AWS_ACCESS_KEY_ID /
+      // AWS_SECRET_ACCESS_KEY / AWS_SESSION_TOKEN from the environment (all are
+      // passed to the litellm container). Passing static keys explicitly makes
+      // boto ignore the ambient STS session token, which breaks temporary
+      // (ASIA…) credentials; only the region needs to be named for LiteLLM.
       return [
         `      model: ${m}`,
-        `      aws_access_key_id: os.environ/AWS_ACCESS_KEY_ID`,
-        `      aws_secret_access_key: os.environ/AWS_SECRET_ACCESS_KEY`,
         `      aws_region_name: os.environ/AWS_REGION_NAME`,
       ];
     case "gcp":

@@ -186,6 +186,15 @@ model_list:
       # GOOGLE_APPLICATION_CREDENTIALS points at the service-account JSON.
 ```
 
+> **Vertex needs the service-account file mounted into the `litellm` container.**
+> The Vertex call is made by the model proxy, not the API server, so
+> `GOOGLE_APPLICATION_CREDENTIALS` must resolve *inside* the litellm container.
+> The one-command local stack (`./setup`) does not mount arbitrary host paths, so
+> configure Vertex with a compose override or Helm that mounts the JSON as a
+> secret (e.g. `/secrets/vertex-sa.json`) and sets `GOOGLE_APPLICATION_CREDENTIALS`
+> to that in-container path. Selecting Vertex in the browser wizard records the
+> path but does not mount the file for you.
+
 ### Mistral, Groq, xAI, DeepSeek, Cohere
 
 These are plain API-key providers — pick them in the wizard, or wire them by hand:

@@ -218,8 +218,12 @@ export const CREDENTIAL_FIELDS: Record<
   },
   GOOGLE_APPLICATION_CREDENTIALS: {
     label: "Google service account JSON path",
-    help: "Path to the JSON key file on the server running Modelgov",
-    placeholder: "/path/to/service-account.json",
+    // The Vertex call is made by the litellm container, so this path must resolve
+    // INSIDE it — mount the JSON file into the litellm service (compose volume or
+    // Helm secret). The one-command local stack can't mount an arbitrary host
+    // path, so Vertex is best set up via a compose override / Helm. See docs.
+    help: "Path to the service-account JSON — must be mounted into the litellm container (see docs/providers.md)",
+    placeholder: "/secrets/vertex-sa.json",
   },
   VERTEX_PROJECT: {
     label: "Google Cloud project ID",

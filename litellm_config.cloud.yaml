@@ -1,7 +1,12 @@
-# LiteLLM proxy config for real cloud providers. `model_name` is what Modelgov
-# sends (must match modelgov.yaml); provider keys come from the env.
+# LiteLLM proxy config for real cloud providers (`make start-cloud`). `model_name`
+# is what Modelgov sends (must match modelgov.yaml model_classes); provider keys
+# come from the env. Entries whose provider key is unset don't block startup —
+# LiteLLM validates keys at call time — so this can list every key-based provider
+# and each just works once you add its key to .env and route to it in your policy.
+# (Bedrock/Vertex/Azure need extra params and env — use the setup wizard for those.)
 
 model_list:
+  # ── OpenAI ──
   - model_name: openai/gpt-4o-mini
     litellm_params:
       model: openai/gpt-4o-mini
@@ -12,8 +17,9 @@ model_list:
       api_key: os.environ/OPENAI_API_KEY
   - model_name: openai/gpt-5
     litellm_params:
-      model: openai/gpt-4o
+      model: openai/gpt-5
       api_key: os.environ/OPENAI_API_KEY
+  # ── Anthropic ──
   - model_name: anthropic/claude-haiku
     litellm_params:
       model: anthropic/claude-3-5-haiku-latest
@@ -26,6 +32,69 @@ model_list:
     litellm_params:
       model: anthropic/claude-3-opus-latest
       api_key: os.environ/ANTHROPIC_API_KEY
+  # ── Google Gemini (AI Studio) ──
+  - model_name: gemini/gemini-flash
+    litellm_params:
+      model: gemini/gemini-2.5-flash
+      api_key: os.environ/GEMINI_API_KEY
+  - model_name: gemini/gemini-pro
+    litellm_params:
+      model: gemini/gemini-2.5-pro
+      api_key: os.environ/GEMINI_API_KEY
+  # ── Groq ──
+  - model_name: groq/llama-3.1-8b-instant
+    litellm_params:
+      model: groq/llama-3.1-8b-instant
+      api_key: os.environ/GROQ_API_KEY
+  - model_name: groq/llama-3.3-70b-versatile
+    litellm_params:
+      model: groq/llama-3.3-70b-versatile
+      api_key: os.environ/GROQ_API_KEY
+  # ── Mistral ──
+  - model_name: mistral/mistral-small-latest
+    litellm_params:
+      model: mistral/mistral-small-latest
+      api_key: os.environ/MISTRAL_API_KEY
+  - model_name: mistral/mistral-large-latest
+    litellm_params:
+      model: mistral/mistral-large-latest
+      api_key: os.environ/MISTRAL_API_KEY
+  # ── xAI ──
+  - model_name: xai/grok-2-latest
+    litellm_params:
+      model: xai/grok-2-latest
+      api_key: os.environ/XAI_API_KEY
+  # ── DeepSeek ──
+  - model_name: deepseek/deepseek-chat
+    litellm_params:
+      model: deepseek/deepseek-chat
+      api_key: os.environ/DEEPSEEK_API_KEY
+  - model_name: deepseek/deepseek-reasoner
+    litellm_params:
+      model: deepseek/deepseek-reasoner
+      api_key: os.environ/DEEPSEEK_API_KEY
+  # ── Cohere ──
+  - model_name: cohere/command-r
+    litellm_params:
+      model: cohere/command-r
+      api_key: os.environ/COHERE_API_KEY
+  - model_name: cohere/command-r-plus
+    litellm_params:
+      model: cohere/command-r-plus
+      api_key: os.environ/COHERE_API_KEY
+  # ── OpenRouter (aggregator) ──
+  - model_name: openrouter/openai/gpt-4o-mini
+    litellm_params:
+      model: openrouter/openai/gpt-4o-mini
+      api_key: os.environ/OPENROUTER_API_KEY
+  - model_name: openrouter/openai/gpt-4o
+    litellm_params:
+      model: openrouter/openai/gpt-4o
+      api_key: os.environ/OPENROUTER_API_KEY
+  - model_name: openrouter/anthropic/claude-3.5-sonnet
+    litellm_params:
+      model: openrouter/anthropic/claude-3.5-sonnet
+      api_key: os.environ/OPENROUTER_API_KEY
   # Local prompt-injection classifier (hybrid injection) — never a real model.
   - model_name: local/injection-guard
     litellm_params:
