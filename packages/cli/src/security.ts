@@ -45,7 +45,9 @@ export function securityConfigWarnings(env: Record<string, string>): string[] {
     if (env.IDEMPOTENCY_CAPTURE_CONTENT === "true" && env.IDEMPOTENCY_CAPTURE_CONTENT_ALLOW !== "true") {
       lines.push("fail IDEMPOTENCY_CAPTURE_CONTENT=true requires IDEMPOTENCY_CAPTURE_CONTENT_ALLOW=true in production");
     }
-    if (env.MODELGOV_BEHIND_PROXY === "true" && !env.TRUST_PROXY) {
+    // parseTrustProxy() treats "false" as disabled, so an explicit
+    // TRUST_PROXY=false leaves proxy trust off — reject it like an unset value.
+    if (env.MODELGOV_BEHIND_PROXY === "true" && (!env.TRUST_PROXY || env.TRUST_PROXY === "false")) {
       lines.push("fail MODELGOV_BEHIND_PROXY=true requires TRUST_PROXY");
     }
   }

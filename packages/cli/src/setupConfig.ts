@@ -22,7 +22,16 @@ export function readEnvFile(path: string, root: string = ROOT): Record<string, s
     if (!trimmed || trimmed.startsWith("#")) continue;
     const idx = trimmed.indexOf("=");
     if (idx === -1) continue;
-    out[trimmed.slice(0, idx)] = trimmed.slice(idx + 1);
+    let value = trimmed.slice(idx + 1);
+    // Strip matching surrounding quotes (e.g. LITELLM_CONFIG_PATH="./x.yaml"),
+    // otherwise the quotes become part of the path and resolution fails.
+    if (
+      value.length >= 2 &&
+      ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'")))
+    ) {
+      value = value.slice(1, -1);
+    }
+    out[trimmed.slice(0, idx)] = value;
   }
   return out;
 }
@@ -94,6 +103,8 @@ export function runningOnSummary(mode: Mode): string {
       return "the gateway is running on Azure OpenAI.";
     case "local":
       return "the gateway is running on local Ollama.";
+    case "prod":
+      return "the gateway is running in production mode.";
     default:
       // simple / full: bootstrapped on the built-in demo AI until you connect a
       // real provider in the console — no key or signup needed to start.
