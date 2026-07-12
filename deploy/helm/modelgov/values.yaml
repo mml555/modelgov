@@ -199,7 +199,7 @@ litellm:
   enabled: true
   # pin: update deliberately (was floating :main-stable). production=true already
   # refuses floating tags via validate-images.yaml; this pins the dev default too.
-  image: ghcr.io/berriai/litellm:main-v1.72.0-stable
+  image: ghcr.io/berriai/litellm:main-v1.75.5-stable
   # If disabled, point the API at an external LiteLLM here.
   baseUrl: ""
   resources:

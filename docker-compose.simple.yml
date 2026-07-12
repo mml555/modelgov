@@ -27,7 +27,7 @@ services:
   litellm:
     # pin: update deliberately (was floating :main-stable — a moving tag drifts
     # the dev stack under everyone without a commit). Bump this intentionally.
-    image: ghcr.io/berriai/litellm:main-v1.72.0-stable
+    image: ghcr.io/berriai/litellm:main-v1.75.5-stable
     command: ["--config", "/app/config.yaml", "--port", "4000"]
     # Pass ONLY provider credentials + the master key to this third-party image —
     # not `env_file: .env`, which would also hand it DATABASE_URL, MODELGOV_API_KEY,

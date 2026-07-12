@@ -79,6 +79,15 @@ describe("securityConfigWarnings", () => {
     expect(lines.some((l) => l.includes("DB_RLS_ENABLED"))).toBe(true);
   });
 
+  it("rejects TRUST_PROXY=false behind a proxy in production (parseTrustProxy treats it as off)", () => {
+    const lines = securityConfigWarnings({
+      MODELGOV_PRODUCTION: "true",
+      MODELGOV_BEHIND_PROXY: "true",
+      TRUST_PROXY: "false",
+    });
+    expect(lines.some((l) => l.startsWith("fail") && l.includes("TRUST_PROXY"))).toBe(true);
+  });
+
   it("fails production misconfigurations", () => {
     const lines = securityConfigWarnings({
       MODELGOV_PRODUCTION: "true",
@@ -238,6 +247,13 @@ describe("assertLitellmConfigUsable", () => {
     const r = root();
     mkdirSync(join(r, "litellm_config.generated.yaml"));
     expect(() => assertLitellmConfigUsable(r)).toThrow(/is a directory/);
+  });
+
+  it("accepts a quoted LITELLM_CONFIG_PATH (quotes are stripped, not part of the path)", () => {
+    const r = root();
+    writeFileSync(join(r, "custom.yaml"), "model_list: []\n");
+    writeFileSync(join(r, ".env"), 'LITELLM_CONFIG_PATH="./custom.yaml"\n');
+    expect(() => assertLitellmConfigUsable(r)).not.toThrow();
   });
 });
 
