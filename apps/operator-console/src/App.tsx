@@ -16,6 +16,7 @@ import { MetricsPage } from "./pages/MetricsPage";
 import { HealthPage } from "./pages/HealthPage";
 import { SetupWizardPage } from "./pages/SetupWizardPage";
 import { isSetupComplete } from "./setup/persistence";
+import { fetchSetupStatus } from "./api/setup";
 
 interface TenantSwitcher {
   tenants: string[];
@@ -89,6 +90,11 @@ function ProtectedLayout() {
   const [whoami, setWhoami] = useState<Whoami | null>(null);
   const [tenants, setTenants] = useState<string[]>([]);
   const [tenant, setTenant] = useState(() => getTenant());
+  // undefined = still deciding. Seed from this browser's localStorage: if it
+  // already finished setup, skip the server round-trip (and any wizard flash).
+  const [setupNeeded, setSetupNeeded] = useState<boolean | undefined>(() =>
+    isSetupComplete() ? false : undefined,
+  );
 
   useEffect(() => {
     if (!getToken()) return;
@@ -100,13 +106,24 @@ function ProtectedLayout() {
       .catch(() => setWhoami(null));
   }, []);
 
-  // First-run: guided setup before the operational dashboard.
-  if (getToken() && !isSetupComplete()) {
-    return <Navigate to="/setup" replace />;
-  }
+  // First-run gating on SERVER state, not just this browser's localStorage: only
+  // force the wizard when the setup API is enabled AND no real policy is active
+  // yet. This stops a teammate on a fresh browser from being pushed into the
+  // wizard (and overwriting a live policy), and avoids a /setup 404 in a console
+  // whose setup API is disabled (production).
+  useEffect(() => {
+    if (!getToken() || isSetupComplete()) return;
+    fetchSetupStatus()
+      .then((s) => setSetupNeeded(s.enabled && !s.configured))
+      .catch(() => setSetupNeeded(false));
+  }, []);
 
   // Keep ?url=&token= from ./setup autoconnect links when bouncing to login.
   if (!getToken()) return <Navigate to={`/login${location.search}`} replace />;
+
+  // Still resolving whether first-run setup is needed — avoid a wizard flash.
+  if (setupNeeded === undefined) return null;
+  if (setupNeeded) return <Navigate to="/setup" replace />;
 
   const onTenantChange = (t: string) => {
     persistTenant(t);

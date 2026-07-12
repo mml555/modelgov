@@ -33,6 +33,13 @@ model_list:
       model: openai/modelgov-demo
       api_base: http://demo-llm:8080/v1
       api_key: demo-key
+  # Local prompt-injection classifier (hybrid injection). A `local/` sentinel so
+  # it never collides with a real provider model in a cloud setup.
+  - model_name: local/injection-guard
+    litellm_params:
+      model: openai/modelgov-demo
+      api_base: http://demo-llm:8080/v1
+      api_key: demo-key
 
 general_settings:
   master_key: os.environ/LITELLM_MASTER_KEY

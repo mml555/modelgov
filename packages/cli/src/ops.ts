@@ -1,5 +1,5 @@
 import { deployProfileChecks, PROVIDER_REGISTRY } from "@modelgov/policy-engine";
-import { copyFileSync, existsSync, readFileSync, unlinkSync } from "node:fs";
+import { copyFileSync, existsSync, readFileSync, readdirSync, rmdirSync, statSync, unlinkSync } from "node:fs";
 import { basename, resolve } from "node:path";
 import { spawn } from "node:child_process";
 import { parse as parseYaml } from "yaml";
@@ -197,11 +197,76 @@ async function up(flags: OpsFlags, opts: { strictSmoke: boolean; json: boolean }
     ensureAzureKeys();
   }
 
+  ensureGeneratedLitellmConfig();
+  assertLitellmConfigUsable();
+
   console.log(`Starting Modelgov (${flags.mode})...`);
   await dockerCompose(flags.mode, ["up", "--build", "-d"]);
   await waitForReady(modeConfig(flags.mode).apiPort);
   await smoke(flags.mode, { strict: opts.strictSmoke });
   printSuccess(flags.mode, opts.json);
+}
+
+/** Runtime-generated LiteLLM config: the default proxy config for the local stack. */
+const GENERATED_LITELLM_CONFIG = "litellm_config.generated.yaml";
+const DEMO_LITELLM_CONFIG = "litellm_config.yaml";
+
+/**
+ * Seed the host litellm_config.generated.yaml before `up` so Docker never
+ * creates it as a directory. Both the litellm and api containers bind-mount this
+ * exact host file (litellm reads it; the setup wizard writes it), so it must
+ * exist as a real file first. Copies the demo config when absent, and auto-heals
+ * an EMPTY directory left by a prior missing-file run. A real file (demo- or
+ * wizard-written) is left untouched.
+ */
+export function ensureGeneratedLitellmConfig(root: string = ROOT): void {
+  const target = resolve(root, GENERATED_LITELLM_CONFIG);
+  if (existsSync(target)) {
+    if (!statSync(target).isDirectory()) return; // real file — keep the active config
+    // Docker land-mine: an empty dir it created for a missing mount. Safe to remove.
+    if (readdirSync(target).length > 0) return; // non-empty — let the guard surface it
+    rmdirSync(target);
+  }
+  const demo = resolve(root, DEMO_LITELLM_CONFIG);
+  if (existsSync(demo)) {
+    copyFileSync(demo, target);
+    console.log(`Seeded ${GENERATED_LITELLM_CONFIG} from ${DEMO_LITELLM_CONFIG} (demo provider).`);
+  }
+}
+
+/**
+ * Fail fast when the effective LiteLLM config path is missing or a directory.
+ *
+ * All non-prod compose files bind `${LITELLM_CONFIG_PATH:-./litellm_config.generated.yaml}`
+ * to /app/config.yaml. If that host path does not exist, Docker silently creates
+ * it as a *directory*, LiteLLM crashes with a cryptic `IsADirectoryError`, and
+ * setup fails with only "API did not become ready". ensureGeneratedLitellmConfig
+ * seeds the default; this catches a stale LITELLM_CONFIG_PATH that points at a
+ * file the wizard never wrote, with an actionable message instead.
+ */
+export function assertLitellmConfigUsable(root: string = ROOT): void {
+  const configured = readEnvFile(".env", root).LITELLM_CONFIG_PATH?.trim();
+  // Unset falls back to the seeded ./litellm_config.generated.yaml (see compose).
+  const relative = (configured && configured.length > 0 ? configured : `./${GENERATED_LITELLM_CONFIG}`).replace(/^\.\//, "");
+  const fullPath = resolve(root, relative);
+
+  if (!existsSync(fullPath)) {
+    throw new Error(
+      `LITELLM_CONFIG_PATH points at ${relative}, which does not exist. ` +
+        `Docker would create it as a directory and the model proxy would crash. ` +
+        (configured
+          ? `Fix or remove LITELLM_CONFIG_PATH in .env (unset it to use the built-in demo config), ` +
+            `or finish the setup wizard's cloud-provider step which writes this file.`
+          : `Run this from your Modelgov project directory.`),
+    );
+  }
+  if (statSync(fullPath).isDirectory()) {
+    throw new Error(
+      `LITELLM_CONFIG_PATH (${relative}) is a directory, not a file — Docker likely created it ` +
+        `from an earlier run where the file was missing. Remove it (\`rmdir ${relative}\`) and ` +
+        `either unset LITELLM_CONFIG_PATH in .env (built-in demo config) or write a real LiteLLM config there.`,
+    );
+  }
 }
 
 function ensureEnv(mode: Mode): void {
@@ -573,18 +638,46 @@ function printSuccess(mode: Mode, json: boolean): void {
   }
 
   console.log("");
-  console.log("✓ Ready — demo stack is running (no OpenAI key or signup needed).");
+  console.log(`✓ Ready — ${runningOnSummary(mode)}`);
+  const usesDemoBootstrap = mode === "simple" || mode === "full";
   const opened = maybeOpenBrowser(consoleUrl);
-  console.log(
-    opened
-      ? "  Opening the setup console in your browser… (if it doesn't open, click:)"
-      : "  Click this link to finish setup in your browser:",
-  );
+  if (usesDemoBootstrap) {
+    // The simple/full stack boots on the built-in demo AI. The console link opens
+    // a guided wizard that connects a REAL provider (OpenAI, Anthropic, Gemini,
+    // …) in a couple of minutes — that is the point of opening it, not the demo.
+    console.log(
+      opened
+        ? "  Opening the console to connect your AI provider… (if it doesn't open, click:)"
+        : "  Open the console to connect your AI provider (or explore the demo):",
+    );
+  } else {
+    console.log(
+      opened
+        ? "  Opening the operator console… (if it doesn't open, click:)"
+        : "  Open the operator console:",
+    );
+  }
   console.log("");
   console.log(`  ${consoleUrl}`);
   console.log("");
   if (mode === "full") console.log("  Langfuse UI: http://localhost:3001");
   console.log(`  ${rerunCommand("status", mode)} · ${rerunCommand("down", mode)}`);
+}
+
+/** One-line description of what the running stack is actually serving, per mode. */
+function runningOnSummary(mode: Mode): string {
+  switch (mode) {
+    case "cloud":
+      return "the gateway is running with your cloud provider keys.";
+    case "azure":
+      return "the gateway is running on Azure OpenAI.";
+    case "local":
+      return "the gateway is running on local Ollama.";
+    default:
+      // simple / full: bootstrapped on the built-in demo AI until you connect a
+      // real provider in the console — no key or signup needed to start.
+      return "the gateway is running on the built-in demo AI (no key needed to start).";
+  }
 }
 
 function rerunCommand(commandOrMode: Mode | OpsCommand, mode?: Mode): string {
@@ -601,8 +694,8 @@ function rerunCommand(commandOrMode: Mode | OpsCommand, mode?: Mode): string {
   return `make ${commandOrMode}${suffix}`;
 }
 
-function readEnvFile(path: string): Record<string, string> {
-  const fullPath = resolve(ROOT, path);
+function readEnvFile(path: string, root: string = ROOT): Record<string, string> {
+  const fullPath = resolve(root, path);
   if (!existsSync(fullPath)) return {};
   const text = readFileSync(fullPath, "utf8");
   const out: Record<string, string> = {};

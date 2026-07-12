@@ -31,6 +31,12 @@ model_list:
     litellm_params:
       model: ollama_chat/llama3.2:1b
       api_base: http://host.docker.internal:11434
+  # Local prompt-injection classifier (hybrid injection) — never a real model.
+  - model_name: local/injection-guard
+    litellm_params:
+      model: openai/modelgov-demo
+      api_base: http://demo-llm:8080/v1
+      api_key: demo-key
 
 general_settings:
   master_key: os.environ/LITELLM_MASTER_KEY

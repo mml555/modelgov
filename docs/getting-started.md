@@ -108,7 +108,17 @@ budget blocks, PII, and injection demos.
 ## Connect real providers
 
 The default stack proves the gateway locally with the built-in demo provider.
-When you want real model calls:
+
+For **any of the 14+ providers**, the easiest path is the console `/setup` wizard
+(the link `./setup` prints): pick **Quick start** (OpenAI preset) or
+**Customize** → your provider, paste the key, and it writes
+`litellm_config.generated.yaml`, saves the key to `.env`, and restarts the model
+proxy in place — real calls go live immediately. If the wizard couldn't
+auto-restart (no Docker socket), run `pnpm modelgov reload-providers` afterward.
+
+The manual `make start-cloud` path is a legacy alternative whose static
+`litellm_config.cloud.yaml` only defines OpenAI and Anthropic models (running it
+after the wizard discards the generated config and breaks other providers):
 
 ```bash
 cp .env.example .env

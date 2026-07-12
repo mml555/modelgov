@@ -405,7 +405,11 @@ function validateRefs(
   // class — otherwise restricted data is exfiltrated to an unapproved provider by
   // the safety layer, bypassing the data-sovereignty gate the class enforces.
   const injectionModel = config.safety.injectionModel;
-  if (injectionModel) {
+  // A `local/`- or `ollama/`-routed classifier screens on-box and never sends
+  // restricted text to an external provider, so it satisfies any data class.
+  const injectionIsLocal =
+    !!injectionModel && (injectionModel.startsWith("local/") || injectionModel.startsWith("ollama/"));
+  if (injectionModel && !injectionIsLocal) {
     const injectionProvider = providerOf(injectionModel);
     for (const [name, feature] of Object.entries(config.features)) {
       if (!feature.dataSensitivity) continue;

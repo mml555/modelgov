@@ -1,4 +1,27 @@
-import { apiFetch } from "./client";
+import { apiFetch, ApiError } from "./client";
+
+export interface SetupStatus {
+  /** The setup API is available (dev/non-production console). */
+  enabled: boolean;
+  /** A real, operator-applied policy is active (not just the bootstrap seed). */
+  configured: boolean;
+}
+
+/**
+ * Whether first-run setup is still needed, from the server (not per-browser
+ * localStorage). A 404 means the setup API is disabled (production console), so
+ * the wizard must not be shown at all. Any other failure is treated the same —
+ * fail safe by NOT forcing the wizard.
+ */
+export async function fetchSetupStatus(): Promise<SetupStatus> {
+  try {
+    return await apiFetch<SetupStatus>("/v1/setup/status");
+  } catch (e) {
+    if (e instanceof ApiError && e.status === 404) return { enabled: false, configured: false };
+    // Unknown/transient error: don't force the wizard (and risk clobbering policy).
+    return { enabled: false, configured: true };
+  }
+}
 
 export interface SetupSecretsResult {
   ok: boolean;

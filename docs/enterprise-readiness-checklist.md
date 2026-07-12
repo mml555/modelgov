@@ -6,7 +6,7 @@ Use this checklist before calling a deployment **enterprise-ready**. Every item 
 
 - [x] [Version surfaces consistent](../scripts/verify-versions.sh) — `bash scripts/verify-versions.sh`
 - [x] [Release artifacts published](../.github/workflows/release.yml) — tag `v*` triggers npm, PyPI, OpenAPI asset
-- [x] [Release verification script](../scripts/verify-release-artifacts.sh) — `scripts/verify-release-artifacts.sh v1.5.0`
+- [x] [Release verification script](../scripts/verify-release-artifacts.sh) — `scripts/verify-release-artifacts.sh v1.7.1`
 - [x] [Changelog complete](../CHANGELOG.md)
 - [x] [Migration notes included](../docs/upgrades.md)
 

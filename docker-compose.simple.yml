@@ -61,7 +61,11 @@ services:
       GOOGLE_APPLICATION_CREDENTIALS: ${GOOGLE_APPLICATION_CREDENTIALS:-}
       GITHUB_COPILOT_TOKEN: ${GITHUB_COPILOT_TOKEN:-}
     volumes:
-      - ${LITELLM_CONFIG_PATH:-./litellm_config.yaml}:/app/config.yaml:ro
+      # Default to the generated config (seeded from litellm_config.yaml by the
+      # CLI before `up`). The setup wizard rewrites THIS same host file in place,
+      # so a plain restart applies a provider change — and the api container
+      # mounts the same file (see below) so its writes land on the host.
+      - ${LITELLM_CONFIG_PATH:-./litellm_config.generated.yaml}:/app/config.yaml:ro
     deploy:
       resources:
         limits:
@@ -140,6 +144,12 @@ services:
     volumes:
       - ./modelgov.yaml:/app/modelgov.yaml:ro
       - ./.env:/project/.env
+      # The setup wizard writes the generated LiteLLM config to
+      # $MODELGOV_PROJECT_ROOT/litellm_config.generated.yaml. Bind it to the host
+      # so the write reaches the SAME file the litellm container reads (above) —
+      # without this, the wizard's cloud-provider path writes into the container
+      # only and the proxy never sees it. Seeded on the host by the CLI before up.
+      - ./litellm_config.generated.yaml:/project/litellm_config.generated.yaml
       - /var/run/docker.sock:/var/run/docker.sock
     ports: ["127.0.0.1:${MODELGOV_PUBLIC_PORT:-3090}:3000"]
     healthcheck:

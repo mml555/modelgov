@@ -6,7 +6,7 @@ import { renderLitellmConfig } from "create-modelgov/litellm";
 import { TEMPLATES, type TemplateId } from "create-modelgov/templates";
 import { activateVersion, previewPolicy, saveVersion } from "../api/policy";
 import { mergeSetupPolicy, saveSetupSecrets } from "../api/setup";
-import { apiBase, apiFetch } from "../api/client";
+import { apiBase, apiFetch, ApiError } from "../api/client";
 import {
   BACKEND_OPTIONS,
   BEGINNER_PRESET,
@@ -215,18 +215,24 @@ export function SetupWizardPage() {
         setTestStatus("ok");
         return;
       } catch (e) {
-        if (attempt === retries) {
-          setTestStatus("error");
-          setError(
-            useCloud || useLocal
-              ? "The model proxy isn't responding yet. Give it a few seconds and click “Test again”."
-              : e instanceof Error
-                ? e.message
-                : String(e),
-          );
-          return;
+        // A plain Error means `fetch` itself rejected (proxy not up yet); an
+        // ApiError means the gateway RESPONDED — so a 503 is still warming up, but
+        // any other status is a real error (bad key, quota, model-not-found) that
+        // retrying will not fix. Surface those verbatim instead of masking them.
+        const transient = !(e instanceof ApiError) || e.status === 503;
+        if (transient && attempt < retries) {
+          await new Promise((r) => setTimeout(r, 2500));
+          continue;
         }
-        await new Promise((r) => setTimeout(r, 2500));
+        setTestStatus("error");
+        if (e instanceof ApiError && !transient) {
+          setError(e.code ? `${e.message} (${e.code})` : e.message);
+        } else {
+          setError(
+            "The model proxy isn't responding yet. Give it a few seconds and click “Test again”.",
+          );
+        }
+        return;
       }
     }
   }

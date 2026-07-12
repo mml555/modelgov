@@ -65,7 +65,10 @@ safety:
   protect:
     pii: mask
     prompt_injection: block
-  injection_model: openai/gpt-4o-mini
+  # Local sentinel routed to the demo classifier (see litellm_config.yaml). Using
+  # a `local/` name — not a real provider model — keeps the setup wizard from
+  # shadowing your real cheap-tier model when it preserves this boot-only field.
+  injection_model: local/injection-guard
 
 observability:
   provider: none # "none" | "langfuse"

@@ -16,8 +16,9 @@ AWS Bedrock, Google Vertex, Mistral, Groq, xAI, DeepSeek, Cohere, GitHub Copilot
 and it generates the `modelgov.yaml`, the LiteLLM config (with the correct auth
 wiring per provider), and the `.env` keys.
 
-> Note: `create-modelgov` is not yet published to npm. Until then, run it from
-> source — see [self-host.md](./self-host.md).
+> Already running via `./setup`? Use the console `/setup` wizard to add or switch
+> a provider in place — it configures the config and restarts the proxy for you.
+> `create-modelgov` is for scaffolding a fresh project.
 
 Modelgov keeps a **provider registry** (`@modelgov/policy-engine`'s
 `providers.ts`) as the single source of truth for each provider's auth style,

@@ -41,12 +41,14 @@ automatically on localhost). First visit launches a guided setup wizard at `/set
 
 | Path | What it does |
 | --- | --- |
-| **Quick start (recommended)** | Built-in demo AI + support chat template — no API keys, ~2 minutes |
-| **Customize step by step** | Pick use case, backend (demo / 14+ cloud providers / local Ollama), keys, limits |
+| **Quick start (recommended)** | Real provider in ~2 minutes: OpenAI preset, paste one API key, balanced safety, $200/mo cap |
+| **Customize step by step** | Pick use case, backend (14+ cloud providers / local Ollama), keys, limits |
+| **Just exploring (no API key)** | Built-in demo AI + support chat template — no keys, no real calls |
 
-The wizard writes `modelgov.yaml` policy and (for cloud providers) saves API keys to
-your local `.env`. When you pick real providers, run `make start-cloud` afterward so
-the gateway loads the keys.
+The wizard writes `litellm_config.generated.yaml`, saves API keys to your local
+`.env`, and restarts the model proxy for you — so real calls go live immediately,
+no extra command needed. If it couldn't auto-restart (no Docker socket available),
+it prints a `pnpm modelgov reload-providers` command for you to run.
 
 To run the wizard again: open the browser console and run
 `localStorage.removeItem('modelgov-setup-v1-complete')`, then reload `/setup`.
@@ -163,7 +165,7 @@ MODELGOV_API_KEY=sk-modelgov-api-local \
 | `make up-prod` | Small self-hosted production (**not HA**) |
 | **Helm** | [Enterprise production](./docs/production-deploy.md) — recommended |
 
-**Current release:** `v1.5.0` — pin `ghcr.io/mml555/modelgov/modelgov-api:v1.5.0` in production.
+**Current release:** `v1.7.1` — pin `ghcr.io/mml555/modelgov/modelgov-api:v1.7.1` in production.
 
 | Command | Stack |
 | --- | --- |

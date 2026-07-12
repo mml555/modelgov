@@ -1,5 +1,6 @@
 import { stringify } from "yaml";
 import { PROVIDER_REGISTRY } from "@modelgov/policy-engine";
+import { HYBRID_INJECTION_MODEL } from "./litellm";
 import type { ModelClass, SafetyPreset, Template } from "./templates";
 
 // The providers the wizard offers. Each MUST be a registry slug that defines
@@ -125,7 +126,7 @@ export function renderModelgovYaml(opts: ScaffoldOptions): string {
   const injectionModel = localOnly
     ? LOCAL_MODEL
     : useHybridInjection
-      ? "openai/gpt-4o-mini"
+      ? HYBRID_INJECTION_MODEL
       : primaryModel("cheap", opts.providers[0]!);
 
   const features = Object.fromEntries(

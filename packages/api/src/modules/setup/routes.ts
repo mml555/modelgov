@@ -121,7 +121,11 @@ export function registerSetupRoutes(app: FastifyInstance, deps: SetupRouteDeps):
         .map(([k, v]) => [k, v.trim()] as const)
         .filter(([k, v]) => v.length > 0 && ALLOWED_SECRET_ENV_VARS.has(k)),
     );
-    if (Object.keys(filtered).length === 0) {
+    // Subscription / OAuth-device providers (e.g. GitHub Copilot) legitimately
+    // have no pasteable key. As long as the caller is finishing a provider setup
+    // (a litellmYaml to install), an empty secrets map is valid — otherwise it's
+    // a no-op request and worth a 400.
+    if (Object.keys(filtered).length === 0 && !parsed.data.litellmYaml) {
       return sendError(
         reply,
         400,
@@ -134,7 +138,7 @@ export function registerSetupRoutes(app: FastifyInstance, deps: SetupRouteDeps):
     const envPath = resolve(deps.projectRoot, ".env");
     let litellmConfigPath: string | undefined;
     try {
-      mergeEnvFile(envPath, filtered);
+      if (Object.keys(filtered).length > 0) mergeEnvFile(envPath, filtered);
 
       if (parsed.data.litellmYaml) {
         const configPath = resolve(deps.projectRoot, GENERATED_LITELLM_CONFIG);
@@ -165,6 +169,23 @@ export function registerSetupRoutes(app: FastifyInstance, deps: SetupRouteDeps):
             : "Provider keys saved. Run `pnpm modelgov reload-providers` once so the model proxy uses them.")
         : "Provider keys saved.",
     });
+  });
+
+  app.get("/v1/setup/status", {
+    schema: {
+      tags: ["setup"],
+      description:
+        "Dev-only: whether first-run setup is still needed. `configured` is true once a non-bootstrap policy version is active, so the console can avoid forcing the wizard (and overwriting a live policy) on a second operator. Absent (404) when the setup API is disabled.",
+      response: { 200: { type: "object", additionalProperties: true }, 401: { type: "object" } },
+    },
+  }, async (request, reply) => {
+    // The presence of this route already tells the console the setup API is on.
+    // `configured` distinguishes the bootstrap seed (author "bootstrap") from a
+    // real, operator-applied policy so a teammate on a fresh browser isn't forced
+    // through the wizard against an already-configured gateway.
+    const active = await getActiveConfigVersion(deps.pool, request.ctx.tenantId);
+    const configured = !!active && active.record.author !== "bootstrap";
+    return reply.send({ enabled: true, configured });
   });
 
   app.post("/v1/setup/policy/merge", {

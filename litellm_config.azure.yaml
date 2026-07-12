@@ -22,6 +22,12 @@ model_list:
       api_key: os.environ/AZURE_API_KEY
       api_base: os.environ/AZURE_API_BASE
       api_version: os.environ/AZURE_API_VERSION
+  # Local prompt-injection classifier (hybrid injection) — never a real model.
+  - model_name: local/injection-guard
+    litellm_params:
+      model: openai/modelgov-demo
+      api_base: http://demo-llm:8080/v1
+      api_key: demo-key
 
 general_settings:
   master_key: os.environ/LITELLM_MASTER_KEY

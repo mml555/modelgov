@@ -1,5 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
+  assertLitellmConfigUsable,
+  ensureGeneratedLitellmConfig,
   hasAnyProviderCredentials,
   modeConfig,
   parseOpsFlags,
@@ -161,6 +166,78 @@ describe("browserOpenCommand", () => {
   });
   it("uses cmd /c start with an empty title arg on Windows", () => {
     expect(browserOpenCommand("win32", url)).toEqual({ cmd: "cmd", args: ["/c", "start", "", url] });
+  });
+});
+
+describe("ensureGeneratedLitellmConfig", () => {
+  const dirs: string[] = [];
+  const root = () => {
+    const d = mkdtempSync(join(tmpdir(), "modelgov-seed-"));
+    dirs.push(d);
+    writeFileSync(join(d, "litellm_config.yaml"), "# demo\nmodel_list: []\n");
+    return d;
+  };
+  afterEach(() => {
+    for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true });
+  });
+
+  it("seeds the generated config from the demo config when absent", () => {
+    const r = root();
+    ensureGeneratedLitellmConfig(r);
+    expect(readFileSync(join(r, "litellm_config.generated.yaml"), "utf8")).toContain("# demo");
+  });
+
+  it("keeps an existing real generated config (wizard-written) untouched", () => {
+    const r = root();
+    writeFileSync(join(r, "litellm_config.generated.yaml"), "# gemini\nmodel_list: [x]\n");
+    ensureGeneratedLitellmConfig(r);
+    expect(readFileSync(join(r, "litellm_config.generated.yaml"), "utf8")).toContain("# gemini");
+  });
+
+  it("auto-heals an EMPTY directory left by Docker into a seeded file", () => {
+    const r = root();
+    mkdirSync(join(r, "litellm_config.generated.yaml")); // the Docker land-mine
+    ensureGeneratedLitellmConfig(r);
+    // Now a real file with demo content (guard would otherwise crash the proxy).
+    expect(readFileSync(join(r, "litellm_config.generated.yaml"), "utf8")).toContain("# demo");
+  });
+
+  it("leaves a NON-empty directory for the guard to surface", () => {
+    const r = root();
+    mkdirSync(join(r, "litellm_config.generated.yaml"));
+    writeFileSync(join(r, "litellm_config.generated.yaml", "keep.txt"), "x");
+    ensureGeneratedLitellmConfig(r);
+    expect(() => assertLitellmConfigUsable(r)).toThrow(/is a directory/);
+  });
+});
+
+describe("assertLitellmConfigUsable", () => {
+  const dirs: string[] = [];
+  const root = () => {
+    const d = mkdtempSync(join(tmpdir(), "modelgov-guard-"));
+    dirs.push(d);
+    return d;
+  };
+  afterEach(() => {
+    for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true });
+  });
+
+  it("passes when the default generated config exists", () => {
+    const r = root();
+    writeFileSync(join(r, "litellm_config.generated.yaml"), "model_list: []\n");
+    expect(() => assertLitellmConfigUsable(r)).not.toThrow();
+  });
+
+  it("throws when a configured LITELLM_CONFIG_PATH points at a missing file", () => {
+    const r = root();
+    writeFileSync(join(r, ".env"), "LITELLM_CONFIG_PATH=./litellm_config.generated.yaml\n");
+    expect(() => assertLitellmConfigUsable(r)).toThrow(/does not exist/);
+  });
+
+  it("throws when the config path is a directory (the IsADirectoryError land-mine)", () => {
+    const r = root();
+    mkdirSync(join(r, "litellm_config.generated.yaml"));
+    expect(() => assertLitellmConfigUsable(r)).toThrow(/is a directory/);
   });
 });
 

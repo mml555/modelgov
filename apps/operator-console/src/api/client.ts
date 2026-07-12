@@ -36,6 +36,23 @@ export function apiBase(): string {
   return (sessionStorage.getItem(BASE_KEY) ?? DEFAULT_BASE).replace(/\/$/, "");
 }
 
+/**
+ * Error from a non-2xx gateway response. Carries the HTTP status and the parsed
+ * `error.code` so callers can distinguish a real gateway/provider failure (bad
+ * key, quota, model-not-found) from a transient connection/warm-up problem
+ * (which throws a plain Error from `fetch` rejecting instead).
+ */
+export class ApiError extends Error {
+  readonly status: number;
+  readonly code?: string;
+  constructor(status: number, message: string, code?: string) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+    this.code = code;
+  }
+}
+
 export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = getToken();
   const headers = new Headers(init.headers);
@@ -55,7 +72,17 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
   }
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(text || `HTTP ${res.status}`);
+    // Prefer the gateway's structured error.message/code over the raw body.
+    let message = text || `HTTP ${res.status}`;
+    let code: string | undefined;
+    try {
+      const parsed = JSON.parse(text) as { error?: { message?: string; code?: string } };
+      if (parsed.error?.message) message = parsed.error.message;
+      code = parsed.error?.code;
+    } catch {
+      // non-JSON body — keep the raw text
+    }
+    throw new ApiError(res.status, message, code);
   }
   if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;

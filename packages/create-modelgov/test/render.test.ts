@@ -33,11 +33,13 @@ describe("renderModelgovYaml (support_chat)", () => {
     expect(cfg.modelClasses.cheap?.fallback).toBeUndefined();
   });
 
-  it("uses hybrid injection model for cloud dev when hybridInjection is set", () => {
+  it("uses the local injection-guard sentinel for cloud dev when hybridInjection is set", () => {
     const cfg = parseConfig(
       renderModelgovYaml({ ...base, providers: ["gemini"], hybridInjection: true }),
     );
-    expect(cfg.safety.injectionModel).toBe("openai/gpt-4o-mini");
+    // Must be a local/ sentinel, never a real provider model that could shadow
+    // the user's own cheap tier.
+    expect(cfg.safety.injectionModel).toBe("local/injection-guard");
     expect(cfg.modelClasses.cheap?.primary).toBe("gemini/gemini-flash");
   });
 
@@ -45,14 +47,39 @@ describe("renderModelgovYaml (support_chat)", () => {
     const cfg = parseConfig(renderModelgovYaml({ ...base, providers: ["gemini"] }));
     expect(cfg.safety.injectionModel).toBe("gemini/gemini-flash");
   });
+
+  // Regression: the hybrid injection guard must NOT reuse the user's own cheap
+  // model string. With an OpenAI primary, cheap == openai/gpt-4o-mini, and the
+  // old guard (also openai/gpt-4o-mini → demo) silently routed real chat traffic
+  // to the demo provider.
+  it("does not shadow the OpenAI cheap tier with the injection guard", () => {
+    const cfg = parseConfig(
+      renderModelgovYaml({ ...base, providers: ["openai"], hybridInjection: true }),
+    );
+    expect(cfg.modelClasses.cheap?.primary).toBe("openai/gpt-4o-mini");
+    expect(cfg.safety.injectionModel).not.toBe(cfg.modelClasses.cheap?.primary);
+    expect(cfg.safety.injectionModel).toBe("local/injection-guard");
+  });
 });
 
 describe("renderLitellmConfig hybrid injection", () => {
-  it("adds demo route for openai/gpt-4o-mini when hybridInjection is enabled", () => {
-    const yaml = renderLitellmConfig(["gemini/gemini-flash"], { hybridInjection: true });
-    expect(yaml).toContain("model_name: gemini/gemini-flash");
+  it("routes only the local injection guard to demo — never a real provider model", () => {
+    // Primary is OpenAI, whose cheap model is openai/gpt-4o-mini. That real model
+    // must resolve to the real provider; only local/injection-guard → demo.
+    const yaml = renderLitellmConfig(["openai/gpt-4o-mini"], { hybridInjection: true });
     expect(yaml).toContain("model_name: openai/gpt-4o-mini");
-    expect(yaml).toContain("api_base: http://demo-llm:8080/v1");
+    expect(yaml).toContain("model_name: local/injection-guard");
+    // The real OpenAI model must NOT be pointed at the demo container.
+    const openaiBlock = yaml.slice(
+      yaml.indexOf("model_name: openai/gpt-4o-mini"),
+      yaml.indexOf("model_name: local/injection-guard"),
+    );
+    expect(openaiBlock).not.toContain("demo-llm");
+    expect(openaiBlock).toContain("os.environ/OPENAI_API_KEY");
+    // The guard itself routes to the demo classifier.
+    expect(yaml.slice(yaml.indexOf("model_name: local/injection-guard"))).toContain(
+      "api_base: http://demo-llm:8080/v1",
+    );
     expect(yaml).toContain("Hybrid injection");
   });
 });
