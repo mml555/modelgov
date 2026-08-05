@@ -14,7 +14,25 @@ allowBuilds:
   sharp: true
 
 overrides:
-  postcss: 8.5.16
+  # Security pins for transitive deps with HIGH advisories. Each is a patch or
+  # in-range minor — no major bumps here. Re-check with
+  # `pnpm audit --prod --audit-level high` and RAISE these when a pin goes stale
+  # (postcss 8.5.16 was itself pinned for an earlier advisory and later became
+  # the vulnerable version).
+  #
+  # postcss <=8.5.17: path traversal via sourceMappingURL (GHSA-r28c-9q8g-f849)
+  postcss: "^8.5.18"
+  # fast-uri <3.1.5: host confusion via backslash authority (GHSA-7p8r-x3mc-p8w7)
+  fast-uri: "^3.1.5"
+  # find-my-way <9.7.0 — in fastify's own supported range
+  find-my-way: "^9.7.0"
+  # next <15.5.21 and its sharp dep (examples/chatbot only)
+  next: "^15.5.21"
+  sharp: "^0.35.0"
   # esbuild <0.28.1 dev-server arbitrary file read (GHSA-g7r4-m6w7-qqqr); only
   # tsup pulled the vulnerable 0.27.7, tsx already uses 0.28.1 — dedupe onto it.
   "tsup>esbuild": "^0.28.1"
+
+# Advisories deliberately accepted (with justification) live in
+# package.json -> pnpm.auditConfig.ignoreGhsas, and are explained in
+# SECURITY.md -> Accepted advisories.
