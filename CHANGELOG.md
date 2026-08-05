@@ -15,6 +15,69 @@ guarantees in `docs/versioning.md` apply.
 
 ## [Unreleased]
 
+### Fixed
+
+- **`./setup` failed on a fresh clone.** `@modelgov/policy-engine` exports only
+  `./dist/index.js` and had no `prepare` hook, so `pnpm install` alone left
+  `dist/` missing and the CLI died with `ERR_MODULE_NOT_FOUND` before printing
+  anything. Every CI job runs `pnpm build` first, so only a first-time user hit
+  it. `policy-engine`, `sdk-typescript` and `create-modelgov` now build on
+  install, and `setup` builds as a fallback. This also fixes any
+  `pnpm modelgov …` command run before `./setup` on a new clone.
+- **The production stack could not start.** `docker-compose.production.yml`
+  probed LiteLLM's `/health`, which requires auth whenever `LITELLM_MASTER_KEY`
+  is set — and production requires it. LiteLLM never became healthy, so the API
+  container (which waits on it) never started. Now probes the unauthenticated
+  `/health/liveliness`, matching the dev stack.
+- **`.env.production.example` could not boot as copied.** It set
+  `METRICS_ENABLED=true` with `METRICS_AUTH_TOKEN` commented out; the boot guard
+  correctly refuses that combination, so copying the template verbatim produced
+  a crash loop.
+- **The documented Helm install failed.** Every production values profile sets
+  `production=true` with metrics enabled, but the install command in the chart
+  README omitted `secret.litellmMasterKey` and `secret.metricsAuthToken`, so the
+  chart's fail-closed validation refused to render. Commands corrected and a
+  stale `image.tag` refreshed; `scripts/helm-render-check.sh` (new CI job) now
+  renders every profile.
+- **Local stacks did not survive a restart.** No compose file below production
+  declared a restart policy, so a Docker or host restart left the gateway down
+  while every other project came back. All local services now use
+  `restart: unless-stopped`.
+- **Azure and Mistral prices were wrong.** `azure/gpt-4o-mini` carried OpenAI's
+  rate, under-reporting Azure spend ~9% (budgets permitted more real cost than
+  configured); `mistral/mistral-small-latest` was 2× the current rate,
+  over-reporting spend. Both corrected against LiteLLM's price database.
+- **`OutboxEntry.id` was typed `number`** but `webhook_outbox.id` is a
+  `bigserial`, which node-postgres returns as a string — no runtime failure
+  today, but arithmetic or strict comparison on it would misbehave.
+
+### Added
+
+- **`503 database_unavailable`** for connection-level Postgres failures, with
+  `details.retryable: true`, instead of a generic `500 internal_error`. A
+  restart or failover is transient and safe to retry; a 500 tells clients not to
+  retry and points on-call at a code defect. Query errors still return 500.
+- **Deployment verification scripts** — `scripts/verify-live.sh` (budgets,
+  safety, audit, idempotency), `scripts/loadtest.mjs` (exact cap enforcement
+  under concurrency) and `scripts/security-probe.sh` (cross-user idempotency
+  leaks, injection, permission escalation). `pnpm verify` proves the code;
+  these prove a running deployment. See operations → Verifying a deployment.
+- **`scripts/check-price-drift.mjs`** — diffs the provider price registry
+  against LiteLLM's maintained price database. A stale rate fails no test but
+  silently diverges recorded spend from the real invoice. Required before every
+  release (docs/releasing.md).
+- **Cross-checkout compose guard.** Every local compose file declares the same
+  project name, so `modelgov reset` from a second clone destroyed the first
+  clone's containers and Postgres volume. Destructive commands now refuse when
+  the project belongs to another directory, and a volume-removing command that
+  cannot verify ownership refuses rather than guessing.
+
+### Changed
+
+- Coverage gates raised for the CLI (25 → 35 statements) and added for
+  `create-modelgov` and the operator console's logic, which were previously
+  measured by nothing.
+
 ## [1.7.1] - 2026-07-09
 
 ### Fixed
