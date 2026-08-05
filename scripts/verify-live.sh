@@ -155,16 +155,19 @@ else
 fi
 
 hdr "10. Audit trail"
-res=$(curl -s -w '\n%{http_code}' -H "authorization: Bearer $KEY" "$URL/v1/requests?limit=5")
+res=$(curl -s -w '\n%{http_code}' -H "authorization: Bearer $KEY" "$URL/v1/requests?limit=50")
 c=$(code_of "$res"); b=$(body_of "$res")
 [[ "$c" == 200 ]] && ok "/v1/requests -> 200" || bad "/v1/requests" "status $c"
 [[ "$b" == *"$RUN"* ]] && ok "this run's requests are in the audit log" || bad "audit log missing run" "${b:0:200}"
 # fetch one by id and confirm cost/decision metadata is recorded
+# Pick a row belonging to THIS run: rows[0] can be concurrent traffic, in which
+# case the assertions below would pass without ever checking our own request.
 rid=$(python3 -c "
 import json,sys
 d=json.load(sys.stdin)
 rows=d.get('requests') or d.get('data') or d.get('items') or []
-print(rows[0].get('id','') if rows else '')" <<<"$b" 2>/dev/null)
+mine=[r for r in rows if str(r.get('userId','')).startswith(sys.argv[1])]
+print((mine[0] if mine else {}).get('id',''))" "$RUN" <<<"$b" 2>/dev/null)
 if [[ -n "$rid" ]]; then
   one=$(curl -s -H "authorization: Bearer $KEY" "$URL/v1/requests/$rid")
   [[ "$one" == *'"decision"'* ]] && ok "/v1/requests/{id} returns the decision" || bad "request detail" "${one:0:200}"

@@ -10,7 +10,22 @@
 set -uo pipefail
 URL="${MODELGOV_URL:-http://localhost:3090}"
 KEY="${MODELGOV_API_KEY:-sk-modelgov-api-local}"
-R="sec$(date +%s)"
+# Second-level timestamps collide when two probes start in the same second,
+# which cross-contaminates budgets, idempotency keys and audit assertions.
+R="sec$(date +%s)-$( (od -An -N4 -tx1 /dev/urandom | tr -d ' \n') 2>/dev/null || echo $$ )"
+
+# Never put a bearer key on the wire in cleartext to a non-local host.
+case "$URL" in
+  https://*) ;;
+  http://localhost*|http://127.0.0.1*|http://\[::1\]*) ;;
+  *)
+    if [ "${MODELGOV_ALLOW_INSECURE:-false}" != "true" ]; then
+      echo "Refusing to send an API key over cleartext to $URL." >&2
+      echo "Use https, or set MODELGOV_ALLOW_INSECURE=true for a trusted private network." >&2
+      exit 2
+    fi
+    ;;
+esac
 pass=0; fail=0
 ok(){ printf '  \033[32mPASS\033[0m %s\n' "$1"; pass=$((pass+1)); }
 bad(){ printf '  \033[31mFAIL\033[0m %s\n     %s\n' "$1" "$2"; fail=$((fail+1)); }
@@ -24,7 +39,13 @@ b1=$(post -H "idempotency-key: $IK" -d "{\"userId\":\"${R}_alice\",\"userType\":
 b2=$(post -H "idempotency-key: $IK" -d "{\"userId\":\"${R}_bob\",\"userType\":\"logged_in\",\"feature\":\"support_chat\",\"messages\":[{\"role\":\"user\",\"content\":\"bob different question\"}]}")
 id1=$(python3 -c "import json,sys;print(json.loads(sys.argv[1]).get('requestId',''))" "$b1" 2>/dev/null)
 id2=$(python3 -c "import json,sys;d=json.loads(sys.argv[1]);print(d.get('requestId') or d.get('error',{}).get('code',''))" "$b2" 2>/dev/null)
-if [ -n "$id1" ] && [ "$id1" = "$id2" ]; then
+if [ -z "$id1" ]; then
+  # Without a successful first request there is nothing to replay, so a "pass"
+  # here would be vacuous — a timeout or 5xx must not read as isolation.
+  bad "could not establish alice's baseline request" "alice response: ${b1:0:140}"
+elif [ -z "$id2" ]; then
+  bad "bob's request produced neither a requestId nor an error code" "bob response: ${b2:0:140}"
+elif [ "$id1" = "$id2" ]; then
   bad "bob replayed alice's response with the same idempotency key" "both requestId=$id1"
 else
   ok "same idempotency key from a different user does NOT return alice's response (bob: $id2)"

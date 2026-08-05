@@ -11,10 +11,20 @@
 // reserved_usd must be 0 (no leaked holds) and requests_used must equal `admitted`.
 import { randomUUID } from "node:crypto";
 
-const URL = process.env.MODELGOV_URL ?? "http://localhost:3090";
+// NB: not named `URL` — that would shadow the global URL constructor.
+const BASE_URL = process.env.MODELGOV_URL ?? "http://localhost:3090";
 const KEY = process.env.MODELGOV_API_KEY ?? "sk-modelgov-api-local";
 const TOTAL = Number(process.env.TOTAL ?? 120);
 const CONCURRENCY = Number(process.env.CONCURRENCY ?? 40);
+for (const [name, v] of [["TOTAL", TOTAL], ["CONCURRENCY", CONCURRENCY]]) {
+  // A zero/negative/NaN value yields no results, and the percentile maths then
+  // calls toFixed() on undefined — an unhelpful crash instead of a clear error.
+  if (!Number.isInteger(v) || v < 1) {
+    console.error(`${name} must be a positive integer (got ${process.env[name]})`);
+    process.exit(2);
+  }
+}
+requireSafeTransport(BASE_URL, KEY);
 // Identity is generated here, never taken from the environment: the run id is
 // printed so you can query budget_counters with it afterwards, and echoing an
 // arbitrary env string to stdout is how a script leaks a secret someone parked
@@ -32,10 +42,33 @@ if (!USER_TYPE) {
   process.exit(2);
 }
 
+/**
+ * Refuse to send a bearer key over cleartext to a non-local host. Plain http to
+ * localhost is the normal dev case; http to anything else puts the key on the
+ * wire. Set MODELGOV_ALLOW_INSECURE=true only for a trusted private network.
+ */
+function requireSafeTransport(url, key) {
+  let u;
+  try {
+    u = new URL(url);
+  } catch {
+    console.error(`MODELGOV_URL is not a valid URL: ${url}`);
+    process.exit(2);
+  }
+  const local = ["localhost", "127.0.0.1", "::1", "[::1]"].includes(u.hostname);
+  if (u.protocol !== "https:" && !local && key && process.env.MODELGOV_ALLOW_INSECURE !== "true") {
+    console.error(
+      `Refusing to send an API key over cleartext to ${u.host}.\n` +
+        `Use https, or set MODELGOV_ALLOW_INSECURE=true for a trusted private network.`,
+    );
+    process.exit(2);
+  }
+}
+
 async function one(i) {
   const t0 = performance.now();
   try {
-    const res = await fetch(`${URL}/v1/chat`, {
+    const res = await fetch(`${BASE_URL}/v1/chat`, {
       method: "POST",
       headers: { authorization: `Bearer ${KEY}`, "content-type": "application/json" },
       body: JSON.stringify({
