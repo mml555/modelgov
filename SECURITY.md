@@ -57,3 +57,21 @@ replace application authentication or authorization.
 
 Modelgov composes LiteLLM, Presidio, Postgres, and optionally Langfuse. Monitor
 CVEs in those components and rebuild images on security patches.
+
+CI gates every PR on `pnpm audit --prod --audit-level high`. A newly disclosed
+advisory in a transitive dependency is fixed by pinning the patched version in
+`pnpm-workspace.yaml` → `overrides`, **not** by relaxing the gate. Those pins go
+stale: `postcss` was once pinned for an advisory and later became the vulnerable
+version itself, so raise them rather than assuming a pin is still safe.
+
+### Accepted advisories
+
+`pnpm-workspace.yaml` → `auditConfig.ignoreGhsas` suppresses specific
+advisories, each with its justification inline and tabulated here. An entry is
+only acceptable when the vulnerable code path is **provably unreachable** in
+this project — never merely inconvenient to fix. (The key is `ignoreGhsas`;
+`ignoreCves` takes CVE ids and silently does nothing for a GHSA id.)
+
+| Advisory | Package | Why it does not apply |
+| --- | --- | --- |
+| [GHSA-qwww-vcr4-c8h2](https://github.com/advisories/GHSA-qwww-vcr4-c8h2) | `react-router` (via `react-router-dom` in the operator console) | CSRF in **RSC mode**. The advisory states it "only affects your application if you are using the unstable RSC APIs". The console is a static Vite SPA served by nginx (`apps/operator-console/Dockerfile`) whose only router import is `react-router-dom` — no RSC, no server runtime, no router actions. The fix is `react-router` 8.x, a major bump under our `react-router-dom ^7`. Revisit when the console upgrades. |

@@ -163,12 +163,32 @@ services:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:?set a LiteLLM master key}
     volumes:
-      - ./litellm_config.yaml:/app/config.yaml:ro
+      # ⚠ The repo's default ./litellm_config.yaml is the DEMO config — every model
+      # routes to the `demo-llm` sidecar, which this production stack does not run.
+      # Mounted as-is, litellm still passes its liveliness probe and /ready reports
+      # "litellm: ok", but every chat fails 503 (the injection classifier's model
+      # call 500s). Point this at YOUR provider config:
+      #   LITELLM_CONFIG_PATH=./litellm_config.cloud.yaml
+      - type: bind
+        source: ${LITELLM_CONFIG_PATH:-./litellm_config.yaml}
+        target: /app/config.yaml
+        read_only: true
+        bind:
+          # A missing or misspelled path must FAIL, not be silently created as a
+          # directory and mounted — LiteLLM then dies with IsADirectoryError and
+          # the stack reports only "not ready".
+          create_host_path: false
     healthcheck:
+      # MUST be /health/liveliness, not /health. Production always sets
+      # LITELLM_MASTER_KEY (required above), which makes LiteLLM authenticate
+      # /health — an unauthenticated probe gets 401, litellm never turns healthy,
+      # and the api container (depends_on: service_healthy) never starts at all.
+      # /health/liveliness is unauthenticated by design. Same probe as the dev
+      # stack in docker-compose.simple.yml; keep the two in step.
       test:
         [
           "CMD-SHELL",
-          "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:4000/health')\"",
+          "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:4000/health/liveliness')\"",
         ]
       interval: 10s
       timeout: 5s

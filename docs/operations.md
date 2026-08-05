@@ -27,6 +27,30 @@ Makefile targets handle the layering); `production` and `ci-e2e` stand alone.
 | `docker-compose.production.yml` | `make up-prod` | Standalone hardened production stack (pinned images, healthchecks, boot guards) |
 | `docker-compose.ci-e2e.yml` | CI only | End-to-end example stack used by `scripts/example-e2e-ci.sh` |
 
+### Running two checkouts on one machine
+
+Every local compose file declares the same project name (`name: modelgov`), so a
+second clone of this repo addresses the **same** Docker project. `docker compose
+down -v` (or `modelgov reset`) from the second clone therefore deletes the
+first's containers **and its Postgres volume** — compose gives no warning,
+because the project name matches.
+
+Give each extra checkout its own project name:
+
+```bash
+COMPOSE_PROJECT_NAME=modelgov-myclone pnpm modelgov up simple
+```
+
+Compose resolves the project name as `-p` flag → `COMPOSE_PROJECT_NAME` → the
+file's `name:` → directory basename, so the variable wins without editing files.
+Set it for every command in that checkout (export it in your shell), since the
+name determines which containers and volumes are addressed.
+
+As a backstop, `modelgov down` and `modelgov reset` refuse to run when the
+project's containers were created from a different directory, naming both paths.
+A volume-removing command that *cannot* verify ownership (e.g. Docker
+unreachable) also refuses rather than guessing.
+
 ## Production checklist
 
 - [ ] TLS termination (nginx, ALB, Cloudflare) in front of the API
@@ -106,12 +130,45 @@ curl -s http://localhost:3000/ready
 
 Use **`/ready`** for load balancer readiness. It gates on the database and reports LiteLLM/Presidio status when configured.
 
+## Verifying a deployment
+
+`pnpm verify` proves the **code** is correct. These prove a **running deployment**
+enforces what it advertises — run them after any deploy, against any environment:
+
+| Script | Checks |
+| --- | --- |
+| `bash scripts/verify-live.sh` | Budgets, PII/injection safety, audit trail, idempotency, `/v1/explain` spends nothing. **Not read-only:** it issues real `/v1/chat` calls, so it spends budget, writes audit rows, and consumes one user's daily request cap. Non-destructive, but run it against production knowingly |
+| `node scripts/loadtest.mjs` | Admits exactly the cap under concurrency; then confirm `reserved_usd = 0` in `budget_counters` |
+| `bash scripts/security-probe.sh` | Cross-user idempotency leaks, injection via identity fields, oversized bodies, permission escalation, tenant-header forgery. **Sends hostile input — staging first** |
+
+```bash
+MODELGOV_URL=https://gw.example.com MODELGOV_API_KEY=sk-... bash scripts/verify-live.sh
+```
+
 ## Health endpoints
 
 | Endpoint | Checks | Use for |
 | --- | --- | --- |
 | `/health` | Process only | Liveness |
 | `/ready` | Database gates readiness; LiteLLM + Presidio are reported if configured | Readiness / traffic routing |
+
+> **`/ready` returning 200 does not mean chat works.** Readiness gates on the
+> **database only** — deliberately, because Presidio/LiteLLM fail closed per
+> request (503) and pulling every replica out of rotation on a transient upstream
+> blip would turn a degradation into a full outage.
+>
+> The consequence for alerting: during a total Presidio outage every readiness
+> probe stays **green** while every `/v1/chat` returns **503 `safety_unavailable`**.
+> Verified behavior:
+>
+> ```json
+> {"status":"ready","checks":{"database":"ok","litellm":"ok","presidio":"fail"}}
+> ```
+>
+> Do **not** build your only availability alert on the `/ready` status field.
+> Alert on the `checks` sub-fields (`presidio`/`litellm` != "ok"), on the
+> `safety_unavailable` error rate, or on request-success rate from `/metrics`.
+> A k8s readiness probe on `/ready` is still correct — just not sufficient.
 
 ## API key management
 

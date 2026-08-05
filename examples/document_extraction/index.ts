@@ -1,7 +1,13 @@
 import {
   createModelgovClient,
+  ModelgovError,
   PolicyBlockedError,
 } from "@modelgov/sdk";
+
+/** Sub-cent costs need more than 2 decimals; trailing zeros trimmed so the
+ *  output never shows raw float noise ("$0.000160999999..."). */
+const usd = (n: number): string =>
+  `$${n.toFixed(6).replace(/0+$/, "").replace(/\.$/, "")}`;
 
 const client = createModelgovClient({
   baseUrl: process.env.MODELGOV_URL ?? "http://localhost:3090",
@@ -57,8 +63,8 @@ async function main(): Promise<void> {
 
     console.log(`extracted:\n${res.message.content}`);
     console.log(`\n  model: ${res.model} (${res.decision})`);
-    console.log(`  cost: $${res.cost.actualUsd}`);
-    console.log(`  feature budget remaining: $${res.budgetRemaining.featureMonthlyUsd}`);
+    console.log(`  cost: ${usd(res.cost.actualUsd)}`);
+    console.log(`  feature budget remaining: ${usd(res.budgetRemaining.featureMonthlyUsd)}`);
   } catch (err) {
     if (err instanceof PolicyBlockedError) {
       console.error(`⛔ policy blocked: ${JSON.stringify(err.body)}`);
@@ -69,4 +75,24 @@ async function main(): Promise<void> {
   }
 }
 
-void main();
+// The default modelgov.yaml has no `document_extraction` feature — this example
+// ships its own policy (README step 1). Skipping it is the likeliest first run, so
+// answer it with the fix rather than a stack trace.
+void main().catch((err: unknown) => {
+  process.exitCode = 1;
+  if (
+    err instanceof ModelgovError &&
+    (err.code === "unknown_feature" || err.code === "unknown_user_type")
+  ) {
+    console.error(`⛔ ${err.message}`);
+    console.error(
+      "\n   The running gateway's policy doesn't define this feature (or user\n" +
+        "   type). This example ships its own policy —\n" +
+        "   point the stack at it first (README step 1):\n\n" +
+        "     export MODELGOV_CONFIG=examples/document_extraction/modelgov.yaml\n" +
+        "     ./setup\n",
+    );
+    return;
+  }
+  console.error("request failed:", err);
+});

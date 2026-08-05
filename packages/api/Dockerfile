@@ -39,7 +39,13 @@ COPY packages/cli/package.json packages/cli/package.json
 COPY packages/create-modelgov/package.json packages/create-modelgov/package.json
 COPY packages/policy-engine/package.json packages/policy-engine/package.json
 COPY packages/sdk-typescript/package.json packages/sdk-typescript/package.json
-RUN pnpm install --frozen-lockfile
+# --ignore-scripts: this layer intentionally has ONLY package.json files, no src/.
+# The workspace packages carry a `prepare` hook (so a plain `pnpm install` builds
+# them for developers — see packages/policy-engine/package.json), and running it
+# here would try to compile sources that have not been copied yet, failing the
+# build with "Cannot find src/index.ts". The image builds those packages
+# explicitly a few lines below, once their source is present.
+RUN pnpm install --frozen-lockfile --ignore-scripts
 
 # The API image only needs API + policy-engine source to build. Avoid copying
 # repo docs/examples here so documentation changes do not invalidate API builds.

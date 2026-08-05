@@ -3,6 +3,7 @@ import type { IncomingHttpHeaders } from "node:http";
 import rateLimit from "@fastify/rate-limit";
 import Fastify, { type FastifyInstance, type FastifyRequest } from "fastify";
 import { AppError, sendError } from "./errors";
+import { isDatabaseUnavailableError } from "./util/dbUnavailable";
 import { registerExplainRoute } from "./modules/explain/routes";
 import { registerChatRoute, type ChatRouteDeps } from "./modules/chat/routes";
 import { registerEmbeddingsRoute } from "./modules/embeddings/routes";
@@ -417,6 +418,33 @@ export function buildServer(opts: BuildServerOptions): FastifyInstance {
     if (errStatus !== undefined && errStatus >= 400 && errStatus < 500) {
       req.log.warn({ err }, "client request error");
       return sendError(reply, errStatus, "invalid_request", {}, "Invalid request");
+    }
+
+    // A database outage is transient and retryable — report it as such instead
+    // of a generic 500, which tells clients not to retry and points on-call at a
+    // code defect. Mirrors the Presidio path (503 safety_unavailable). Narrow by
+    // design: only connection-level failures, never a bad query (see util).
+    if (isDatabaseUnavailableError(err)) {
+      req.log.error({ err }, "database unavailable");
+      // `retryable` is only safe to advertise when a retry cannot double-charge.
+      // A connection can drop AFTER the provider call was made or the spend was
+      // committed, and this handler cannot tell which side of that line it is
+      // on. With an Idempotency-Key the replay is deduplicated, so a retry is
+      // genuinely safe; without one, a blind retry on /v1/chat could bill the
+      // caller twice. Report the outage either way — but only PROMISE
+      // retry-safety when the caller gave us the means to make it true.
+      const idempotent =
+        typeof req.headers["idempotency-key"] === "string" &&
+        req.headers["idempotency-key"].trim() !== "";
+      const method = req.method.toUpperCase();
+      const mutating = method !== "GET" && method !== "HEAD";
+      return sendError(
+        reply,
+        503,
+        "database_unavailable",
+        { retryable: idempotent || !mutating },
+        "Database temporarily unavailable",
+      );
     }
 
     req.log.error({ err }, "unhandled error");

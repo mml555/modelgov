@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { keyFormatWarning } from "../src/setup/validation";
+import { keyFormatWarning, parseSetupError } from "../src/setup/validation";
 
 describe("keyFormatWarning", () => {
   it("returns null for empty or whitespace values (never nags on blank)", () => {
@@ -26,5 +26,43 @@ describe("keyFormatWarning", () => {
     expect(keyFormatWarning("AWS_ACCESS_KEY_ID", "AKIAEXAMPLE")).toBeNull();
     expect(keyFormatWarning("AWS_ACCESS_KEY_ID", "ASIAEXAMPLE")).toBeNull();
     expect(keyFormatWarning("AWS_ACCESS_KEY_ID", "nope")).toMatch(/doesn't look like/);
+  });
+
+  it("ignores surrounding whitespace when checking the prefix", () => {
+    expect(keyFormatWarning("OPENAI_API_KEY", "  sk-abc  ")).toBeNull();
+  });
+
+  it("names the field in plain words, not as an env var", () => {
+    const warning = keyFormatWarning("OPENAI_API_KEY", "wrong") ?? "";
+    expect(warning).toContain("openai api key");
+    expect(warning).not.toContain("OPENAI_API_KEY");
+  });
+});
+
+describe("parseSetupError", () => {
+  it("unwraps the human message from a JSON error envelope", () => {
+    const e = new Error(JSON.stringify({ error: { code: "invalid_request", message: "Bad key" } }));
+    expect(parseSetupError(e)).toBe("Bad key");
+  });
+
+  it("falls back to the raw message when the body is not JSON", () => {
+    expect(parseSetupError(new Error("network down"))).toBe("network down");
+  });
+
+  it("falls back to the raw message when JSON has no error.message", () => {
+    expect(parseSetupError(new Error(JSON.stringify({ error: {} })))).toBe('{"error":{}}');
+    expect(parseSetupError(new Error(JSON.stringify({ ok: true })))).toBe('{"ok":true}');
+  });
+
+  it("stringifies a non-Error rejection", () => {
+    expect(parseSetupError("plain string")).toBe("plain string");
+    expect(parseSetupError(undefined)).toBe("undefined");
+  });
+
+  it("renders a plain object as [object Object] — a known rough edge", () => {
+    // Documented rather than asserted-away: the SDK rejects with Error
+    // subclasses, so this path needs a non-Error throw to reach. If that ever
+    // becomes reachable, format the object instead of relaxing this test.
+    expect(parseSetupError({})).toBe("[object Object]");
   });
 });

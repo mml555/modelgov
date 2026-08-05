@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { parse as parseYaml } from "yaml";
 import {
   assertLitellmConfigUsable,
   ensureGeneratedLitellmConfig,
@@ -323,4 +324,60 @@ describe("modeConfig", () => {
     expect(modeConfig("prod").composeArgs).toEqual(["-f", "docker-compose.production.yml"]);
     expect(modeConfig("prod").envFile).toBe(".env.production");
   });
+});
+
+// Every long-running service must declare a restart policy. Without one, a Docker
+// Desktop restart or a laptop reboot leaves the gateway down with no signal —
+// observed in the wild: every other compose project on the machine came back and
+// modelgov did not, because its services defaulted to `restart: no`. Production
+// always had this; the local stacks (the onboarding path) did not.
+describe("compose restart policies", () => {
+  const root = join(import.meta.dirname, "..", "..", "..");
+  const services = (file: string): Record<string, { restart?: string } | null> => {
+    // logLevel:"error" — compose's own `!override` tag is unknown to a plain YAML
+    // parser and would emit a TAG_RESOLVE_FAILED warning on every read. It parses
+    // fine (the tag only affects list-merge semantics, not the keys we inspect).
+    const doc = parseYaml(readFileSync(join(root, file), "utf8"), { logLevel: "error" }) as {
+      services?: Record<string, { restart?: string } | null>;
+    };
+    return doc.services ?? {};
+  };
+
+  // Self-contained stacks: every service must declare the policy itself.
+  // (ci-e2e is excluded on purpose — its own script tears it down, and a restart
+  // policy would fight that teardown.)
+  for (const file of ["docker-compose.simple.yml", "docker-compose.production.yml"]) {
+    it(`${file} declares a restart policy for every service`, () => {
+      const svcs = services(file);
+      expect(Object.keys(svcs).length).toBeGreaterThan(0);
+      const missing = Object.entries(svcs)
+        .filter(([, svc]) => !svc?.restart)
+        .map(([name]) => name);
+      expect(missing, `services without a restart policy in ${file}`).toEqual([]);
+    });
+
+    it(`${file} uses unless-stopped, not always`, () => {
+      // `always` would resurrect containers after a deliberate `make stop`.
+      for (const [name, svc] of Object.entries(services(file))) {
+        expect(svc?.restart, `${file} → ${name}`).toBe("unless-stopped");
+      }
+    });
+  }
+
+  // Overlays are merged ON TOP of the simple base, so a service they merely
+  // override inherits the base policy and needs nothing. Only a service the
+  // overlay INTRODUCES has no base to inherit from — that is what must declare it.
+  for (const overlay of [
+    "docker-compose.dev.full.yml",
+    "docker-compose.cloud.yml",
+    "docker-compose.local.yml",
+    "docker-compose.azure.yml",
+  ]) {
+    it(`${overlay} declares a restart policy on every service it introduces`, () => {
+      const base = new Set(Object.keys(services("docker-compose.simple.yml")));
+      const introduced = Object.entries(services(overlay)).filter(([n]) => !base.has(n));
+      const missing = introduced.filter(([, svc]) => !svc?.restart).map(([n]) => n);
+      expect(missing, `new services without a restart policy in ${overlay}`).toEqual([]);
+    });
+  }
 });

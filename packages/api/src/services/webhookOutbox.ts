@@ -3,7 +3,8 @@ import type { Pool } from "pg";
 import { assertPublicHttpUrl } from "../util/httpUrlGuard";
 
 export interface OutboxEntry {
-  id: number;
+  /** bigserial — pg returns bigint as a string, so this is NOT a number. */
+  id: string;
   eventType: string;
   payload: Record<string, unknown>;
   destinationUrl: string;
@@ -63,7 +64,7 @@ export async function claimPendingWebhooks(
   );
 
   return (rows as Array<{
-    id: number;
+    id: string;
     event_type: string;
     payload: Record<string, unknown>;
     destination_url: string;
@@ -81,7 +82,7 @@ export async function claimPendingWebhooks(
   }));
 }
 
-export async function markWebhookDelivered(pool: Pool, id: number): Promise<void> {
+export async function markWebhookDelivered(pool: Pool, id: string): Promise<void> {
   await pool.query(
     `UPDATE webhook_outbox SET delivered_at = now(), last_error = NULL WHERE id = $1`,
     [id],
@@ -95,7 +96,7 @@ export async function markWebhookDelivered(pool: Pool, id: number): Promise<void
  */
 export async function deliverOutboxWebhook(
   entry: {
-    id: number;
+    id: string;
     payload: Record<string, unknown>;
     destinationUrl: string;
     secret?: string;
@@ -201,7 +202,7 @@ export async function cleanupWebhookOutbox(
 
 export async function markWebhookFailed(
   pool: Pool,
-  id: number,
+  id: string,
   error: string,
   attempts: number,
 ): Promise<void> {

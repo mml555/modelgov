@@ -48,9 +48,26 @@ export function loadWizardState(): Partial<PersistedWizard> {
   }
 }
 
+/**
+ * Persist ONLY the declared fields. Serialising the argument wholesale would
+ * write whatever it carries, so "secrets are never persisted" would depend
+ * entirely on the caller's type being exact — and excess-property checking does
+ * not apply to a value that reached the caller through a wider type. Picking
+ * the fields explicitly makes the guarantee structural.
+ */
 export function saveWizardState(state: PersistedWizard): void {
+  const safe: PersistedWizard = {
+    step: state.step,
+    templateId: state.templateId,
+    backend: state.backend,
+    providers: state.providers,
+    safety: state.safety,
+    monthlyBudget: state.monthlyBudget,
+    customBudget: state.customBudget,
+    quickStart: state.quickStart,
+  };
   try {
-    sessionStorage.setItem(WIZARD_STATE_KEY, JSON.stringify(state));
+    sessionStorage.setItem(WIZARD_STATE_KEY, JSON.stringify(safe));
   } catch {
     /* ignore storage errors (private mode, quota) */
   }

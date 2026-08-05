@@ -81,6 +81,32 @@ Runs build, typecheck, lint, file-size caps, package + coverage tests,
 validation. The Python SDK has its own gate (`cd packages/sdk-python &&
 python -m pytest`). All must be green.
 
+Then check the price registry against upstream — **required before every
+release**:
+
+```bash
+node scripts/check-price-drift.mjs
+```
+
+Provider rates change on the vendor's schedule, not ours. A stale entry does not
+fail any test: budgets still bind, but recorded spend silently diverges from the
+real invoice, which is the one thing a cost-governance gateway must not get
+wrong. This is deliberately NOT part of `pnpm verify` — upstream changing a price
+would red `main` for reasons unrelated to the PR in flight.
+
+Investigate every DRIFTED row before shipping. A name collision (a Modelgov tier
+alias that happens to match a different upstream model) belongs in the script's
+`ALIAS_COLLISIONS` map with a reason, not in a silent tolerance bump.
+
+**UNVERIFIED rows need attention too.** The script exits 0 for them, because a
+missing upstream row is not evidence of drift — but it is not evidence of
+correctness either. Those are Modelgov tier aliases (`anthropic/claude-haiku`)
+and providers absent from the upstream table (`azure_ai/*`), and nothing checks
+them automatically. Confirm each against the vendor's published rate at release
+time; a wrong price there fails no test and silently mis-bills. `azure_ai/*` in
+particular must stay in step with the matching `azure/*` row — both are Azure
+billing, and copying OpenAI-direct rates into them has been a recurring bug.
+
 ## 5. PR and merge
 
 `main` is protected — open a PR, get CI green, and resolve every review thread

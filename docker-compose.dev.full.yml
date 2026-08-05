@@ -16,6 +16,7 @@ name: modelgov
 services:
   langfuse-db:
     image: postgres:16-alpine
+    restart: unless-stopped
     environment:
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: langfuse
@@ -31,6 +32,7 @@ services:
     # pin: update deliberately (was floating :2 — a moving major tag drifts the
     # dev observability stack across langfuse 2.x releases without a commit).
     image: langfuse/langfuse:2.95.4
+    restart: unless-stopped
     depends_on:
       langfuse-db:
         condition: service_healthy

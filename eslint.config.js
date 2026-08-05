@@ -39,6 +39,11 @@ export default tseslint.config(
         URL: "readonly",
         setTimeout: "readonly",
         clearTimeout: "readonly",
+        // Node 20+ web-standard globals (scripts/loadtest.mjs drives the gateway
+        // over HTTP and times it).
+        fetch: "readonly",
+        performance: "readonly",
+        AbortController: "readonly",
       },
     },
   },

@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { loadEnv } from "../src/config/env";
+import { loadDatabaseEnv, loadEnv } from "../src/config/env";
 
 const requiredEnv = {
   DATABASE_URL: "postgres://postgres:postgres@localhost:5432/modelgov",
@@ -72,5 +72,56 @@ describe("loadEnv", () => {
         MODELGOV_API_KEYS: "",
       }),
     ).toThrow(/MODELGOV_API_KEY or MODELGOV_API_KEYS is required/);
+  });
+});
+
+// The migrate entrypoint runs BEFORE the API process and needs only the DB block,
+// so it uses this narrow loader rather than loadEnv — meaning `modelgov migrate`
+// must not require MODELGOV_API_KEY / LITELLM_BASE_URL to start. That distinction
+// is the whole reason the function exists, so it is pinned here.
+describe("loadDatabaseEnv", () => {
+  it("loads the DB block without any API or LiteLLM settings present", () => {
+    const env = loadDatabaseEnv({ DATABASE_URL: requiredEnv.DATABASE_URL });
+    expect(env.DATABASE_URL).toBe(requiredEnv.DATABASE_URL);
+  });
+
+  it("rejects a missing DATABASE_URL with a field-named message", () => {
+    expect(() => loadDatabaseEnv({})).toThrow(/Invalid environment.*DATABASE_URL/s);
+  });
+
+  it("rejects an empty DATABASE_URL", () => {
+    expect(() => loadDatabaseEnv({ DATABASE_URL: "" })).toThrow(/DATABASE_URL is required/);
+  });
+
+  it("does NOT validate the URL's shape — reachability is assertPoolReachable's job", () => {
+    // Deliberate: the schema is `min(1)`, not `.url()`, because node-pg accepts
+    // forms a URL parser would reject (e.g. a unix socket path). A bad value fails
+    // at connect time with a real pg error, not with a schema message.
+    expect(() => loadDatabaseEnv({ DATABASE_URL: "/var/run/postgresql" })).not.toThrow();
+  });
+
+  it("carries the TLS mode through", () => {
+    const env = loadDatabaseEnv({
+      DATABASE_URL: requiredEnv.DATABASE_URL,
+      DATABASE_SSL: "verify-full",
+      DATABASE_SSL_CA: "/etc/ssl/pg-ca.pem",
+    });
+    expect(env.DATABASE_SSL).toBe("verify-full");
+    expect(env.DATABASE_SSL_CA).toBe("/etc/ssl/pg-ca.pem");
+  });
+
+  it("rejects an unknown TLS mode instead of silently disabling TLS", () => {
+    expect(() =>
+      loadDatabaseEnv({ DATABASE_URL: requiredEnv.DATABASE_URL, DATABASE_SSL: "sorta" }),
+    ).toThrow(/Invalid environment.*DATABASE_SSL/s);
+  });
+
+  it("treats an empty DATABASE_SSL_CA as absent, not as an empty path", () => {
+    // An empty string would otherwise become a readFileSync("") at pool creation.
+    const env = loadDatabaseEnv({
+      DATABASE_URL: requiredEnv.DATABASE_URL,
+      DATABASE_SSL_CA: "",
+    });
+    expect(env.DATABASE_SSL_CA).toBeUndefined();
   });
 });

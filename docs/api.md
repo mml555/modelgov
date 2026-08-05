@@ -221,6 +221,7 @@ is stable inside `error.details`:
 | 422 | `idempotency_key_reuse` | Same key, different body |
 | 502 | `provider_unavailable` | LiteLLM / provider down |
 | 503 | `safety_unavailable` | Presidio / safety backend down |
+| 503 | `database_unavailable` | Postgres unreachable (restart / failover). Only connection-level failures map here; a query error stays `500 internal_error`. **`details.retryable` is conditional:** `true` for safe-to-replay requests (GET/HEAD, or any request carrying an `Idempotency-Key`), `false` for a mutating request without one — the connection can drop *after* the provider call, so a blind retry could bill twice. Send an `Idempotency-Key` on `/v1/chat` to make retries safe |
 
 ---
 
@@ -312,6 +313,42 @@ curl -s "$MODELGOV_URL/v1/usage/summary?feature=support_chat&since=7d" \
 ```
 
 CLI: `modelgov usage summary --feature support_chat --since 7d`
+
+### Why recorded spend can exceed the sum of successful calls
+
+Budget counters include **safety-screening cost**, which is charged even when the
+request is ultimately denied. Prompt-injection screening is a real model call and
+runs *before* budget is reserved, so a request can pay for screening and then lose
+the atomic reservation under concurrency. Two denial paths, two cost outcomes:
+
+| Denial | `reason_code` | Cost |
+| --- | --- | --- |
+| Engine blocked it on the pre-loaded snapshot (cap already reached) | e.g. `daily_request_limit_reached` | **none** — no model call at all |
+| Passed the snapshot, then lost the atomic reserve | `daily_budget_exceeded` | screening cost only |
+
+Counting that spend is deliberate: the money left your account, so dropping it
+would under-report real cost. Reconcile against `request_logs` (which records the
+denied rows too), **not** against the sum of your 2xx responses. Measured example:
+a 120-request burst at concurrency 40 against a 50/day cap admitted exactly 50 and
+recorded ~26% more spend than the successful calls alone, all from screening on
+the 19 requests that lost the race. Set `safety: dev` on a feature to remove the
+screening call (and its cost) entirely.
+
+### Do not derive cost from the token columns
+
+`actual_cost_usd` on a `request_logs` row is **model cost + safety-screening
+cost**, while `input_tokens` / `output_tokens` describe **only the model call**.
+When `safety.injection_model` is a priced model (e.g. `openai/gpt-4o-mini`),
+screening adds a roughly fixed per-request amount that the token columns do not
+explain. Measured on the production example policy: an 8-in/18-out call priced at
+$0.000012 by the registry recorded $0.000032 — the $0.00002 delta is the screening
+call, constant across requests.
+
+For chargeback or invoice reconciliation, use `actual_cost_usd` as the source of
+truth and treat the token columns as model-call telemetry. Recomputing spend as
+`tokens × price` will **under-report** by the screening cost on every request.
+Route screening at a cheap or self-hosted model (`safety.injection_model`) to
+shrink that component.
 
 ---
 

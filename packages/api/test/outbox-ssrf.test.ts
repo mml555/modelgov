@@ -2,7 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 import { deliverOutboxWebhook } from "../src/services/webhookOutbox";
 
 const entry = (destinationUrl: string, secret?: string) => ({
-  id: 1,
+  // bigserial: pg hands back bigint as a string, so the row shape uses string ids.
+  id: "1",
   payload: { hello: "world" },
   destinationUrl,
   secret,
