@@ -23,6 +23,7 @@
   ],
   "scripts": {
     "build": "pnpm run -w generate-sdk-types && tsup src/index.ts --format esm --dts --clean",
+    "prepare": "pnpm run build",
     "typecheck": "tsc --noEmit"
   }
 }
