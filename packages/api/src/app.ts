@@ -3,6 +3,7 @@ import type { IncomingHttpHeaders } from "node:http";
 import rateLimit from "@fastify/rate-limit";
 import Fastify, { type FastifyInstance, type FastifyRequest } from "fastify";
 import { AppError, sendError } from "./errors";
+import { isDatabaseUnavailableError } from "./util/dbUnavailable";
 import { registerExplainRoute } from "./modules/explain/routes";
 import { registerChatRoute, type ChatRouteDeps } from "./modules/chat/routes";
 import { registerEmbeddingsRoute } from "./modules/embeddings/routes";
@@ -417,6 +418,21 @@ export function buildServer(opts: BuildServerOptions): FastifyInstance {
     if (errStatus !== undefined && errStatus >= 400 && errStatus < 500) {
       req.log.warn({ err }, "client request error");
       return sendError(reply, errStatus, "invalid_request", {}, "Invalid request");
+    }
+
+    // A database outage is transient and retryable — report it as such instead
+    // of a generic 500, which tells clients not to retry and points on-call at a
+    // code defect. Mirrors the Presidio path (503 safety_unavailable). Narrow by
+    // design: only connection-level failures, never a bad query (see util).
+    if (isDatabaseUnavailableError(err)) {
+      req.log.error({ err }, "database unavailable");
+      return sendError(
+        reply,
+        503,
+        "database_unavailable",
+        { retryable: true },
+        "Database temporarily unavailable",
+      );
     }
 
     req.log.error({ err }, "unhandled error");
