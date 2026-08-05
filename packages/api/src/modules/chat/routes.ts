@@ -268,6 +268,7 @@ async function streamChat(
     messages: ctx.messages,
     maxTokens: ctx.decision.maxOutputTokens,
     temperature: ctx.temperature,
+    responseFormat: ctx.responseFormat,
     signal: controller.signal,
   });
 

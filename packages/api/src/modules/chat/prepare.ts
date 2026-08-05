@@ -1,3 +1,4 @@
+import type { ResponseFormat } from "../../services/litellm";
 import type { PolicyDecision, SafetyPlan, UsageSnapshot } from "@modelgov/policy-engine";
 import type { ChatMessage } from "../../types";
 import { SafetyServiceError } from "../../services/safety";
@@ -50,6 +51,7 @@ export interface PreparedCall {
   piiMasked: boolean;
   injectionBlocked: boolean;
   temperature?: number;
+  responseFormat?: ResponseFormat;
   hold: BudgetHold;
   rejection: RejectionCtx;
   /** Present when grounding=strict: the context to verify the answer against. */
@@ -267,6 +269,7 @@ async function prepareFlatCall(
       piiMasked: safetyOutcome.piiMasked,
       injectionBlocked: safetyOutcome.injectionBlocked,
       temperature: body.temperature,
+      responseFormat: body.responseFormat,
       hold: {
         mode: "flat",
         usage,
@@ -372,6 +375,7 @@ async function prepareHierarchicalCall(
       piiMasked: safetyOutcome.piiMasked,
       injectionBlocked: safetyOutcome.injectionBlocked,
       temperature: body.temperature,
+      responseFormat: body.responseFormat,
       hold: {
         mode: "hierarchical",
         nodes: reserved.nodes,

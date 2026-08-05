@@ -4879,6 +4879,46 @@
                     "minimum": 0,
                     "maximum": 2
                   },
+                  "responseFormat": {
+                    "type": "object",
+                    "required": [
+                      "type"
+                    ],
+                    "additionalProperties": false,
+                    "description": "Force JSON output. `json_object` guarantees valid JSON; `json_schema` (requires `jsonSchema`) constrains it to your schema — recommended for extraction. OpenAI-shaped; LiteLLM translates per provider.",
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "enum": [
+                          "text",
+                          "json_object",
+                          "json_schema"
+                        ]
+                      },
+                      "jsonSchema": {
+                        "type": "object",
+                        "required": [
+                          "name",
+                          "schema"
+                        ],
+                        "additionalProperties": false,
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 64
+                          },
+                          "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                          },
+                          "strict": {
+                            "type": "boolean"
+                          }
+                        }
+                      }
+                    }
+                  },
                   "stream": {
                     "type": "boolean"
                   },

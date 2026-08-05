@@ -179,6 +179,55 @@ describe.skipIf(!DATABASE_URL)("POST /v1/chat (integration)", () => {
     expect(Number(snap.rows[0].used_usd)).toBeCloseTo(0.0002, 6);
   });
 
+  it("forwards responseFormat json_schema through the whole pipeline", async () => {
+    // The unit test proves the wire conversion; this proves the field survives
+    // schema validation, prepare, the policy decision and the provider call —
+    // the plumbing is where a passthrough field actually gets dropped.
+    let seen: LiteLLMChatParams | undefined;
+    const app = appWith({
+      chat: async (p) => {
+        seen = p;
+        return okResult(p.model);
+      },
+    });
+    const schema = { type: "object", properties: { total: { type: "number" } }, required: ["total"] };
+    const res = await post(app, {
+      userId: "u1",
+      userType: "logged_in",
+      feature: "support_chat",
+      messages: [{ role: "user", content: "extract the total" }],
+      responseFormat: { type: "json_schema", jsonSchema: { name: "receipt", schema, strict: true } },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(seen?.responseFormat).toEqual({
+      type: "json_schema",
+      jsonSchema: { name: "receipt", schema, strict: true },
+    });
+  });
+
+  it("rejects json_schema without a schema, and an oversized schema", async () => {
+    const app = appWith({ chat: async (p) => okResult(p.model) });
+    const base = {
+      userId: "u1",
+      userType: "logged_in",
+      feature: "support_chat",
+      messages: [{ role: "user", content: "hi" }],
+    };
+
+    const missing = await post(app, { ...base, responseFormat: { type: "json_schema" } });
+    expect(missing.statusCode).toBe(400);
+
+    // A caller-supplied schema is forwarded on every call, so it is bounded.
+    const huge = { type: "object", properties: Object.fromEntries(
+      Array.from({ length: 4000 }, (_, i) => [`f${i}`, { type: "string" }]),
+    ) };
+    const oversized = await post(app, {
+      ...base,
+      responseFormat: { type: "json_schema", jsonSchema: { name: "big", schema: huge } },
+    });
+    expect(oversized.statusCode).toBe(400);
+  });
+
   it("passes multimodal (vision) content parts through to the model", async () => {
     let seen: LiteLLMChatParams | undefined;
     const app = appWith({

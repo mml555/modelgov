@@ -986,3 +986,52 @@ def test_base_url_trailing_slash_stripped() -> None:
     client.close()
 
     assert str(route.calls.last.request.url) == f"{BASE_URL}/v1/chat"
+
+
+@respx.mock
+def test_chat_sends_response_format_json_schema() -> None:
+    """Structured output must reach the wire as camelCase `responseFormat`.
+
+    The SDK's job here is naming: callers write snake_case, the API speaks
+    camelCase, and the nested `jsonSchema` key must NOT be snake_cased with it.
+    """
+    route = respx.post(f"{BASE_URL}/v1/chat").mock(
+        return_value=httpx.Response(200, json=CHAT_SUCCESS_BODY)
+    )
+    schema = {"type": "object", "properties": {"total": {"type": "number"}}}
+
+    with make_client() as client:
+        client.chat(
+            user_id="u1",
+            user_type="logged_in",
+            feature="support_chat",
+            messages=[{"role": "user", "content": "extract the total"}],
+            response_format={
+                "type": "json_schema",
+                "jsonSchema": {"name": "receipt", "schema": schema, "strict": True},
+            },
+        )
+
+    body = json.loads(route.calls.last.request.content)
+    assert body["responseFormat"] == {
+        "type": "json_schema",
+        "jsonSchema": {"name": "receipt", "schema": schema, "strict": True},
+    }
+
+
+@respx.mock
+def test_chat_omits_response_format_when_unset() -> None:
+    """Absent, not null: a request without it must look exactly as it did before."""
+    route = respx.post(f"{BASE_URL}/v1/chat").mock(
+        return_value=httpx.Response(200, json=CHAT_SUCCESS_BODY)
+    )
+
+    with make_client() as client:
+        client.chat(
+            user_id="u1",
+            user_type="logged_in",
+            feature="support_chat",
+            messages=[{"role": "user", "content": "hi"}],
+        )
+
+    assert "responseFormat" not in json.loads(route.calls.last.request.content)

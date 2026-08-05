@@ -139,6 +139,7 @@ class ModelgovClient:
         requested_model_class: Optional[str] = None,
         input_tokens_estimate: Optional[int] = None,
         temperature: Optional[float] = None,
+        response_format: Optional[Mapping[str, Any]] = None,
         project_id: Optional[str] = None,
         environment: Optional[str] = None,
         idempotency_key: Optional[str] = None,
@@ -165,6 +166,10 @@ class ModelgovClient:
                 the more explicit name.
             input_tokens_estimate: Optional pre-estimate for budget checks.
             temperature: Sampling temperature (0-2).
+            response_format: Force JSON output, e.g. ``{"type": "json_object"}``
+                or ``{"type": "json_schema", "jsonSchema": {"name": ...,
+                "schema": {...}, "strict": True}}``. Prefer ``json_schema`` for
+                extraction — valid JSON of the wrong shape still breaks you.
             project_id: Optional project scope.
             environment: Optional environment tag.
             idempotency_key: Sent as the ``Idempotency-Key`` header. Retrying
@@ -197,6 +202,7 @@ class ModelgovClient:
             requested_model_class=requested_model_class,
             input_tokens_estimate=input_tokens_estimate,
             temperature=temperature,
+            response_format=response_format,
             project_id=project_id,
             environment=environment,
             metadata=metadata,
@@ -223,6 +229,7 @@ class ModelgovClient:
         requested_model_class: Optional[str] = None,
         input_tokens_estimate: Optional[int] = None,
         temperature: Optional[float] = None,
+        response_format: Optional[Mapping[str, Any]] = None,
         project_id: Optional[str] = None,
         environment: Optional[str] = None,
         idempotency_key: Optional[str] = None,
@@ -284,6 +291,7 @@ class ModelgovClient:
             requested_model_class=requested_model_class,
             input_tokens_estimate=input_tokens_estimate,
             temperature=temperature,
+            response_format=response_format,
             project_id=project_id,
             environment=environment,
             metadata=metadata,
@@ -637,6 +645,7 @@ class ModelgovClient:
         requested_model_class: Optional[str],
         input_tokens_estimate: Optional[int],
         temperature: Optional[float],
+        response_format: Optional[Mapping[str, Any]],
         project_id: Optional[str],
         environment: Optional[str],
         metadata: Optional[Mapping[str, Any]],
@@ -657,6 +666,8 @@ class ModelgovClient:
             body["inputTokensEstimate"] = input_tokens_estimate
         if temperature is not None:
             body["temperature"] = temperature
+        if response_format is not None:
+            body["responseFormat"] = dict(response_format)
         if project_id is not None:
             body["projectId"] = project_id
         if environment is not None:

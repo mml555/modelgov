@@ -102,6 +102,52 @@ Default API keys include `chat:create` only. Add `usage:read` for the usage endp
 
 `feature` is **required** and must exist in `modelgov.yaml`.
 
+### Structured output (`responseFormat`)
+
+Force the model to return JSON instead of asking for it in the prompt:
+
+```json
+{
+  "responseFormat": {
+    "type": "json_schema",
+    "jsonSchema": {
+      "name": "invoice",
+      "strict": true,
+      "schema": {
+        "type": "object",
+        "properties": { "total": { "type": "number" }, "dueDate": { "type": "string" } },
+        "required": ["total"]
+      }
+    }
+  }
+}
+```
+
+| `type` | Guarantee |
+| --- | --- |
+| `text` (default) | none — normal completion |
+| `json_object` | output parses as JSON, but the *shape* is whatever the model chose |
+| `json_schema` | output conforms to your schema (`strict: true` on providers that support it) |
+
+Prefer `json_schema` for extraction: valid JSON of the wrong shape still breaks
+the caller, which is the failure the prompt-only approach produces.
+
+The field is OpenAI-shaped and LiteLLM translates it per provider (Gemini
+`responseSchema`, Anthropic tool-forcing), so one request body works across
+backends. Provider support for advanced JSON Schema keywords varies — the
+gateway forwards the schema unmodified rather than guessing a common subset, so
+an unsupported keyword surfaces as a provider error, not a silent downgrade.
+
+Notes:
+
+- `jsonSchema.schema` is capped at 20,000 serialized characters. It is sent on
+  every call, so keep it tight.
+- Works with `stream: true`; deltas are fragments of the JSON document, so
+  accumulate before parsing.
+- Constrained output still costs output tokens. A schema larger than
+  `max_tokens` allows will truncate mid-document — the usual symptom is a parse
+  error on an otherwise valid-looking response.
+
 ### Streaming (`stream: true`)
 
 Set `stream: true` to receive the completion incrementally as

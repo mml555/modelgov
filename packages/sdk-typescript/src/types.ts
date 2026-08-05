@@ -38,6 +38,22 @@ export interface ChatMessage {
  * `FeatureName`, `UserTypeName`, and `ModelClassName` are generated from
  * `modelgov.yaml` via `pnpm generate-sdk-types`.
  */
+/** Structured-output request (see ChatRequest.responseFormat). */
+export type ResponseFormat =
+  | { type: "text" }
+  | { type: "json_object" }
+  | {
+      type: "json_schema";
+      jsonSchema: {
+        /** Identifies the schema to the provider; any short stable label. */
+        name: string;
+        /** A JSON Schema object. Provider support for advanced keywords varies. */
+        schema: Record<string, unknown>;
+        /** OpenAI strict mode: the model must match the schema exactly. */
+        strict?: boolean;
+      };
+    };
+
 export interface ChatRequest {
   userId: string;
   userType: UserTypeName;
@@ -52,6 +68,13 @@ export interface ChatRequest {
   context?: string[];
   inputTokensEstimate?: number;
   temperature?: number;
+  /**
+   * Force JSON output. `json_object` guarantees valid JSON; `json_schema`
+   * constrains it to your schema — prefer that for extraction, since valid
+   * JSON of the wrong shape still breaks the caller. OpenAI-shaped; the
+   * gateway translates per provider via LiteLLM.
+   */
+  responseFormat?: ResponseFormat;
   projectId?: string;
   environment?: string;
   metadata?: Record<string, unknown>;

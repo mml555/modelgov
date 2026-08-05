@@ -15,6 +15,17 @@ guarantees in `docs/versioning.md` apply.
 
 ## [Unreleased]
 
+### Added
+
+- **Structured output on `POST /v1/chat`** — `responseFormat: { type:
+  "json_object" }` or `{ type: "json_schema", jsonSchema: { name, schema,
+  strict } }`, forwarded to the provider so extraction callers stop asking for
+  JSON in the prompt and hand-rolling parsers for what comes back. OpenAI-shaped;
+  LiteLLM translates per provider (Gemini `responseSchema`, Anthropic
+  tool-forcing). Works on the streaming and non-streaming paths, and in both
+  SDKs (`responseFormat` / `response_format`).
+  ([#38](https://github.com/mml555/modelgov/issues/38))
+
 ## [1.7.2] - 2026-08-05
 
 ### Fixed

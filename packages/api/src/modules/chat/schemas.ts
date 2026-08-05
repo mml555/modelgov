@@ -6,6 +6,13 @@ import { z } from "zod";
 const MAX_MESSAGES = 64;
 const MAX_CONTENT_CHARS = 100_000;
 const MAX_METADATA_KEYS = 32;
+/**
+ * Serialized size cap on a caller-supplied JSON Schema. The body limit already
+ * bounds the request, but a 500KB schema would be accepted and then forwarded
+ * to the provider on EVERY call — bound it explicitly so the rejection names
+ * the real problem instead of surfacing as a provider error.
+ */
+const MAX_JSON_SCHEMA_CHARS = 20_000;
 // Multimodal (vision) bounds: how many parts per message, and how long an
 // image `url` may be. A `data:` URI holds a whole base64 image, so the url cap
 // is generous — but a vision deployment still needs a raised body limit
@@ -57,6 +64,33 @@ export const messageSchema = z.object({
   ]),
 });
 
+/**
+ * Structured output. Mirrors OpenAI's `response_format`, which is the shape
+ * LiteLLM normalises for every backend, so callers write it once regardless of
+ * provider. `json_schema` is the one worth using for extraction: `json_object`
+ * only guarantees *valid* JSON, not the JSON you asked for.
+ */
+export const responseFormatSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("text") }),
+  z.object({ type: z.literal("json_object") }),
+  z.object({
+    type: z.literal("json_schema"),
+    jsonSchema: z.object({
+      name: z.string().min(1).max(64),
+      // Kept as an opaque object: validating the caller's JSON Schema against
+      // the JSON Schema meta-schema is the provider's job, and every provider
+      // supports a different subset. Rejecting here would guess wrong.
+      schema: z
+        .record(z.string(), z.unknown())
+        .refine((o) => JSON.stringify(o).length <= MAX_JSON_SCHEMA_CHARS, {
+          message: `jsonSchema.schema may not exceed ${MAX_JSON_SCHEMA_CHARS} serialized characters`,
+        }),
+      /** OpenAI strict mode: the model must match the schema exactly. */
+      strict: z.boolean().optional(),
+    }),
+  }),
+]);
+
 export const chatBodySchema = z.object({
   userId: z.string().min(1),
   userType: z.string().min(1),
@@ -73,6 +107,8 @@ export const chatBodySchema = z.object({
   // column and 500 the request (and, in billing mode, after the credit hold).
   inputTokensEstimate: z.number().int().positive().max(10_000_000).optional(),
   temperature: z.number().min(0).max(2).optional(),
+  /** Force JSON (optionally schema-constrained) output — see responseFormatSchema. */
+  responseFormat: responseFormatSchema.optional(),
   /** Stream the completion as SSE. Requires the feature's output PII mode to be off. */
   stream: z.boolean().optional(),
   /** Leaf budget node to bill against (hierarchical budgets; requires the flag). */
@@ -157,6 +193,33 @@ export const chatBodyJsonSchema = {
     },
     inputTokensEstimate: { type: "integer", minimum: 1 },
     temperature: { type: "number", minimum: 0, maximum: 2 },
+    responseFormat: {
+      // FLAT on purpose — no oneOf. Fastify's Ajv runs with removeAdditional,
+      // and while evaluating a `oneOf` branch whose additionalProperties is
+      // false it STRIPS the sibling keys from the data, so the json_schema
+      // branch then fails on a property the caller did send. The strict
+      // discriminated validation is zod's job (chatBodySchema.safeParse in the
+      // route), which also produces the better message; this block documents
+      // the shape for OpenAPI and catches coarse type errors.
+      type: "object",
+      required: ["type"],
+      additionalProperties: false,
+      description:
+        "Force JSON output. `json_object` guarantees valid JSON; `json_schema` (requires `jsonSchema`) constrains it to your schema — recommended for extraction. OpenAI-shaped; LiteLLM translates per provider.",
+      properties: {
+        type: { type: "string", enum: ["text", "json_object", "json_schema"] },
+        jsonSchema: {
+          type: "object",
+          required: ["name", "schema"],
+          additionalProperties: false,
+          properties: {
+            name: { type: "string", minLength: 1, maxLength: 64 },
+            schema: { type: "object", additionalProperties: true },
+            strict: { type: "boolean" },
+          },
+        },
+      },
+    },
     stream: { type: "boolean" },
     budgetNodeId: { type: "string" },
     projectId: { type: "string" },
