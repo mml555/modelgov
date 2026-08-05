@@ -78,13 +78,27 @@ describe.skipIf(!DATABASE_URL)("webhook outbox lifecycle (integration)", () => {
     await enqueue({ payload: { n: 2 } });
     await enqueue({ payload: { n: 3 } });
 
+    // Give the rows DISTINCT due times, oldest first. Without this they share a
+    // default now() and the test would pass on any two rows, proving nothing
+    // about ordering — only that two distinct rows came back.
+    const { rows: all } = await pool.query<{ id: string }>(
+      "SELECT id FROM webhook_outbox ORDER BY id",
+    );
+    const ids = all.map((r) => r.id);
+    for (const [i, id] of ids.entries()) {
+      await pool.query(
+        `UPDATE webhook_outbox SET next_attempt_at = now() - make_interval(secs => $2) WHERE id = $1`,
+        [id, (ids.length - i) * 60],
+      );
+    }
+
+    // Compare SETS: the claim is an `UPDATE ... RETURNING`, and Postgres gives
+    // no ordering guarantee on returned rows — only the subquery's LIMIT/ORDER
+    // BY decides WHICH rows are taken, which is what oldest-first means here.
     const first = await claimPendingWebhooks(pool, 2);
-    expect(first).toHaveLength(2);
+    expect([...first.map((e) => e.id)].sort()).toEqual([...ids.slice(0, 2)].sort());
     const rest = await claimPendingWebhooks(pool, 2);
-    expect(rest).toHaveLength(1);
-    // All three distinct rows, none delivered twice.
-    const ids = [...first, ...rest].map((e) => e.id);
-    expect(new Set(ids).size).toBe(3);
+    expect(rest.map((e) => e.id)).toEqual(ids.slice(2));
   });
 
   it("never claims a delivered row", async () => {

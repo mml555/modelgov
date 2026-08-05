@@ -102,12 +102,11 @@ if [ ! -d node_modules ]; then
   pnpm install
 fi
 
-# Build the workspace packages before running the CLI. `@modelgov/policy-engine`
-# exports ONLY ./dist/index.js (no src fallback) and has no prepare/postinstall
-# hook, so on a fresh clone `pnpm install` alone leaves dist/ missing and the CLI
-# dies with ERR_MODULE_NOT_FOUND before it can print anything useful. CI never hit
-# this because every CI job runs `pnpm build` explicitly first; only a first-time
-# user did. Keyed on the marker file so a warm checkout skips the rebuild.
+# Fallback build. `@modelgov/policy-engine` exports ONLY ./dist/index.js (no src
+# fallback), so a missing dist/ kills the CLI with ERR_MODULE_NOT_FOUND before it
+# can print anything useful. The package now carries a `prepare` hook, so a plain
+# `pnpm install` builds it and this is normally a no-op — it still covers a tree
+# whose dist/ was deleted without reinstalling. Keyed on the marker file.
 if [ ! -f packages/policy-engine/dist/index.js ]; then
   printf 'Building workspace packages (first run)...\n'
   pnpm build

@@ -121,7 +121,8 @@ export default defineConfig({
         // repo while carrying the most user-facing bug traffic (setup/provider-config
         // fixes). Added tests for setupConfig (env parsing, demo-vs-real detection),
         // the ops decision helpers (isRealSecret, rerunCommand), and the production
-        // doctor checks; the gate moves 25 → 35 statements to lock that in.
+        // doctor checks. The tuple below is lines/functions/branches/statements:
+        // 25/27/21/24 → 35/36/37/35, i.e. statements 24 → 35.
         //
         // The three gates below sit ~2-3 points under their measured values, not
         // the usual ~1: they were baselined on Node 24 while CI runs Node 22, and

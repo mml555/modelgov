@@ -56,7 +56,7 @@ followed; where they are not, threats that they mitigate become residual.
 | **API keys** (`api_keys`) | Compromise → impersonate callers | Postgres (SHA-256 hashes only) |
 | **Prompt / completion content** | Sensitive user data; PII | **Transient by default** — not stored in `request_logs`; only in Langfuse/idempotency if content capture explicitly enabled |
 | **Provider API keys** | High-value; direct provider spend | LiteLLM env / secrets manager |
-| **Document-AI credentials** (`AZURE_DI_KEY`, `AWS_SECRET_ACCESS_KEY`) | Direct provider spend; **held by the gateway, not LiteLLM** — so compromising the API process reaches them | Gateway env / secrets manager |
+| **Document-AI credentials** (`AZURE_DI_ENDPOINT` + `AZURE_DI_KEY`; `AWS_ACCESS_KEY_ID` + `AWS_SECRET_ACCESS_KEY` + optional `AWS_SESSION_TOKEN`, with `AWS_REGION_NAME`) | Direct provider spend; **held by the gateway, not LiteLLM** — so compromising the API process reaches them | Gateway env / secrets manager |
 | **`LITELLM_MASTER_KEY`** | Auth between API and LiteLLM | Secrets manager |
 | **Operator credentials** (OIDC / keys:admin) | Control-plane takeover | IdP / secrets manager |
 

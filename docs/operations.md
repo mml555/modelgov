@@ -137,7 +137,7 @@ enforces what it advertises — run them after any deploy, against any environme
 
 | Script | Checks |
 | --- | --- |
-| `bash scripts/verify-live.sh` | Budgets, PII/injection safety, audit trail, idempotency, `/v1/explain` spends nothing. Safe against production |
+| `bash scripts/verify-live.sh` | Budgets, PII/injection safety, audit trail, idempotency, `/v1/explain` spends nothing. **Not read-only:** it issues real `/v1/chat` calls, so it spends budget, writes audit rows, and consumes one user's daily request cap. Non-destructive, but run it against production knowingly |
 | `node scripts/loadtest.mjs` | Admits exactly the cap under concurrency; then confirm `reserved_usd = 0` in `budget_counters` |
 | `bash scripts/security-probe.sh` | Cross-user idempotency leaks, injection via identity fields, oversized bodies, permission escalation, tenant-header forgery. **Sends hostile input — staging first** |
 

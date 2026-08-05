@@ -86,8 +86,9 @@ void main().catch((err: unknown) => {
   ) {
     console.error(`⛔ ${err.message}`);
     console.error(
-      "\n   The running gateway's policy doesn't define this feature. This example\n" +
-        "   ships its own policy — point the stack at it first (README step 1):\n\n" +
+      "\n   The running gateway's policy doesn't define this feature (or user\n" +
+        "   type). This example ships its own policy —\n" +
+        "   point the stack at it first (README step 1):\n\n" +
         "     export MODELGOV_CONFIG=examples/document_extraction/modelgov.yaml\n" +
         "     ./setup\n",
     );

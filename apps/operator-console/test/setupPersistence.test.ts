@@ -135,8 +135,14 @@ describe("loadWizardState / saveWizardState", () => {
 
   it("never writes a secret — only the declared selection fields", () => {
     const { session } = installMemoryStorage();
-    saveWizardState(WIZARD);
+    // Pass an object that DOES carry a credential: a serializer that writes all
+    // own properties would pass a test whose input has nothing to leak.
+    const withSecret = { ...WIZARD, apiKey: "sk-super-secret", secrets: { OPENAI_API_KEY: "sk-x" } };
+    saveWizardState(withSecret as unknown as PersistedWizard);
+
     const raw = session.getItem("modelgov-setup-wizard-state-v1") ?? "";
+    expect(raw).not.toContain("sk-super-secret");
+    expect(raw).not.toContain("OPENAI_API_KEY");
     expect(Object.keys(JSON.parse(raw) as object).sort()).toEqual(
       Object.keys(WIZARD).sort(),
     );

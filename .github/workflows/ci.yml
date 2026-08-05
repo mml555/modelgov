@@ -199,6 +199,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # This job only renders templates; it never pushes. Not persisting the
+          # token keeps it out of the workspace git config for later steps.
+          persist-credentials: false
       - uses: azure/setup-helm@v4
         with:
           version: v3.16.3

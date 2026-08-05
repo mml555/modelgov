@@ -20,6 +20,12 @@ helm install modelgov ./deploy/helm/modelgov \
   --set-string secret.providerKeys.OPENAI_API_KEY=sk-...
 ```
 
+> **Prefer a pre-created Secret over `--set` in real environments.** Values
+> passed on the command line land in shell history and are visible in the
+> process list while helm runs. Use `secret.existingSecret` pointing at a Secret
+> you created out of band (or `--set-file` / a values file with restricted
+> permissions). The `--set` form below is fine for a scratch cluster.
+
 > **All four secrets are required** by the production profiles, and the chart
 > refuses to render without them (fail-closed, by design — see
 > `templates/validate-images.yaml`). `litellmMasterKey` and `metricsAuthToken`
