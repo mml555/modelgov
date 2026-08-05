@@ -47,6 +47,11 @@ guarantees in `docs/versioning.md` apply.
   rate, under-reporting Azure spend ~9% (budgets permitted more real cost than
   configured); `mistral/mistral-small-latest` was 2× the current rate,
   over-reporting spend. Both corrected against LiteLLM's price database.
+- **Eight HIGH advisories in transitive dependencies** (`postcss`, `fast-uri`,
+  `find-my-way`, `next`, `sharp`) pinned to patched versions. The existing
+  `postcss` pin had itself become the vulnerable version — security pins go
+  stale and must be raised. A ninth (react-router RSC CSRF) is documented as
+  not applicable in SECURITY.md → Accepted advisories.
 - **`OutboxEntry.id` was typed `number`** but `webhook_outbox.id` is a
   `bigserial`, which node-postgres returns as a string — no runtime failure
   today, but arithmetic or strict comparison on it would misbehave.
