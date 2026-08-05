@@ -12,11 +12,22 @@ helm install modelgov ./deploy/helm/modelgov \
   -f deploy/helm/modelgov/values-selfhost.yaml \
   --namespace modelgov --create-namespace \
   --set image.repository=ghcr.io/your-org/modelgov-api \
-  --set image.tag=v1.3.0 \
+  --set image.tag=v1.7.1 \
   --set secret.aiGuardApiKey=$(openssl rand -hex 24) \
+  --set secret.litellmMasterKey=$(openssl rand -hex 24) \
+  --set secret.metricsAuthToken=$(openssl rand -hex 24) \
   --set secret.databaseUrl='postgres://user:pass@your-db:5432/modelgov' \
   --set-string secret.providerKeys.OPENAI_API_KEY=sk-...
 ```
+
+> **All four secrets are required** by the production profiles, and the chart
+> refuses to render without them (fail-closed, by design — see
+> `templates/validate-images.yaml`). `litellmMasterKey` and `metricsAuthToken`
+> have no defaults: every profile here sets `production=true` and
+> `api.metricsEnabled=true`, so an unauthenticated `/metrics` is rejected at
+> render time rather than shipped. Use `secret.existingSecret` to supply them
+> from a pre-created Secret (or `api.metricsAllowPublic=true` only for a private
+> scrape network).
 
 **Azure OpenAI** (use `values-azure.yaml` for policy + LiteLLM wiring):
 
@@ -45,8 +56,9 @@ Generic install (no profile overlay):
 helm install modelgov ./deploy/helm/modelgov \
   --namespace modelgov --create-namespace \
   --set image.repository=ghcr.io/your-org/modelgov-api \
-  --set image.tag=v1.3.0 \
+  --set image.tag=v1.7.1 \
   --set secret.aiGuardApiKey=$(openssl rand -hex 24) \
+  --set secret.litellmMasterKey=$(openssl rand -hex 24) \
   --set secret.databaseUrl='postgres://user:pass@your-db:5432/modelgov' \
   --set-string secret.providerKeys.OPENAI_API_KEY=sk-...
 ```

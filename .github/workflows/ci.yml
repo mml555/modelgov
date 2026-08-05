@@ -190,6 +190,21 @@ jobs:
           terraform init -backend=false
           terraform validate
 
+  helm:
+    # The chart is the recommended production path, so a broken profile is a
+    # shipped outage. `helm lint` is not enough — it renders with defaults, where
+    # the production guards are inert. This templates EVERY profile with realistic
+    # secrets, which is what catches a profile whose fail-closed validation the
+    # documented install command cannot satisfy.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.16.3
+      - name: Render every Helm values profile
+        run: bash scripts/helm-render-check.sh
+
   python-sdk:
     runs-on: ubuntu-latest
     steps:
