@@ -77,4 +77,60 @@ describe("tryWithAdvisoryLock", () => {
     ).rejects.toThrow("sweep failed");
     expect(client.query).toHaveBeenCalledWith("SELECT pg_advisory_unlock($1)", [1]);
   });
+
+  it("treats a non-true lock result as not acquired", async () => {
+    // Defensive: only boolean true means "we won the election".
+    const client = { query: vi.fn(async () => ({ rows: [{}] })), release: vi.fn() };
+    const pool = mockPool(client as unknown as ReturnType<typeof mockClient>);
+    const fn = vi.fn(async () => {});
+    expect(await tryWithAdvisoryLock(pool as never, 5, fn)).toBe(false);
+    expect(fn).not.toHaveBeenCalled();
+  });
+});
+
+// A session-level advisory lock dies with its connection, so a FAILED unlock is
+// not an error worth surfacing — but it must not mask the work's own outcome, and
+// the client must still return to the pool (else a flapping Postgres leaks one
+// connection per maintenance tick). Both helpers `.catch(() => {})` the unlock for
+// exactly that reason; these cases pin it.
+describe("advisory lock release failures", () => {
+  function unlockFailsClient(lockHeld = true) {
+    return {
+      query: vi.fn(async (sql: string) => {
+        if (sql.includes("pg_advisory_unlock")) {
+          throw new Error("connection terminated unexpectedly");
+        }
+        if (sql.includes("pg_try_advisory_lock")) return { rows: [{ ok: lockHeld }] };
+        return { rows: [] };
+      }),
+      release: vi.fn(),
+    };
+  }
+
+  it("withAdvisoryLock still returns the work's value when unlock fails", async () => {
+    const client = unlockFailsClient();
+    const pool = mockPool(client as unknown as ReturnType<typeof mockClient>);
+    await expect(withAdvisoryLock(pool as never, 42, async () => "migrated")).resolves.toBe(
+      "migrated",
+    );
+    expect(client.release).toHaveBeenCalled();
+  });
+
+  it("withAdvisoryLock reports the WORK error, not the unlock error", async () => {
+    const client = unlockFailsClient();
+    const pool = mockPool(client as unknown as ReturnType<typeof mockClient>);
+    await expect(
+      withAdvisoryLock(pool as never, 42, async () => {
+        throw new Error("real cause");
+      }),
+    ).rejects.toThrow("real cause");
+    expect(client.release).toHaveBeenCalled();
+  });
+
+  it("tryWithAdvisoryLock still reports success when unlock fails", async () => {
+    const client = unlockFailsClient(true);
+    const pool = mockPool(client as unknown as ReturnType<typeof mockClient>);
+    await expect(tryWithAdvisoryLock(pool as never, 7, async () => {})).resolves.toBe(true);
+    expect(client.release).toHaveBeenCalled();
+  });
 });
