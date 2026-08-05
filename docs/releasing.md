@@ -98,6 +98,15 @@ Investigate every DRIFTED row before shipping. A name collision (a Modelgov tier
 alias that happens to match a different upstream model) belongs in the script's
 `ALIAS_COLLISIONS` map with a reason, not in a silent tolerance bump.
 
+**UNVERIFIED rows need attention too.** The script exits 0 for them, because a
+missing upstream row is not evidence of drift — but it is not evidence of
+correctness either. Those are Modelgov tier aliases (`anthropic/claude-haiku`)
+and providers absent from the upstream table (`azure_ai/*`), and nothing checks
+them automatically. Confirm each against the vendor's published rate at release
+time; a wrong price there fails no test and silently mis-bills. `azure_ai/*` in
+particular must stay in step with the matching `azure/*` row — both are Azure
+billing, and copying OpenAI-direct rates into them has been a recurring bug.
+
 ## 5. PR and merge
 
 `main` is protected — open a PR, get CI green, and resolve every review thread

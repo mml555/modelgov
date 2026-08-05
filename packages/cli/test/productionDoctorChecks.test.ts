@@ -130,11 +130,15 @@ describe("productionDoctorChecksFromEnv — shape", () => {
 
   it("is a pure function of its env argument (no process.env leakage)", () => {
     const before = productionDoctorChecksFromEnv({});
+    // Save and RESTORE: unconditionally deleting would strip a value the test
+    // worker already had and change behaviour for later tests in the file.
+    const prior = process.env.MODELGOV_PRODUCTION;
     process.env.MODELGOV_PRODUCTION = "true";
     try {
       expect(productionDoctorChecksFromEnv({})).toEqual(before);
     } finally {
-      delete process.env.MODELGOV_PRODUCTION;
+      if (prior === undefined) delete process.env.MODELGOV_PRODUCTION;
+      else process.env.MODELGOV_PRODUCTION = prior;
     }
   });
 });

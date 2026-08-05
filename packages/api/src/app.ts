@@ -426,11 +426,23 @@ export function buildServer(opts: BuildServerOptions): FastifyInstance {
     // design: only connection-level failures, never a bad query (see util).
     if (isDatabaseUnavailableError(err)) {
       req.log.error({ err }, "database unavailable");
+      // `retryable` is only safe to advertise when a retry cannot double-charge.
+      // A connection can drop AFTER the provider call was made or the spend was
+      // committed, and this handler cannot tell which side of that line it is
+      // on. With an Idempotency-Key the replay is deduplicated, so a retry is
+      // genuinely safe; without one, a blind retry on /v1/chat could bill the
+      // caller twice. Report the outage either way — but only PROMISE
+      // retry-safety when the caller gave us the means to make it true.
+      const idempotent =
+        typeof req.headers["idempotency-key"] === "string" &&
+        req.headers["idempotency-key"].trim() !== "";
+      const method = req.method.toUpperCase();
+      const mutating = method !== "GET" && method !== "HEAD";
       return sendError(
         reply,
         503,
         "database_unavailable",
-        { retryable: true },
+        { retryable: idempotent || !mutating },
         "Database temporarily unavailable",
       );
     }

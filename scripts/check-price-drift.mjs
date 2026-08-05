@@ -19,7 +19,10 @@
 // Run it per release, or on a cron that opens an issue.
 
 import { readFileSync } from "node:fs";
-import { PROVIDER_REGISTRY } from "../packages/policy-engine/src/index.ts";
+// Import the BUILT package, not src/*.ts: the documented command is plain
+// `node scripts/check-price-drift.mjs`, and node cannot load TypeScript. The
+// `prepare` hook on policy-engine means dist/ exists after any `pnpm install`.
+import { PROVIDER_REGISTRY } from "../packages/policy-engine/dist/index.js";
 
 const PRICE_URL =
   "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json";
@@ -60,9 +63,19 @@ async function loadTable() {
  * "cannot verify", never "wrong".
  */
 function lookup(table, key) {
+  const provider = key.slice(0, key.indexOf("/"));
   const bare = key.slice(key.indexOf("/") + 1);
-  for (const candidate of [key, bare, `openai/${bare}`]) {
-    if (table[candidate]) return { entry: table[candidate], matchedAs: candidate };
+
+  // Exact key first. The bare name is only acceptable for providers whose
+  // upstream rows are unprefixed (OpenAI). Falling back to a bare or
+  // `openai/*` row for, say, `azure/gpt-4o-mini` would "verify" an Azure price
+  // against OpenAI's — which is exactly the bug this tool just caught in the
+  // registry, so the tool must not reproduce it.
+  if (table[key]) return { entry: table[key], matchedAs: key };
+  if (provider === "openai") {
+    for (const candidate of [bare, `openai/${bare}`]) {
+      if (table[candidate]) return { entry: table[candidate], matchedAs: candidate };
+    }
   }
   return null;
 }

@@ -69,10 +69,30 @@ for ep in "/v1/admin/keys" "/v1/admin/audit" "/v1/admin/policy/versions"; do
     *) bad "$ep unexpected" "got $code" ;;
   esac
 done
-code=$(curl -s -o /dev/null -w '%{http_code}' -m 15 -X POST "$URL/v1/admin/emergency/pause" -H "authorization: Bearer $KEY" -H 'content-type: application/json' -d '{}')
-case "$code" in 200|403) ok "emergency pause gated (HTTP $code)";; *) bad "emergency pause" "got $code";; esac
-# Undo if we actually paused it.
-[ "$code" = "200" ] && curl -s -o /dev/null -X POST "$URL/v1/admin/emergency/resume" -H "authorization: Bearer $KEY" -H 'content-type: application/json' -d '{}' && echo "     (resumed)"
+# State-changing by nature: pausing a gateway stops ALL traffic, and a failed
+# resume would leave it that way. Opt-in only, and the resume is retried and
+# verified rather than fired once and hoped for.
+if [ "${PROBE_EMERGENCY_PAUSE:-false}" = "true" ]; then
+  code=$(curl -s -o /dev/null -w '%{http_code}' -m 15 -X POST "$URL/v1/admin/emergency/pause" -H "authorization: Bearer $KEY" -H 'content-type: application/json' -d '{}')
+  case "$code" in 200|403) ok "emergency pause gated (HTTP $code)";; *) bad "emergency pause" "got $code";; esac
+  if [ "$code" = "200" ]; then
+    resumed=""
+    for _ in 1 2 3; do
+      rc=$(curl -s -o /dev/null -w '%{http_code}' -m 15 -X POST "$URL/v1/admin/emergency/resume" -H "authorization: Bearer $KEY" -H 'content-type: application/json' -d '{}')
+      [ "$rc" = "200" ] && { resumed=1; break; }
+      sleep 2
+    done
+    # Confirm from the gateway, not from our own request's status code.
+    state=$(curl -s -m 15 -H "authorization: Bearer $KEY" "$URL/v1/admin/emergency/status")
+    if [ -n "$resumed" ] && ! grep -qi '"paused":[[:space:]]*true' <<<"$state"; then
+      ok "emergency pause resumed and verified"
+    else
+      bad "GATEWAY MAY STILL BE PAUSED — resume it manually" "status: ${state:0:120}"
+    fi
+  fi
+else
+  printf '  \033[33mSKIP\033[0m emergency pause/resume (set PROBE_EMERGENCY_PAUSE=true to include)\n'
+fi
 
 hdr "E. Tenant header cannot be forged without permission"
 code=$(curl -s -o /dev/null -w '%{http_code}' -m 20 -X POST "$URL/v1/chat" -H "authorization: Bearer $KEY" -H 'x-modelgov-tenant: other-tenant' -H 'content-type: application/json' \

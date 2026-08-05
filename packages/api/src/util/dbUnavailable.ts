@@ -50,18 +50,32 @@ const CONNECTION_MESSAGES = [
   "terminating connection due to administrator command",
 ];
 
+/** Depth bound on the `cause` walk. Real driver chains are 2-3 deep. */
+const MAX_CAUSE_DEPTH = 8;
+
 export function isDatabaseUnavailableError(err: unknown): boolean {
-  if (err == null || typeof err !== "object") return false;
-  const e = err as { code?: unknown; errno?: unknown; message?: unknown; cause?: unknown };
+  // Iterative with a seen-set, NOT recursion: this runs inside the Fastify
+  // error handler, and a cause CYCLE (a.cause = b; b.cause = a) would overflow
+  // the stack while handling an error — turning a bad error chain into a
+  // crashed request. Comparing only against the immediate parent is not enough
+  // to catch a two-object cycle.
+  const seen = new Set<unknown>();
+  let current: unknown = err;
 
-  const code = typeof e.code === "string" ? e.code : undefined;
-  if (code && (CONNECTION_SQLSTATES.has(code) || CONNECTION_ERRNOS.has(code))) return true;
+  for (let depth = 0; depth < MAX_CAUSE_DEPTH; depth++) {
+    if (current == null || typeof current !== "object") return false;
+    if (seen.has(current)) return false;
+    seen.add(current);
 
-  const message = typeof e.message === "string" ? e.message.toLowerCase() : "";
-  if (message && CONNECTION_MESSAGES.some((m) => message.includes(m))) return true;
+    const e = current as { code?: unknown; message?: unknown; cause?: unknown };
 
-  // Pool/driver errors often wrap the socket error; check one level down.
-  if (e.cause != null && e.cause !== err) return isDatabaseUnavailableError(e.cause);
+    const code = typeof e.code === "string" ? e.code : undefined;
+    if (code && (CONNECTION_SQLSTATES.has(code) || CONNECTION_ERRNOS.has(code))) return true;
 
+    const message = typeof e.message === "string" ? e.message.toLowerCase() : "";
+    if (message && CONNECTION_MESSAGES.some((m) => message.includes(m))) return true;
+
+    current = e.cause;
+  }
   return false;
 }

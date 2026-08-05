@@ -58,10 +58,12 @@ guarantees in `docs/versioning.md` apply.
 
 ### Added
 
-- **`503 database_unavailable`** for connection-level Postgres failures, with
-  `details.retryable: true`, instead of a generic `500 internal_error`. A
-  restart or failover is transient and safe to retry; a 500 tells clients not to
-  retry and points on-call at a code defect. Query errors still return 500.
+- **`503 database_unavailable`** for connection-level Postgres failures instead
+  of a generic `500 internal_error`. A restart or failover is transient; a 500
+  tells clients not to retry and points on-call at a code defect. Query errors
+  still return 500. `details.retryable` is conditional — `true` only for
+  GET/HEAD or requests carrying an `Idempotency-Key`, because a connection can
+  drop after the provider call and a blind retry would bill twice.
 - **Deployment verification scripts** — `scripts/verify-live.sh` (budgets,
   safety, audit, idempotency), `scripts/loadtest.mjs` (exact cap enforcement
   under concurrency) and `scripts/security-probe.sh` (cross-user idempotency

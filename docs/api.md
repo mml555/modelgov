@@ -221,7 +221,7 @@ is stable inside `error.details`:
 | 422 | `idempotency_key_reuse` | Same key, different body |
 | 502 | `provider_unavailable` | LiteLLM / provider down |
 | 503 | `safety_unavailable` | Presidio / safety backend down |
-| 503 | `database_unavailable` | Postgres unreachable (restart / failover). `details.retryable: true` — safe to retry with backoff. Only connection-level failures map here; a query error stays `500 internal_error` |
+| 503 | `database_unavailable` | Postgres unreachable (restart / failover). Only connection-level failures map here; a query error stays `500 internal_error`. **`details.retryable` is conditional:** `true` for safe-to-replay requests (GET/HEAD, or any request carrying an `Idempotency-Key`), `false` for a mutating request without one — the connection can drop *after* the provider call, so a blind retry could bill twice. Send an `Idempotency-Key` on `/v1/chat` to make retries safe |
 
 ---
 

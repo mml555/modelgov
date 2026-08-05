@@ -24,9 +24,30 @@ export function isRealSecret(value: string | undefined): boolean {
   return true;
 }
 
+/**
+ * Provider env vars that are CONFIGURATION, not secrets — endpoints, regions,
+ * project ids, API versions. They live in `credentialEnvVars` because the wizard
+ * must prompt for them, but presence of one proves nothing about whether the
+ * operator actually supplied a key: setting only AZURE_API_BASE would otherwise
+ * satisfy the gate and let `make start-cloud` boot with no credential at all,
+ * failing later as a provider 401.
+ */
+const NON_SECRET_CONFIG_VARS = new Set([
+  "AZURE_API_BASE",
+  "AZURE_API_VERSION",
+  "AZURE_AI_API_BASE",
+  "AWS_REGION_NAME",
+  "VERTEX_PROJECT",
+  "VERTEX_LOCATION",
+]);
+
 /** True when .env contains at least one non-placeholder provider credential. */
 export function hasAnyProviderCredentials(env: Record<string, string>): boolean {
-  const optionalOnly = new Set(["AWS_SESSION_TOKEN", "GITHUB_COPILOT_TOKEN"]);
+  const optionalOnly = new Set([
+    "AWS_SESSION_TOKEN",
+    "GITHUB_COPILOT_TOKEN",
+    ...NON_SECRET_CONFIG_VARS,
+  ]);
   for (const spec of Object.values(PROVIDER_REGISTRY)) {
     for (const key of spec.credentialEnvVars ?? []) {
       if (optionalOnly.has(key)) continue;

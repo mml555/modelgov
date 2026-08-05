@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isMode, isRealSecret, parseJson, rerunCommand } from "../src/ops.js";
+import { hasAnyProviderCredentials, isMode, isRealSecret, parseJson, rerunCommand } from "../src/ops.js";
 
 describe("isMode", () => {
   it("accepts every shipped deploy mode", () => {
@@ -112,5 +112,32 @@ describe("parseJson", () => {
 
   it("passes arrays through (typeof 'object')", () => {
     expect(parseJson("[1,2]")).toEqual([1, 2]);
+  });
+});
+
+describe("hasAnyProviderCredentials", () => {
+  it("does not accept provider CONFIGURATION as a credential", () => {
+    // These live in credentialEnvVars because the wizard prompts for them, but
+    // none is a secret. Accepting one let `make start-cloud` boot with no key
+    // and fail later as a provider 401.
+    for (const k of [
+      "AZURE_API_BASE",
+      "AZURE_API_VERSION",
+      "AZURE_AI_API_BASE",
+      "AWS_REGION_NAME",
+      "VERTEX_PROJECT",
+      "VERTEX_LOCATION",
+    ]) {
+      expect(hasAnyProviderCredentials({ [k]: "https://my-resource.example.com" }), k).toBe(false);
+    }
+  });
+
+  it("still accepts a real key alongside that configuration", () => {
+    expect(
+      hasAnyProviderCredentials({
+        AZURE_API_BASE: "https://my-resource.openai.azure.com",
+        AZURE_API_KEY: "a-real-looking-azure-key-value",
+      }),
+    ).toBe(true);
   });
 });

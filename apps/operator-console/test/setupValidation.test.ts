@@ -54,8 +54,15 @@ describe("parseSetupError", () => {
     expect(parseSetupError(new Error(JSON.stringify({ ok: true })))).toBe('{"ok":true}');
   });
 
-  it("stringifies a non-Error rejection (never renders '[object Object]' blindly)", () => {
+  it("stringifies a non-Error rejection", () => {
     expect(parseSetupError("plain string")).toBe("plain string");
     expect(parseSetupError(undefined)).toBe("undefined");
+  });
+
+  it("renders a plain object as [object Object] — a known rough edge", () => {
+    // Documented rather than asserted-away: the SDK rejects with Error
+    // subclasses, so this path needs a non-Error throw to reach. If that ever
+    // becomes reachable, format the object instead of relaxing this test.
+    expect(parseSetupError({})).toBe("[object Object]");
   });
 });

@@ -169,7 +169,15 @@ services:
       # "litellm: ok", but every chat fails 503 (the injection classifier's model
       # call 500s). Point this at YOUR provider config:
       #   LITELLM_CONFIG_PATH=./litellm_config.cloud.yaml
-      - ${LITELLM_CONFIG_PATH:-./litellm_config.yaml}:/app/config.yaml:ro
+      - type: bind
+        source: ${LITELLM_CONFIG_PATH:-./litellm_config.yaml}
+        target: /app/config.yaml
+        read_only: true
+        bind:
+          # A missing or misspelled path must FAIL, not be silently created as a
+          # directory and mounted — LiteLLM then dies with IsADirectoryError and
+          # the stack reports only "not ready".
+          create_host_path: false
     healthcheck:
       # MUST be /health/liveliness, not /health. Production always sets
       # LITELLM_MASTER_KEY (required above), which makes LiteLLM authenticate

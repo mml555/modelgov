@@ -139,7 +139,11 @@ export const PROVIDER_REGISTRY: Record<string, ProviderSpec> = {
     credentialEnvVars: ["AZURE_AI_API_KEY", "AZURE_AI_API_BASE"],
     defaultModels: { cheap: "azure_ai/gpt-4o-mini", standard: "azure_ai/gpt-4o", premium: "azure_ai/claude-opus-4-1" },
     prices: {
-      "azure_ai/gpt-4o-mini": { inputPer1k: 0.00015, outputPer1k: 0.0006 },
+      // Same Azure billing as azure/gpt-4o-mini (the sibling azure_ai rows
+      // already mirror the azure/* rates exactly); this one still carried
+      // OpenAI-direct pricing. Not in the upstream table, so the drift check
+      // reports it UNVERIFIED — kept in step with its sibling by hand.
+      "azure_ai/gpt-4o-mini": { inputPer1k: 0.000165, outputPer1k: 0.00066 },
       "azure_ai/gpt-4o": { inputPer1k: 0.0025, outputPer1k: 0.01 },
       "azure_ai/gpt-5": { inputPer1k: 0.00125, outputPer1k: 0.01 },
       "azure_ai/claude-opus-4-1": { inputPer1k: 0.015, outputPer1k: 0.075 },

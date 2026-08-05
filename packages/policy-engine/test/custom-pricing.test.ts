@@ -77,9 +77,11 @@ describe("custom pricing", () => {
     // Azure lists gpt-4o-mini ABOVE OpenAI direct; a value equal to OpenAI's
     // means someone copy-pasted the wrong row again and Azure spend will
     // under-report.
-    expect(price.inputPer1k).toBeGreaterThan(
-      getModelPrice("openai/gpt-4o-mini").inputPer1k,
-    );
+    const openai = getModelPrice("openai/gpt-4o-mini");
+    expect(price.inputPer1k).toBeGreaterThan(openai.inputPer1k);
+    // Output too: checking only the input rate lets outputPer1k silently
+    // regress to OpenAI's and under-report output cost.
+    expect(price.outputPer1k).toBeGreaterThan(openai.outputPer1k);
   });
 
   it("built-in Azure AI Foundry model names are not reported as unpriced", () => {
