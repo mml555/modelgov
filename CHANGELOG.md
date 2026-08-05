@@ -15,6 +15,8 @@ guarantees in `docs/versioning.md` apply.
 
 ## [Unreleased]
 
+## [1.7.2] - 2026-08-05
+
 ### Fixed
 
 - **`./setup` failed on a fresh clone.** `@modelgov/policy-engine` exports only
