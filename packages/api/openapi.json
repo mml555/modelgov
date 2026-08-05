@@ -6121,10 +6121,14 @@
                     "safety": {
                       "type": "object",
                       "required": [
-                        "piiMasked"
+                        "piiMasked",
+                        "structuredWithheld"
                       ],
                       "properties": {
                         "piiMasked": {
+                          "type": "boolean"
+                        },
+                        "structuredWithheld": {
                           "type": "boolean"
                         }
                       }

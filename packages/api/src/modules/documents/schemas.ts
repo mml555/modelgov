@@ -94,8 +94,14 @@ export const documentSuccessJsonSchema = {
     budgetRemaining: budgetRemainingJsonSchema,
     safety: {
       type: "object",
-      required: ["piiMasked"],
-      properties: { piiMasked: { type: "boolean" } },
+      required: ["piiMasked", "structuredWithheld"],
+      properties: {
+        piiMasked: { type: "boolean" },
+        // True when output PII masking dropped tables/fields/documents. Without
+        // this the caller cannot distinguish a withheld payload from a document
+        // that genuinely had no structured content.
+        structuredWithheld: { type: "boolean" },
+      },
     },
     requestId: { type: "string" },
   },

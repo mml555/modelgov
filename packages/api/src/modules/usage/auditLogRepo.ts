@@ -13,7 +13,10 @@ export type RequestReasonCode =
   | PolicyReasonCode
   | "billing_hierarchical_unsupported"
   | "grounded"
-  | "grounding_refused";
+  | "grounding_refused"
+  // Document extraction returned OK but its structured payload was dropped
+  // because output PII masking was on (see modules/documents/service.ts).
+  | "structured_withheld";
 
 export interface RequestLogRow {
   tenantId?: string;

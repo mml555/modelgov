@@ -15,6 +15,17 @@ guarantees in `docs/versioning.md` apply.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Document extraction now reports when structured output was withheld.** With
+  output PII masking on, `tables`/`fields`/`documents` are dropped (they carry
+  the same content that was redacted from `text`) — but the response gave no
+  sign, so an empty payload was indistinguishable from a document that genuinely
+  had no tables, and a config mistake read as a model-quality problem. The
+  response now carries `safety.structuredWithheld` and the audit row records
+  `reasonCode = structured_withheld`.
+  ([#37](https://github.com/mml555/modelgov/issues/37))
+
 ## [1.7.2] - 2026-08-05
 
 ### Fixed

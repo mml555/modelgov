@@ -63,7 +63,11 @@ export interface DocumentSuccessBody {
   reason?: string;
   cost: { estimatedUsd: number; actualUsd: number };
   budgetRemaining: BudgetRemaining | null;
-  safety: { piiMasked: boolean };
+  safety: {
+    piiMasked: boolean;
+    /** True when output PII masking dropped the structured payload (#37). */
+    structuredWithheld: boolean;
+  };
   requestId: string;
 }
 
@@ -395,6 +399,10 @@ export async function handleDocumentExtract(
   // masking `text` alone would leak PII through the structured fields.
   let text = extracted.text;
   let piiMasked = false;
+  // Set when output PII masking forced us to drop the structured payload. The
+  // caller MUST be able to tell that apart from a document that genuinely had
+  // no tables — otherwise a config mistake reads as a model-quality problem.
+  let structuredWithheld = false;
   let structured: StructuredOutput = {
     ...(extracted.tables ? { tables: extracted.tables } : {}),
     ...(extracted.fields ? { fields: extracted.fields } : {}),
@@ -429,8 +437,9 @@ export async function handleDocumentExtract(
     // document that reaches here is clean and its structured output is safe; in
     // `off` mode there is nothing to mask.) Callers needing structured extraction
     // use pii:off (they own PII handling) or pii:block.
-    if (decision.safetyPlan.pii === "mask") {
+    if (decision.safetyPlan.pii === "mask" && Object.keys(structured).length > 0) {
       structured = {};
+      structuredWithheld = true;
     }
   } catch (err) {
     if (err instanceof SafetyServiceError) {
@@ -464,6 +473,7 @@ export async function handleDocumentExtract(
       status: "ok",
       actualCostUsd,
       piiMasked,
+      ...(structuredWithheld ? { reasonCode: "structured_withheld" as const } : {}),
     });
   } catch {
     // The provider ran and cost is settled below; the audit write failed. Mark
@@ -496,7 +506,7 @@ export async function handleDocumentExtract(
       reason: decision.reason,
       cost: { estimatedUsd: reservedUsd, actualUsd: actualCostUsd },
       budgetRemaining: remainingAfter(decision.budgetRemaining, actualCostUsd),
-      safety: { piiMasked },
+      safety: { piiMasked, structuredWithheld },
       requestId: auditRequestId,
     },
   };

@@ -103,6 +103,14 @@ rejects a PII document, so a document that returns has clean structured output;
 since redacting it field-by-field is error-prone. A feature that needs structured
 extraction should use `pii: off` (the caller owns PII) or `pii: block`.
 
+When that happens the response says so: **`safety.structuredWithheld: true`**,
+and the audit row carries `reasonCode = structured_withheld`. Without it an empty
+`tables` is indistinguishable from a document that genuinely had none, so a
+config mistake looks like a model-quality problem. Check the flag before
+concluding a provider returned nothing. Per-entity masking
+([#41](https://github.com/mml555/modelgov/issues/41)) is what would eventually
+allow masking the structured values in place instead of dropping them.
+
 ## Config / env
 
 | Env | Meaning |
