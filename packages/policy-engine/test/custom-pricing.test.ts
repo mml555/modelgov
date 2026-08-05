@@ -66,7 +66,20 @@ describe("custom pricing", () => {
       safety: { preset: "dev" },
     });
     expect(findUnpricedModels(config)).not.toContain("azure/gpt-4o-mini");
-    expect(getModelPrice("azure/gpt-4o-mini").inputPer1k).toBe(0.00015);
+
+    const price = getModelPrice("azure/gpt-4o-mini");
+    // The point of this test is "Azure deployment names resolve to a real
+    // price", so assert that rather than re-pinning a vendor rate that changes
+    // on Azure's schedule (scripts/check-price-drift.mjs is what keeps the
+    // number honest against upstream).
+    expect(price.inputPer1k).toBeGreaterThan(0);
+    expect(price.outputPer1k).toBeGreaterThan(0);
+    // Azure lists gpt-4o-mini ABOVE OpenAI direct; a value equal to OpenAI's
+    // means someone copy-pasted the wrong row again and Azure spend will
+    // under-report.
+    expect(price.inputPer1k).toBeGreaterThan(
+      getModelPrice("openai/gpt-4o-mini").inputPer1k,
+    );
   });
 
   it("built-in Azure AI Foundry model names are not reported as unpriced", () => {
