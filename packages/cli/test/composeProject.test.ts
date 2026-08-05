@@ -148,14 +148,24 @@ describe("assertProjectOwnedByThisCheckout", () => {
     ).rejects.toThrow(/could not determine which checkout owns/);
   });
 
-  it("fails open on a query error for a plain down (containers are recreatable)", async () => {
+  it("also fails closed for a plain down (an unasked-for outage is still an outage)", async () => {
+    // Containers are recreatable, but tearing down someone else's running stack
+    // without being able to prove it is ours is not a call to make optimistically.
     await expect(
       assertProjectOwnedByThisCheckout({
         command: ["down"],
         root: OTHER,
         capture: failing(),
       }),
-    ).resolves.toBeUndefined();
+    ).rejects.toThrow(/could not determine which checkout owns/);
+  });
+
+  it("names the lower stakes for a non-volume down", async () => {
+    const err = await assertProjectOwnedByThisCheckout({
+      command: ["down"], root: OTHER, capture: failing(),
+    }).catch((e: unknown) => e as Error);
+    expect(err.message).toMatch(/tear down another checkout's running stack/);
+    expect(err.message).not.toMatch(/volumes/);
   });
 
   it("uses the docker-ps label ACCESSOR, not map indexing", () => {

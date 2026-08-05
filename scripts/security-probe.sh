@@ -82,14 +82,25 @@ code=$(curl -s -o /dev/null -w '%{http_code}' -m 20 -X POST "$URL/v1/chat" -H "a
 [ "$code" = "400" ] || [ "$code" = "200" ] && ok "negative maxTokens handled (HTTP $code)" || bad "negative maxTokens" "got $code"
 
 hdr "D. Permission enforcement"
+# These probe AUTHORISATION, so their meaning depends on the key you hand them.
+# With a restricted service key every one returns 403 and the suite proves only
+# that the gate exists — not that an over-permissioned key would be caught. Run
+# with an admin key to exercise the reachable side.
+admin_seen=0
 for ep in "/v1/admin/keys" "/v1/admin/audit" "/v1/admin/policy/versions"; do
   code=$(curl -s -o /dev/null -w '%{http_code}' -m 15 -H "authorization: Bearer $KEY" "$URL$ep")
   case "$code" in
-    200) ok "$ep reachable for this key (has the permission)" ;;
+    200) ok "$ep reachable for this key (holds the permission)"; admin_seen=$((admin_seen+1)) ;;
     403) ok "$ep correctly 403 for a key without the permission" ;;
     *) bad "$ep unexpected" "got $code" ;;
   esac
 done
+if [ "$admin_seen" -eq 0 ]; then
+  printf '  \033[33mNOTE\033[0m this key holds no admin permission, so section D only proved the
+'
+  printf '       gate rejects it. Re-run with an admin key to test the granted side.
+'
+fi
 # State-changing by nature: pausing a gateway stops ALL traffic, and a failed
 # resume would leave it that way. Opt-in only, and the resume is retried and
 # verified rather than fired once and hoped for.

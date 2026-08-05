@@ -136,11 +136,17 @@ export async function assertProjectOwnedByThisCheckout(opts: {
       CONFIG_FILES_FORMAT,
     ]);
   } catch (err) {
-    if (!removesVolumes(command)) return;
+    // Fail CLOSED for every destructive command, not just volume removal. If
+    // the ownership query fails for a reason that does not equally stop
+    // `docker compose down`, proceeding would tear down another checkout's
+    // running stack — recoverable, but still an outage someone did not ask for.
+    const stakes = removesVolumes(command)
+      ? "delete another checkout's containers AND volumes"
+      : "tear down another checkout's running stack";
     throw new Error(
       `Refusing to run \`${rendered}\`: could not determine which checkout owns ` +
-        `compose project '${project}', so this might delete another checkout's ` +
-        `volumes.\n  ${String(err).split("\n")[0]}\n\n` +
+        `compose project '${project}', so this might ${stakes}.\n` +
+        `  ${String(err).split("\n")[0]}\n\n` +
         `Re-run once docker is reachable, or scope this checkout explicitly:\n` +
         `  COMPOSE_PROJECT_NAME=${project}-$(basename "$PWD") pnpm modelgov ...`,
     );

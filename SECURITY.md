@@ -66,10 +66,11 @@ version itself, so raise them rather than assuming a pin is still safe.
 
 ### Accepted advisories
 
-`package.json` → `pnpm.auditConfig.ignoreGhsas` suppresses specific advisories.
-JSON cannot hold comments, so every entry is justified here. An entry is only
-acceptable when the vulnerable code path is **provably unreachable** in this
-project — never merely inconvenient to fix.
+`pnpm-workspace.yaml` → `auditConfig.ignoreGhsas` suppresses specific
+advisories, each with its justification inline and tabulated here. An entry is
+only acceptable when the vulnerable code path is **provably unreachable** in
+this project — never merely inconvenient to fix. (The key is `ignoreGhsas`;
+`ignoreCves` takes CVE ids and silently does nothing for a GHSA id.)
 
 | Advisory | Package | Why it does not apply |
 | --- | --- | --- |

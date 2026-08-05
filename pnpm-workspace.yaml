@@ -33,6 +33,19 @@ overrides:
   # tsup pulled the vulnerable 0.27.7, tsx already uses 0.28.1 — dedupe onto it.
   "tsup>esbuild": "^0.28.1"
 
-# Advisories deliberately accepted (with justification) live in
-# package.json -> pnpm.auditConfig.ignoreGhsas, and are explained in
-# SECURITY.md -> Accepted advisories.
+
+# Advisories deliberately accepted. An entry is only acceptable when the
+# vulnerable code path is PROVABLY UNREACHABLE here — never merely inconvenient
+# to fix. Each one is also tabulated in SECURITY.md -> Accepted advisories.
+#
+# NB: the key is ignoreGhsas (ignoreCves takes CVE-* ids and silently does
+# nothing for a GHSA id).
+auditConfig:
+  ignoreGhsas:
+    # react-router RSC-mode CSRF, reached via react-router-dom in the operator
+    # console. The advisory states it "only affects your application if you are
+    # using the unstable RSC APIs"; the console is a static Vite SPA served by
+    # nginx whose only router import is react-router-dom — no RSC, no server
+    # runtime, no router actions. The fix is react-router 8.x, a major bump
+    # under our react-router-dom ^7. Revisit when the console upgrades.
+    - GHSA-qwww-vcr4-c8h2
