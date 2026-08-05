@@ -7,13 +7,28 @@
 //
 // Then confirm the ledger agrees:
 //   SELECT requests_used, used_usd, reserved_usd FROM budget_counters WHERE key='<userId>';
+// (the script prints the generated userId; it is not settable via the env)
 // reserved_usd must be 0 (no leaked holds) and requests_used must equal `admitted`.
 const URL = process.env.MODELGOV_URL ?? "http://localhost:3090";
 const KEY = process.env.MODELGOV_API_KEY ?? "sk-modelgov-api-local";
 const TOTAL = Number(process.env.TOTAL ?? 120);
 const CONCURRENCY = Number(process.env.CONCURRENCY ?? 40);
-const USER = process.env.USER_ID ?? `load-${Date.now()}`;
-const USER_TYPE = process.env.USER_TYPE ?? "logged_in"; // 50 requests/day, $0.25/day
+// Identity is generated here, never taken from the environment: the run id is
+// printed so you can query budget_counters with it afterwards, and echoing an
+// arbitrary env string to stdout is how a script leaks a secret someone parked
+// in the wrong variable.
+const USER = `load-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+
+// The tier is validated against the known set and the MATCHED CONSTANT is what
+// gets used and printed — an unrecognised value fails loudly instead of being
+// passed through to the gateway (and into the log).
+const USER_TYPES = ["anonymous", "logged_in", "admin"];
+const requestedType = process.env.USER_TYPE ?? "logged_in";
+const USER_TYPE = USER_TYPES.find((t) => t === requestedType);
+if (!USER_TYPE) {
+  console.error(`USER_TYPE must be one of: ${USER_TYPES.join(", ")}`);
+  process.exit(2);
+}
 
 async function one(i) {
   const t0 = performance.now();
@@ -65,11 +80,8 @@ const lat = results.map((r) => r.ms).sort((a, b) => a - b);
 const pct = (p) => lat[Math.min(lat.length - 1, Math.floor((p / 100) * lat.length))].toFixed(0);
 const charged = ok.reduce((s, r) => s + (r.cost ?? 0), 0);
 
-// The identity fields below are operator-supplied LABELS (a run id and a policy
-// tier), never credentials — MODELGOV_API_KEY is read but never printed, and
-// error text is reduced to a kind above. userId must be printed: it is the key
-// you query budget_counters with afterwards.
-// codeql[js/clear-text-logging]
+// Everything below is generated or validated in this file — no environment
+// string reaches stdout. MODELGOV_API_KEY is read but never printed.
 console.log(JSON.stringify({
   userId: USER,
   userType: USER_TYPE,
