@@ -33,7 +33,13 @@ async function one(i) {
     try { body = await res.json(); } catch { /* empty body */ }
     return { status: res.status, ms, cost: body?.cost?.actualUsd ?? null, code: body?.error?.code ?? null };
   } catch (err) {
-    return { status: 0, ms: performance.now() - t0, cost: null, code: String(err).slice(0, 60) };
+    // Report the error KIND only. A fetch failure's message can embed the target
+    // URL, and a URL can carry credentials (http://user:pass@host) — so the raw
+    // text never reaches stdout.
+    const kind = (err && typeof err === "object" && "cause" in err && err.cause?.code)
+      || (err && typeof err === "object" && "name" in err && err.name)
+      || "unknown";
+    return { status: 0, ms: performance.now() - t0, cost: null, code: String(kind).slice(0, 40) };
   }
 }
 
@@ -59,6 +65,11 @@ const lat = results.map((r) => r.ms).sort((a, b) => a - b);
 const pct = (p) => lat[Math.min(lat.length - 1, Math.floor((p / 100) * lat.length))].toFixed(0);
 const charged = ok.reduce((s, r) => s + (r.cost ?? 0), 0);
 
+// The identity fields below are operator-supplied LABELS (a run id and a policy
+// tier), never credentials — MODELGOV_API_KEY is read but never printed, and
+// error text is reduced to a kind above. userId must be printed: it is the key
+// you query budget_counters with afterwards.
+// codeql[js/clear-text-logging]
 console.log(JSON.stringify({
   userId: USER,
   userType: USER_TYPE,
