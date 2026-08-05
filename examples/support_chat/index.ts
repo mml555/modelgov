@@ -8,6 +8,15 @@ import {
 // Run the stack first: ./setup
 // Then:                 pnpm --filter support-chat-example start
 
+/**
+ * Format a USD amount for humans. Per-request AI costs are fractions of a cent,
+ * so 2 decimals would print "$0.00" and hide the spend entirely; 6 decimals with
+ * trailing zeros trimmed keeps small costs readable AND avoids leaking raw float
+ * noise like "$0.00016099999999999998" into the first thing a new user sees.
+ */
+const usd = (n: number): string =>
+  `$${n.toFixed(6).replace(/0+$/, "").replace(/\.$/, "")}`;
+
 const client = createModelgovClient({
   baseUrl: process.env.MODELGOV_URL ?? "http://localhost:3090",
   apiKey: process.env.MODELGOV_API_KEY,
@@ -40,10 +49,10 @@ async function main(): Promise<void> {
     console.log(`assistant: ${res.message.content}`);
     console.log(`\n  model:    ${res.model} (decision: ${res.decision})`);
     console.log(
-      `  cost:     est $${res.cost.estimatedUsd} / actual $${res.cost.actualUsd}`,
+      `  cost:     est ${usd(res.cost.estimatedUsd)} / actual ${usd(res.cost.actualUsd)}`,
     );
     console.log(
-      `  budget:   user-daily $${res.budgetRemaining.userDailyUsd} remaining`,
+      `  budget:   user-daily ${usd(res.budgetRemaining.userDailyUsd)} remaining`,
     );
     console.log(
       `  safety:   piiMasked=${res.safety.piiMasked} injectionBlocked=${res.safety.injectionBlocked}`,
