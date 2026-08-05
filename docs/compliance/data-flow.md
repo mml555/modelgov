@@ -130,12 +130,27 @@ Set `REQUEST_LOG_RETENTION_MS` to match your data-retention policy. Content stor
 
 Modelgov runs entirely on **your infrastructure** — Postgres, Redis, LiteLLM,
 Presidio, and the API are all self-hosted, so their data resides wherever you
-deploy them. The one boundary that leaves your environment is the **upstream model
-provider**: prompt (post-masking) and completion content transit LiteLLM to
-OpenAI/Anthropic/Gemini/Bedrock (or your chosen provider), whose processing region
-and retention are governed by *your* contract with *that* provider. To keep data
-in-region, choose a regional/self-hosted model (e.g. Bedrock in-region, Ollama via
-`./setup` for the built-in demo provider or `make start-local` for Ollama) so no content leaves your boundary.
+deploy them. **Two** boundaries can leave your environment, and both are the
+operator's choice:
+
+1. **The upstream model provider** (always, for `/v1/chat` and `/v1/embeddings`):
+   prompt (post-masking) and completion content transit LiteLLM to
+   OpenAI/Anthropic/Gemini/Bedrock (or your chosen provider), whose processing
+   region and retention are governed by *your* contract with *that* provider.
+2. **A hosted document-AI provider** (only if you configure one): `POST
+   /v1/documents/extract` sends the **document bytes** directly from the gateway
+   — not via LiteLLM — to **Azure Document Intelligence** (`AZURE_DI_ENDPOINT`)
+   or **Amazon Textract** (`AWS_ACCESS_KEY_ID`). This is a deliberate second
+   egress, contained to `modules/documents/` + `services/documents/`; see
+   [document-AI design](../design/document-ai.md#architectural-note-deliberate-second-egress).
+   Each provider is enabled **only** when its credentials are set, so a
+   deployment that never configures them has no such egress. The **Tesseract**
+   provider (`TESSERACT_URL`) is a self-hosted sidecar — it leaves no boundary.
+
+To keep data in-region, choose a regional/self-hosted model (e.g. Bedrock
+in-region, Ollama via `./setup` for the built-in demo provider or
+`make start-local` for Ollama), and for documents prefer the Tesseract sidecar or
+a regional Azure DI / Textract endpoint, so no content leaves your boundary.
 
 ---
 
@@ -144,6 +159,7 @@ in-region, choose a regional/self-hosted model (e.g. Bedrock in-region, Ollama v
 | Where data could leak | Control (shipped) | Residual / operator action |
 | --- | --- | --- |
 | Prompt content to the provider | Presidio mask/block **before** the model call; regional/self-hosted model option | Coverage = Presidio recognizers; `dev` preset disables it |
+| Document bytes to a hosted document-AI provider | Provider enabled **only** when its credentials are set; SSRF-pinned egress; PII masked on the **extracted text** | Uploaded bytes reach Azure DI / Textract **unmasked** (masking happens on the result) — use the Tesseract sidecar to keep documents in-boundary |
 | Content persisted in traces | `OBSERVABILITY_CAPTURE_CONTENT=false` by default | If enabled, secure + set retention on Langfuse |
 | Content persisted on replays | `IDEMPOTENCY_CAPTURE_CONTENT=false` by default | If enabled, `idempotency_keys` holds content until swept |
 | Sensitive data in `metadata` | Documented as metadata (not policy-affecting); ≤32 keys | **Do not** place PII/secrets in `metadata` — it is stored in `request_logs` |

@@ -28,7 +28,8 @@ followed; where they are not, threats that they mitigate become residual.
 │      ├── Presidio (PII / injection)                                  │
 │      ├── Postgres (budgets, audit, api_keys, idempotency)            │
 │      ├── Redis (rate-limit counters)                                 │
-│      └── LiteLLM ──TB4──► provider (OpenAI/Anthropic/…) over TB1     │
+│      ├── LiteLLM ──TB4──► provider (OpenAI/Anthropic/…) over TB1     │
+│      └── document-AI ──TB6──► Azure DI / Textract (if configured)    │
 │                                                                      │
 │  Operator / automation ──TB5──► control plane (/v1/admin/*, usage)   │
 │    via API key (keys:admin) OR OIDC JWT → operator role → perms      │
@@ -42,6 +43,7 @@ followed; where they are not, threats that they mitigate become residual.
 | **TB3** | Modelgov API ↔ its backends | Private network only; Postgres/Redis/Presidio not internet-exposed |
 | **TB4** | LiteLLM ↔ upstream provider | Provider API keys (held by LiteLLM), `LITELLM_MASTER_KEY` between API and LiteLLM |
 | **TB5** | Operator/automation ↔ control plane | `keys:admin` API key **or** OIDC JWT → operator RBAC role → permissions |
+| **TB6** | Modelgov API ↔ hosted document-AI provider | **Second egress, not via LiteLLM** — `/v1/documents/extract` sends document bytes straight to Azure DI / Textract, so the API zone needs its own outbound rule + provider credentials (`AZURE_DI_KEY` / `AWS_SECRET_ACCESS_KEY`) in the gateway env. Egress is SSRF-pinned at connect time; absent unless configured. Self-hosted **Tesseract** stays inside TB3. See [document-AI design](../design/document-ai.md#architectural-note-deliberate-second-egress) |
 
 ---
 
@@ -54,6 +56,7 @@ followed; where they are not, threats that they mitigate become residual.
 | **API keys** (`api_keys`) | Compromise → impersonate callers | Postgres (SHA-256 hashes only) |
 | **Prompt / completion content** | Sensitive user data; PII | **Transient by default** — not stored in `request_logs`; only in Langfuse/idempotency if content capture explicitly enabled |
 | **Provider API keys** | High-value; direct provider spend | LiteLLM env / secrets manager |
+| **Document-AI credentials** (`AZURE_DI_KEY`, `AWS_SECRET_ACCESS_KEY`) | Direct provider spend; **held by the gateway, not LiteLLM** — so compromising the API process reaches them | Gateway env / secrets manager |
 | **`LITELLM_MASTER_KEY`** | Auth between API and LiteLLM | Secrets manager |
 | **Operator credentials** (OIDC / keys:admin) | Control-plane takeover | IdP / secrets manager |
 

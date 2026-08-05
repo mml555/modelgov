@@ -66,7 +66,7 @@ customer-hosted (on your infrastructure/cloud)  ·  **License:** MIT
 | E2 | Is prompt/response content stored? | **No, by default.** `OBSERVABILITY_CAPTURE_CONTENT` and `IDEMPOTENCY_CAPTURE_CONTENT` both default **off**. If an operator enables capture, that store must be protected/retained accordingly. |
 | E3 | PII handling / DLP | **Presidio** PII mask/block and prompt-injection block per safety preset. **Fails closed** (`503`) when Presidio is unavailable — never sends unguarded. Coverage bounded by Presidio recognizers; `dev` preset disables enforcement. See [data-flow — PII](../compliance/data-flow.md#pii-handling-dlp-via-presidio). |
 | E4 | Data retention & disposal | `request_logs` retention sweep (default 30d); idempotency/reservation leases auto-swept (15m). Content stores (if enabled) governed separately. |
-| E5 | Data residency | Fully self-hosted — data resides where the operator deploys. The only external egress is to the chosen model provider; use a regional/self-hosted model (e.g. Bedrock in-region, Ollama) to keep content in-region. See [data-flow — residency](../compliance/data-flow.md#data-residency). `[OPERATOR states hosting region.]` |
+| E5 | Data residency | Fully self-hosted — data resides where the operator deploys. **Two** external egresses exist, both operator-chosen: (1) the chosen **model provider** via LiteLLM; (2) a hosted **document-AI provider** (Azure Document Intelligence or Amazon Textract) called directly by the gateway for `POST /v1/documents/extract` — enabled **only** when its credentials are configured. Use a regional/self-hosted model (e.g. Bedrock in-region, Ollama) and the self-hosted **Tesseract** sidecar for documents to keep content in-region. See [data-flow — residency](../compliance/data-flow.md#data-residency). `[OPERATOR states hosting region and which document-AI provider, if any, is enabled.]` |
 | E6 | Data deletion / DSAR | **Right-to-erasure endpoint** `POST /v1/admin/erasure` (`data:erase`) deletes a user's request-linked data (`request_logs`, `idempotency_keys`) and is audited; plus global + per-feature retention sweeps. Consent management / full DSAR orchestration remain operator/DPA responsibility. |
 
 ## F. Incident response & vulnerability management
@@ -128,9 +128,11 @@ For a Data Processing Agreement between `[OPERATOR]` and its customer:
 3. **Data categories** — request metadata (identity, feature, decision, cost);
    optionally prompt/response content **only if** the operator enables capture.
    Highlight that content is transient by default.
-4. **Sub-processor list & change notice** — enumerate the model provider(s) and
-   infra provider; commit to `[X]` days' notice before adding/replacing a
-   sub-processor.
+4. **Sub-processor list & change notice** — enumerate the model provider(s), the
+   infra provider, and — if `POST /v1/documents/extract` is enabled with a hosted
+   backend — the **document-AI provider** (Azure Document Intelligence or Amazon
+   Textract), which receives uploaded document bytes directly from the gateway.
+   Commit to `[X]` days' notice before adding/replacing a sub-processor.
 5. **Security measures** — reference this questionnaire, the [threat model](../compliance/threat-model.md),
    and [SOC 2 mapping](../compliance/soc2-controls.md): encryption in transit/at
    rest, RBAC, key rotation/revocation, DLP (Presidio), audit logging, fail-closed
