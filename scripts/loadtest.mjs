@@ -9,6 +9,8 @@
 //   SELECT requests_used, used_usd, reserved_usd FROM budget_counters WHERE key='<userId>';
 // (the script prints the generated userId; it is not settable via the env)
 // reserved_usd must be 0 (no leaked holds) and requests_used must equal `admitted`.
+import { randomUUID } from "node:crypto";
+
 const URL = process.env.MODELGOV_URL ?? "http://localhost:3090";
 const KEY = process.env.MODELGOV_API_KEY ?? "sk-modelgov-api-local";
 const TOTAL = Number(process.env.TOTAL ?? 120);
@@ -17,7 +19,7 @@ const CONCURRENCY = Number(process.env.CONCURRENCY ?? 40);
 // printed so you can query budget_counters with it afterwards, and echoing an
 // arbitrary env string to stdout is how a script leaks a secret someone parked
 // in the wrong variable.
-const USER = `load-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+const USER = `load-${Date.now()}-${randomUUID().slice(0, 8)}`;
 
 // The tier is validated against the known set and the MATCHED CONSTANT is what
 // gets used and printed — an unrecognised value fails loudly instead of being
