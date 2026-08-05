@@ -1,4 +1,3 @@
-import { PROVIDER_REGISTRY } from "@modelgov/policy-engine";
 import { copyFileSync, existsSync, readFileSync, unlinkSync } from "node:fs";
 import { basename, resolve } from "node:path";
 import { spawn } from "node:child_process";
@@ -18,10 +17,18 @@ import {
 } from "./setupConfig.js";
 
 import { securityConfigWarnings } from "./security.js";
+import {
+  ensureAzureKeys,
+  ensureProviderKeys,
+  hasAnyProviderCredentials,
+  isRealSecret,
+} from "./providerCredentials.js";
+import { assertProjectOwnedByThisCheckout } from "./composeProject.js";
 
 // Re-exported so existing importers (and tests) keep a stable entry point.
 export { assertLitellmConfigUsable, ensureGeneratedLitellmConfig } from "./setupConfig.js";
 export { assertProductionDeploy, securityConfigWarnings } from "./security.js";
+export { hasAnyProviderCredentials, isRealSecret } from "./providerCredentials.js";
 
 export interface SmokeChatPayload {
   feature: string;
@@ -125,7 +132,9 @@ export function parseOpsFlags(args: string[]): OpsFlags {
   return flags;
 }
 
-function isMode(value: string): value is Mode {
+// isMode/parseJson/rerunCommand are exported so these pure decision helpers can
+// be tested directly, same rationale as providerCredentials.ts.
+export function isMode(value: string): value is Mode {
   return value === "simple" || value === "full" || value === "local" || value === "cloud" || value === "azure" || value === "prod";
 }
 
@@ -211,25 +220,6 @@ function warnOnCustomLitellmConfig(mode: Mode): void {
   );
 }
 
-function ensureProviderKeys(): void {
-  if (hasAnyProviderCredentials(readEnvFile(".env"))) return;
-  throw new Error(
-    "Add a provider API key to .env (e.g. OPENAI_API_KEY, GEMINI_API_KEY, GROQ_API_KEY), then rerun. Use `./setup` for the zero-secret demo stack.",
-  );
-}
-
-/** True when .env contains at least one non-placeholder provider credential. */
-export function hasAnyProviderCredentials(env: Record<string, string>): boolean {
-  const optionalOnly = new Set(["AWS_SESSION_TOKEN", "GITHUB_COPILOT_TOKEN"]);
-  for (const spec of Object.values(PROVIDER_REGISTRY)) {
-    for (const key of spec.credentialEnvVars ?? []) {
-      if (optionalOnly.has(key)) continue;
-      if (isRealSecret(env[key])) return true;
-    }
-  }
-  return false;
-}
-
 async function reloadProviders(mode: Mode): Promise<void> {
   const env = readEnvFile(".env");
   if (!hasAnyProviderCredentials(env)) {
@@ -252,18 +242,6 @@ async function reloadProviders(mode: Mode): Promise<void> {
   await dockerCompose(reloadMode, ["up", "-d", "litellm", "--force-recreate"]);
   await waitForReady(modeConfig(reloadMode).apiPort);
   console.log("ok model proxy reloaded — real provider calls are enabled");
-}
-
-function ensureAzureKeys(): void {
-  const env = readEnvFile(".env");
-  const key = env.AZURE_API_KEY;
-  const base = env.AZURE_API_BASE;
-  const version = env.AZURE_API_VERSION;
-  if (isRealSecret(key) && isRealSecret(base) && isRealSecret(version)) return;
-  throw new Error(
-    "Set AZURE_API_KEY, AZURE_API_BASE, and AZURE_API_VERSION in .env, then rerun. " +
-      "Deployment names in modelgov.azure.example.yaml must match your Azure resource.",
-  );
 }
 
 async function ensureOllama(): Promise<void> {
@@ -422,6 +400,9 @@ async function reset(flags: OpsFlags): Promise<void> {
 async function dockerCompose(mode: Mode, command: string[]): Promise<void> {
   const config = modeConfig(mode);
   assertComposeFilesExist(config.composeArgs);
+  // Same `name:` in every compose file means a second checkout would target this
+  // project too — refuse a destructive command that isn't ours to run.
+  await assertProjectOwnedByThisCheckout({ command, root: ROOT, capture: runCapture, mode });
   const args = [
     ...(config.envFile ? ["--env-file", config.envFile] : []),
     ...config.composeArgs,
@@ -521,7 +502,7 @@ async function printEndpointStatus(port: number, path: "/health" | "/ready"): Pr
   }
 }
 
-function parseJson(text: string): Record<string, unknown> | undefined {
+export function parseJson(text: string): Record<string, unknown> | undefined {
   try {
     const value = JSON.parse(text) as unknown;
     return value && typeof value === "object" ? value as Record<string, unknown> : undefined;
@@ -591,7 +572,7 @@ function printSuccess(mode: Mode, json: boolean): void {
   console.log(`  ${rerunCommand("status", mode)} · ${rerunCommand("down", mode)}`);
 }
 
-function rerunCommand(commandOrMode: Mode | OpsCommand, mode?: Mode): string {
+export function rerunCommand(commandOrMode: Mode | OpsCommand, mode?: Mode): string {
   if (commandOrMode === "simple") return "make start";
   if (commandOrMode === "full") return "make start-full";
   if (commandOrMode === "local") return "make start-local";
@@ -603,24 +584,6 @@ function rerunCommand(commandOrMode: Mode | OpsCommand, mode?: Mode): string {
   if (commandOrMode === "up") return mode && mode !== "simple" ? `make start${suffix}` : "make start";
   if (commandOrMode === "down") return mode && mode !== "simple" ? `make stop${suffix}` : "make stop";
   return `make ${commandOrMode}${suffix}`;
-}
-
-// Known non-secret placeholders shipped in .env templates / scaffold hints. These
-// are >6 chars and contain no "..."/"REPLACE", so without an explicit denylist
-// they'd be mistaken for real credentials — e.g. `make start-cloud` on the demo
-// .env would pass the credential gate and then 401 against the provider.
-const PLACEHOLDER_SECRETS = new Set(["demo-unused", "demo-key", "changeme", "your-key-here"]);
-
-function isRealSecret(value: string | undefined): boolean {
-  if (!value) return false;
-  const v = value.trim();
-  if (v.length <= 6) return false;
-  if (v.includes("...") || v.includes("REPLACE")) return false;
-  if (PLACEHOLDER_SECRETS.has(v)) return false;
-  // Scaffold hints like `<your-resource>` and `/path/to/service-account.json`.
-  if (v.includes("<") && v.includes(">")) return false;
-  if (v.startsWith("/path/to/")) return false;
-  return true;
 }
 
 async function run(command: string, args: string[]): Promise<void> {
