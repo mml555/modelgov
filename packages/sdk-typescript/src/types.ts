@@ -54,6 +54,20 @@ export type ResponseFormat =
       };
     };
 
+/**
+ * A retrieved passage. A bare string is still accepted; the metadata fields
+ * exist so a feature configured with `cite: [page, section]` can require
+ * citations to name them — and so the gateway can VERIFY the cited value
+ * against the passage the quote came from, rather than pass it through.
+ */
+export interface GroundingPassage {
+  text: string;
+  page?: number | string;
+  section?: string;
+  title?: string;
+  url?: string;
+}
+
 export interface ChatRequest {
   userId: string;
   userType: UserTypeName;
@@ -65,7 +79,7 @@ export interface ChatRequest {
    * strict`). The gateway answers ONLY from these, forces verbatim citations,
    * and verifies them — unverifiable answers become a safe refusal.
    */
-  context?: string[];
+  context?: Array<string | GroundingPassage>;
   inputTokensEstimate?: number;
   temperature?: number;
   /**

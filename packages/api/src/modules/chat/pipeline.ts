@@ -133,7 +133,11 @@ export async function executeSyncChat(
   // human-facing answer (or a refusal); output safety then masks PII in that.
   let grounded: boolean | undefined;
   if (prepared.grounding) {
-    const verdict = verifyGrounding(content, prepared.grounding.context);
+    const verdict = verifyGrounding(
+      content,
+      prepared.grounding.context,
+      prepared.grounding.options,
+    );
     content = verdict.answer;
     grounded = verdict.grounded;
     if (!grounded) {

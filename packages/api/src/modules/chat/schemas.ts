@@ -102,7 +102,27 @@ export const chatBodySchema = z.object({
    * safety plan sets grounding=strict, the gateway answers ONLY from these,
    * requires the model to cite verbatim quotes, and verifies them.
    */
-  context: z.array(z.string().min(1).max(MAX_CONTENT_CHARS)).min(1).max(64).optional(),
+  context: z
+    .array(
+      z.union([
+        z.string().min(1).max(MAX_CONTENT_CHARS),
+        // Structured passage: needed when the feature requires page/section
+        // citations, since the gateway verifies the cited value against the
+        // passage the quote came from and can only do that if it knows it.
+        z
+          .object({
+            text: z.string().min(1).max(MAX_CONTENT_CHARS),
+            page: z.union([z.number().int().nonnegative(), z.string().min(1).max(64)]).optional(),
+            section: z.string().min(1).max(256).optional(),
+            title: z.string().min(1).max(256).optional(),
+            url: z.string().min(1).max(2048).optional(),
+          })
+          .strict(),
+      ]),
+    )
+    .min(1)
+    .max(64)
+    .optional(),
   // Bounded above: an unbounded estimate can overflow the numeric(14,6) reserve
   // column and 500 the request (and, in billing mode, after the credit hold).
   inputTokensEstimate: z.number().int().positive().max(10_000_000).optional(),
@@ -189,7 +209,11 @@ export const chatBodyJsonSchema = {
       type: "array",
       minItems: 1,
       maxItems: 64,
-      items: { type: "string", minLength: 1, maxLength: 100000 },
+      // Loose on purpose, same reasoning as responseFormat below: Fastify's Ajv
+      // runs with removeAdditional, and declaring the object branch's
+      // properties here would strip passage metadata while validating the
+      // string branch. Zod is the strict layer.
+      items: { type: ["string", "object"] },
     },
     inputTokensEstimate: { type: "integer", minimum: 1 },
     temperature: { type: "number", minimum: 0, maximum: 2 },
