@@ -18,6 +18,7 @@ import { logRequest } from "../usage/auditLogRepo";
 import { baseLog, baseObs, remainingAfter } from "../chat/mapper";
 import type { Observability } from "../../services/observability";
 import { SafetyServiceError, type SafetyGuard } from "../../services/safety";
+import { maskStructured } from "./structuredMasking";
 import {
   assertFetchableDocumentUrl,
   DocumentClientError,
@@ -65,7 +66,11 @@ export interface DocumentSuccessBody {
   budgetRemaining: BudgetRemaining | null;
   safety: {
     piiMasked: boolean;
-    /** True when output PII masking dropped the structured payload (#37). */
+    /**
+     * True when the structured payload was dropped rather than returned. Since
+     * per-entity PII policy, the leaves are masked IN PLACE instead — this is
+     * now only the fallback for a SafetyGuard without `inspectOutputMany`.
+     */
     structuredWithheld: boolean;
   };
   requestId: string;
@@ -83,6 +88,8 @@ export type DocumentExtractResult =
       retryable?: boolean;
     };
 
+export type StructuredOutput = Pick<DocumentSuccessBody, "tables" | "fields" | "documents">;
+
 function toSource(document: DocumentBody["document"]): DocumentSource {
   if (document.base64 !== undefined) return { kind: "base64", base64: document.base64 };
   if (document.url !== undefined) return { kind: "url", url: document.url };
@@ -92,7 +99,7 @@ function toSource(document: DocumentBody["document"]): DocumentSource {
   throw new DocumentClientError("document must have exactly one of base64, url, or s3");
 }
 
-type StructuredOutput = Pick<DocumentSuccessBody, "tables" | "fields" | "documents">;
+
 
 /**
  * Governed document extraction: the same policy/budget/audit/billing spine as
@@ -431,15 +438,54 @@ export async function handleDocumentExtract(
     }
     text = out.content;
     piiMasked = out.piiMasked;
-    // The structured output holds the SAME content as `text`, so in MASK mode it
-    // would carry the PII that was only redacted from `text` — withhold it. (In
-    // `block` mode a PII document already 403'd above via the text screen, so a
-    // document that reaches here is clean and its structured output is safe; in
-    // `off` mode there is nothing to mask.) Callers needing structured extraction
-    // use pii:off (they own PII handling) or pii:block.
-    if (decision.safetyPlan.pii === "mask" && hasStructuredContent(structured)) {
-      structured = {};
-      structuredWithheld = true;
+    // The structured output holds the SAME content as `text`, so under masking
+    // it would carry the PII that was only redacted from `text`. Mask its leaves
+    // in place rather than withholding the payload (#37's stand-in). A
+    // per-entity policy is what makes the result useful: an extraction feature
+    // can allow the entity types it exists to extract and still redact the rest.
+    //
+    // (In `block` mode a PII document already 403'd above via the text screen,
+    // so a document reaching here is clean; in `off` mode there is nothing to
+    // mask. Both skip this entirely.)
+    // Run whenever the plan can mask ANYTHING, not just under a blanket
+    // `pii: mask`. A per-entity policy with a `block` list resolves the coarse
+    // mode to "block", and the old condition then skipped structured scanning
+    // entirely — so mask-dispositioned entities were redacted from `text` and
+    // returned RAW in the structured payload. Blanket `block` is still skipped:
+    // there, any finding already 403'd on the text screen, so a document
+    // reaching here is genuinely clean.
+    const planCanMask =
+      decision.safetyPlan.pii !== "off" &&
+      (decision.safetyPlan.piiEntities !== undefined || decision.safetyPlan.pii === "mask");
+    if (planCanMask && hasStructuredContent(structured)) {
+      const masking = await maskStructured(deps, structured, decision.safetyPlan);
+      if (masking.blocked) {
+        const blocked = await failure({
+          status: "safety_blocked",
+          resolvedModel,
+          actualCostUsd,
+          error: "output_pii_detected",
+          obsStatus: "safety_blocked",
+          obsReason: "output_pii_detected",
+          http: {
+            status: 403,
+            code: "safety_blocked",
+            details: { reason: "output_pii_detected", findings: masking.findings },
+            message: "Safety Blocked",
+          },
+        });
+        await settleBilling(blocked.auditRequestId ?? "");
+        return blocked;
+      }
+      if (masking.masked) {
+        // Report masking if EITHER the text or the structured leaves changed.
+        piiMasked = piiMasked || masking.piiMasked;
+      } else {
+        // No batch support on this guard — fall back to withholding rather than
+        // returning a payload we could not screen.
+        structured = {};
+        structuredWithheld = true;
+      }
     }
   } catch (err) {
     if (err instanceof SafetyServiceError) {
