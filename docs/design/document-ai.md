@@ -103,7 +103,9 @@ rejects a PII document, so a document that returns has clean structured output;
 since redacting it field-by-field is error-prone. A feature that needs structured
 extraction should use `pii: off` (the caller owns PII) or `pii: block`.
 
-When that happens the response says so: **`safety.structuredWithheld: true`**,
+When that happens the response says so: **`safety.structuredWithheld: true`**
+(absent means false — a response replayed from an idempotency row cached before
+this field existed will omit it),
 and the audit row carries `reasonCode = structured_withheld`. Without it an empty
 `tables` is indistinguishable from a document that genuinely had none, so a
 config mistake looks like a model-quality problem. Check the flag before

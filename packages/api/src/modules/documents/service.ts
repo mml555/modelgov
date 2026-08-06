@@ -437,7 +437,7 @@ export async function handleDocumentExtract(
     // document that reaches here is clean and its structured output is safe; in
     // `off` mode there is nothing to mask.) Callers needing structured extraction
     // use pii:off (they own PII handling) or pii:block.
-    if (decision.safetyPlan.pii === "mask" && Object.keys(structured).length > 0) {
+    if (decision.safetyPlan.pii === "mask" && hasStructuredContent(structured)) {
       structured = {};
       structuredWithheld = true;
     }
@@ -510,6 +510,21 @@ export async function handleDocumentExtract(
       requestId: auditRequestId,
     },
   };
+}
+
+/**
+ * Whether there is actually structured content to withhold. Key PRESENCE is not
+ * enough: an adapter that returns `tables: []` / `fields: {}` has produced
+ * nothing, and reporting `structuredWithheld: true` for it would be the very
+ * false positive the flag exists to prevent — a caller chasing a withheld
+ * payload that never existed.
+ */
+function hasStructuredContent(s: StructuredOutput): boolean {
+  return (
+    (s.tables?.length ?? 0) > 0 ||
+    (s.documents?.length ?? 0) > 0 ||
+    Object.keys(s.fields ?? {}).length > 0
+  );
 }
 
 async function tryLog(

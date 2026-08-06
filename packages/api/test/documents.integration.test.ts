@@ -243,6 +243,14 @@ describe.skipIf(!DATABASE_URL)("document extraction (integration)", () => {
     // indistinguishable from a document that genuinely had no tables, so a
     // config mistake reads as a model-quality problem.
     expect(body.safety.structuredWithheld).toBe(true);
+
+    // The audit row must record it too — the response tells the caller, the
+    // reason code is what an operator greps for after the fact.
+    const { rows } = await pool.query(
+      "SELECT reason_code FROM request_logs WHERE id = $1",
+      [Number(String(body.requestId).replace("req_", ""))],
+    );
+    expect(rows[0]?.reason_code).toBe("structured_withheld");
   });
 
   it("reports structuredWithheld=false when the document simply had no structured content", async () => {
@@ -260,6 +268,37 @@ describe.skipIf(!DATABASE_URL)("document extraction (integration)", () => {
     expect(body.tables).toBeUndefined();
     expect(body.safety.piiMasked).toBe(true);
     expect(body.safety.structuredWithheld).toBe(false);
+
+    // ...and must NOT be tagged: nothing was withheld here.
+    const { rows } = await pool.query(
+      "SELECT reason_code FROM request_logs WHERE id = $1",
+      [Number(String(body.requestId).replace("req_", ""))],
+    );
+    expect(rows[0]?.reason_code).toBeNull();
+  });
+
+  it("reports structuredWithheld=false when the adapter returned EMPTY structures", async () => {
+    // Key presence is not content: `tables: []` means the adapter produced
+    // nothing, so claiming a withholding would send the caller hunting for a
+    // payload that never existed.
+    const a = app({
+      safety: maskingGuard,
+      extract: async () => ({
+        text: "some text",
+        pages: 1,
+        model: "tesseract",
+        tables: [],
+        fields: {},
+        documents: [],
+      }),
+    });
+    const res = await extract(a, {
+      provider: "tesseract",
+      feature: "doc_review_masked",
+      document: { base64: "ZmFrZQ==" },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().safety.structuredWithheld).toBe(false);
   });
 
   it("does not withhold structured output when masking is off", async () => {

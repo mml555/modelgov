@@ -6121,8 +6121,7 @@
                     "safety": {
                       "type": "object",
                       "required": [
-                        "piiMasked",
-                        "structuredWithheld"
+                        "piiMasked"
                       ],
                       "properties": {
                         "piiMasked": {

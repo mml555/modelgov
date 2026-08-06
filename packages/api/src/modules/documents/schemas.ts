@@ -94,12 +94,18 @@ export const documentSuccessJsonSchema = {
     budgetRemaining: budgetRemainingJsonSchema,
     safety: {
       type: "object",
-      required: ["piiMasked", "structuredWithheld"],
+      required: ["piiMasked"],
       properties: {
         piiMasked: { type: "boolean" },
         // True when output PII masking dropped tables/fields/documents. Without
         // this the caller cannot distinguish a withheld payload from a document
         // that genuinely had no structured content.
+        //
+        // NOT in `required`, deliberately. Completed idempotency rows are
+        // replayed VERBATIM and retained for a week, so for ~7 days after this
+        // ships a replay can return a body cached before the field existed.
+        // Marking it required would make the published spec lie for that
+        // window. Absent means false; every freshly-computed response sets it.
         structuredWithheld: { type: "boolean" },
       },
     },
