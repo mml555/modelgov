@@ -17,6 +17,15 @@ guarantees in `docs/versioning.md` apply.
 
 ### Added
 
+- **`dimensions` on `POST /v1/embeddings`** — request a reduced output width
+  from Matryoshka models (`text-embedding-3-*`, `gemini-embedding-001`), which
+  otherwise always emit full width. The response now always reports
+  `dimensions`, read off the returned vector rather than echoed from the
+  request, so a provider that ignores it on a non-MRL model cannot leave you
+  asserting a width you did not get. Embedding dimension defines the vector
+  space, so a corpus embedded at a different width is not comparable.
+  ([#39](https://github.com/mml555/modelgov/issues/39))
+
 - **Structured output on `POST /v1/chat`** — `responseFormat: { type:
   "json_object" }` or `{ type: "json_schema", jsonSchema: { name, schema,
   strict } }`, forwarded to the provider so extraction callers stop hand-rolling

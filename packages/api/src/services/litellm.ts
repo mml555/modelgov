@@ -96,6 +96,12 @@ export interface LiteLLMEmbeddingParams {
   model: string;
   /** One or more texts to embed. */
   input: string[];
+  /**
+   * Requested output width. Matryoshka (MRL) models — text-embedding-3-*,
+   * gemini-embedding-001 — emit full width unless asked for fewer. Omitted
+   * entirely when unset so a non-MRL provider sees the request it always saw.
+   */
+  dimensions?: number;
   timeoutMs?: number;
 }
 
@@ -495,7 +501,11 @@ export function createLiteLLMClient(
             "content-type": "application/json",
             ...(options.apiKey ? { authorization: `Bearer ${options.apiKey}` } : {}),
           },
-          body: JSON.stringify({ model: params.model, input: params.input }),
+          body: JSON.stringify({
+            model: params.model,
+            input: params.input,
+            ...(params.dimensions === undefined ? {} : { dimensions: params.dimensions }),
+          }),
           signal: controller.signal,
         });
       } catch (err) {

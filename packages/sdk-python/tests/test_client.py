@@ -1035,3 +1035,36 @@ def test_chat_omits_response_format_when_unset() -> None:
         )
 
     assert "responseFormat" not in json.loads(route.calls.last.request.content)
+
+
+@respx.mock
+def test_embed_sends_dimensions_and_omits_when_unset() -> None:
+    """Matryoshka width must reach the wire, and be absent when not requested."""
+    body_ok = {
+        "embeddings": [[0.1, 0.2]],
+        "model": "openai/text-embedding-3-small",
+        "dimensions": 2,
+        "provider": "openai",
+        "decision": "allow",
+        "usage": {"inputTokens": 3},
+        "cost": {"estimatedUsd": 0.0, "actualUsd": 0.0},
+        "budgetRemaining": None,
+        "requestId": "req_1",
+    }
+    route = respx.post(f"{BASE_URL}/v1/embeddings").mock(
+        return_value=httpx.Response(200, json=body_ok)
+    )
+
+    with make_client() as client:
+        res = client.embed(
+            user_id="u1", user_type="workflow", feature="kb_embedding",
+            input="chunk", dimensions=512,
+        )
+        assert json.loads(route.calls.last.request.content)["dimensions"] == 512
+        # The response's width is what the caller must trust, not the request's.
+        assert res["dimensions"] == 2
+
+        client.embed(
+            user_id="u1", user_type="workflow", feature="kb_embedding", input="chunk"
+        )
+        assert "dimensions" not in json.loads(route.calls.last.request.content)

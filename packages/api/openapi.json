@@ -5468,6 +5468,12 @@
                   "modelClass": {
                     "type": "string"
                   },
+                  "dimensions": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 16384,
+                    "description": "Output vector width (Matryoshka models: text-embedding-3-*, gemini-embedding-001). Omit for the model's native width. The response echoes it so you can assert vector-space identity."
+                  },
                   "inputTokensEstimate": {
                     "type": "integer",
                     "minimum": 1
@@ -5517,6 +5523,13 @@
                     },
                     "model": {
                       "type": "string"
+                    },
+                    "dimensions": {
+                      "type": [
+                        "null",
+                        "integer"
+                      ],
+                      "description": "Width of the returned vectors, read off the response — assert this rather than assuming the model's default."
                     },
                     "provider": {
                       "type": "string"

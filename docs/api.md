@@ -289,6 +289,44 @@ is stable inside `error.details`:
 
 ---
 
+## `POST /v1/embeddings`
+
+Same policy / budget / audit spine as `/v1/chat`, priced per token. Input PII is
+masked or blocked before the provider call per the feature's safety plan
+(fail-closed); there is no injection classifier on this path.
+
+### `dimensions` — and why you should assert it
+
+Matryoshka (MRL) models — `text-embedding-3-*`, `gemini-embedding-001` — emit
+their full native width unless you ask for fewer:
+
+```json
+{ "userId": "svc", "userType": "workflow", "feature": "kb_embedding",
+  "input": ["chunk one", "chunk two"], "dimensions": 512 }
+```
+
+**Embedding dimension defines the vector space.** A corpus embedded at a
+different width is not comparable to this one, and a store that pins dimension
+in its column type (pgvector, Pinecone, Qdrant) will reject the insert outright
+— the loud failure. The quiet one is a store that accepts variable width, where
+mismatched vectors just score badly.
+
+So the response always reports what you actually got:
+
+```json
+{ "embeddings": [[...]], "model": "openai/text-embedding-3-small", "dimensions": 512 }
+```
+
+That value is read off the returned vector, **not** echoed from your request: a
+provider may ignore `dimensions` on a non-MRL model, and echoing the request
+back would tell you a comfortable lie. Assert it when your corpus spans more
+than one embedding run.
+
+Omit `dimensions` and the gateway omits it from the provider call entirely, so a
+non-MRL backend sees exactly the request it always saw.
+
+---
+
 ## `POST /v1/explain`
 
 Dry-run policy evaluation. Returns the decision, resolved model, safety plan,

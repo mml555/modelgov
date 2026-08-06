@@ -195,6 +195,11 @@ class EmbeddingsResponse(TypedDict):
 
     embeddings: List[List[float]]  # one vector per input, in request order
     model: str
+    # Width of the returned vectors. Assert this rather than assuming the width
+    # you asked for was honoured — a provider may ignore `dimensions` on a
+    # non-MRL model. NotRequired: a response replayed from an idempotency row
+    # cached before this field existed will omit it.
+    dimensions: NotRequired[Optional[int]]
     provider: str
     decision: str  # "allow" | "degrade" | "fallback"
     reason: NotRequired[str]

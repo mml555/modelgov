@@ -173,6 +173,89 @@ describe.skipIf(!DATABASE_URL)("POST /v1/embeddings (integration)", () => {
   const post = (app: FastifyInstance, body: Record<string, unknown>) =>
     app.inject({ method: "POST", url: "/v1/embeddings", payload: body });
 
+  it("forwards dimensions to the provider and echoes the width actually returned", async () => {
+    // Vector width defines the vector space: a corpus embedded at a different
+    // width cannot be compared against this one, so the caller has to be able
+    // to assert what it got rather than trust the model's default.
+    let seen: number | undefined;
+    const client = fakeEmbedClient(async (p) => {
+      seen = p.dimensions;
+      return {
+        embeddings: p.input.map(() => Array.from({ length: p.dimensions ?? 3 }, () => 0.1)),
+        model: p.model,
+        actualCostUsd: 0.00001,
+        inputTokens: 8,
+        raw: {},
+      };
+    });
+    const res = await post(appWith(client), {
+      userId: "svc-dim",
+      userType: "workflow",
+      feature: "kb_embedding",
+      input: ["chunk"],
+      dimensions: 512,
+    });
+    expect(res.statusCode).toBe(200);
+    expect(seen).toBe(512);
+    expect(res.json().dimensions).toBe(512);
+    expect(res.json().embeddings[0]).toHaveLength(512);
+  });
+
+  it("omits dimensions from the provider call when unset, and still reports the width", async () => {
+    // Absent, not null — a non-MRL provider must see the request it always saw.
+    let sawKey = true;
+    const client = fakeEmbedClient(async (p) => {
+      sawKey = "dimensions" in p && p.dimensions !== undefined;
+      return { embeddings: [[0.1, 0.2, 0.3]], model: p.model, actualCostUsd: 0.00001, inputTokens: 8, raw: {} };
+    });
+    const res = await post(appWith(client), {
+      userId: "svc-dim2",
+      userType: "workflow",
+      feature: "kb_embedding",
+      input: ["chunk"],
+    });
+    expect(res.statusCode).toBe(200);
+    expect(sawKey).toBe(false);
+    // Reported regardless, read off the returned vector.
+    expect(res.json().dimensions).toBe(3);
+  });
+
+  it("reports the ACTUAL width when a provider ignores the requested dimensions", async () => {
+    // Some providers silently ignore `dimensions` on non-MRL models. Echoing
+    // the request back would tell the caller a comfortable lie; the response
+    // must reflect the vector they actually received.
+    const client = fakeEmbedClient(async (p) => ({
+      embeddings: [[0.1, 0.2, 0.3, 0.4]], // full width, request ignored
+      model: p.model,
+      actualCostUsd: 0.00001,
+      inputTokens: 8,
+      raw: {},
+    }));
+    const res = await post(appWith(client), {
+      userId: "svc-dim3",
+      userType: "workflow",
+      feature: "kb_embedding",
+      input: ["chunk"],
+      dimensions: 512,
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().dimensions).toBe(4);
+  });
+
+  it("rejects a non-positive or absurd dimensions value", async () => {
+    const app = appWith(okEmbed);
+    for (const dimensions of [0, -1, 1.5, 999_999]) {
+      const res = await post(app, {
+        userId: "svc-dim4",
+        userType: "workflow",
+        feature: "kb_embedding",
+        input: ["chunk"],
+        dimensions,
+      });
+      expect(res.statusCode, `dimensions=${dimensions}`).toBe(400);
+    }
+  });
+
   it("embeds inputs, records spend, and returns one vector per input", async () => {
     const app = appWith(okEmbed);
     const res = await post(app, {

@@ -49,6 +49,13 @@ export interface EmbeddingsDeps {
 export interface EmbeddingsSuccessBody {
   embeddings: number[][];
   model: string;
+  /**
+   * Width of the returned vectors. Reported ALWAYS, not just when requested:
+   * embedding dimension defines the vector space, so a caller comparing a
+   * corpus embedded elsewhere needs to assert it rather than assume the
+   * model's default has not changed under them.
+   */
+  dimensions: number | null;
   provider: string;
   decision: "allow" | "degrade" | "fallback";
   reason?: string;
@@ -345,7 +352,7 @@ export async function handleEmbeddings(
   let usedFallback = false;
   let result: Awaited<ReturnType<NonNullable<LiteLLMClient["embed"]>>>;
   try {
-    result = await deps.litellm.embed({ model, input: embedTexts });
+    result = await deps.litellm.embed({ model, input: embedTexts, dimensions: input.dimensions });
   } catch (err) {
     if (err instanceof ProviderError && decision.fallbackModel) {
       // Re-evaluate with forceFallback so the fallback model/provider is re-run
@@ -432,7 +439,7 @@ export async function handleEmbeddings(
       try {
         model = fb.resolvedModel;
         usedFallback = true;
-        result = await deps.litellm.embed({ model, input: embedTexts });
+        result = await deps.litellm.embed({ model, input: embedTexts, dimensions: input.dimensions });
       } catch (fallbackErr) {
         return providerFailure(deps, providerBudget.release, rowBase, model, fallbackErr, { aiRequest, decision });
       }
@@ -524,6 +531,9 @@ export async function handleEmbeddings(
     body: {
       embeddings: result.embeddings,
       model,
+      // From the RETURNED vector, not the request: if a provider ignores or
+      // clamps `dimensions`, the caller must see what it actually got.
+      dimensions: result.embeddings[0]?.length ?? null,
       provider: providerOf(model),
       decision: responseDecision,
       reason: usedFallback ? "provider failure on primary — routed to fallback model" : decision.reason,

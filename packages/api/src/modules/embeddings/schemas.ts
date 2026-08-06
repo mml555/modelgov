@@ -18,6 +18,13 @@ export const embeddingsBodySchema = z.object({
     z.array(z.string().min(1).max(MAX_INPUT_CHARS)).min(1).max(MAX_INPUTS),
   ]),
   modelClass: z.string().optional(),
+  /**
+   * Output vector width for Matryoshka models. Upper bound is generous on
+   * purpose — the real ceiling is the model's native width, which only the
+   * provider knows, so an over-large value should surface as a provider error
+   * rather than a gateway guess that goes stale as models change.
+   */
+  dimensions: z.number().int().positive().max(16_384).optional(),
   inputTokensEstimate: z.number().int().positive().optional(),
   projectId: z.string().optional(),
   environment: z.string().optional(),
@@ -51,6 +58,13 @@ export const embeddingsBodyJsonSchema = {
       ],
     },
     modelClass: { type: "string" },
+    dimensions: {
+      type: "integer",
+      minimum: 1,
+      maximum: 16384,
+      description:
+        "Output vector width (Matryoshka models: text-embedding-3-*, gemini-embedding-001). Omit for the model's native width. The response echoes it so you can assert vector-space identity.",
+    },
     inputTokensEstimate: { type: "integer", minimum: 1 },
     projectId: { type: "string" },
     environment: { type: "string" },
@@ -67,6 +81,13 @@ export const embeddingsSuccessJsonSchema = {
       items: { type: "array", items: { type: "number" } },
     },
     model: { type: "string" },
+    // Not in `required`: completed idempotency rows replay VERBATIM for a week,
+    // so a replay can return a body cached before this field existed. Absent
+    // means "unknown, from an older response", not "zero-width".
+    dimensions: {
+      type: ["integer", "null"],
+      description: "Width of the returned vectors, read off the response — assert this rather than assuming the model's default.",
+    },
     provider: { type: "string" },
     decision: { type: "string", enum: ["allow", "degrade", "fallback"] },
     reason: { type: "string" },
