@@ -55,7 +55,17 @@ export default defineConfig({
       ],
       exclude: [
         "**/*.test.ts",
-        "**/index.ts",
+        // NOT a blanket "**/index.ts": three index files are real entrypoints
+        // with zero barrel exports (cli 216 lines, api 150, create-modelgov 143),
+        // and excluding them contradicted this config's own `include` — which
+        // lists create-modelgov because a regression there "misconfigures every
+        // new install", then hid that package's largest file. Only genuine
+        // re-export barrels are excluded, by path.
+        "packages/policy-engine/src/index.ts",
+        "packages/sdk-typescript/src/index.ts",
+        "packages/api/src/services/**/index.ts",
+        "packages/api/src/modules/**/index.ts",
+        "apps/operator-console/src/**/index.ts",
         "packages/api/src/migrate.ts",
         "packages/api/src/openapiExport.ts",
         "packages/sdk-typescript/src/generated/**",
@@ -94,6 +104,16 @@ export default defineConfig({
       // change: 79.28 lines / 79.16 functions / 71.22 branches / 77.19
       // statements — every global gate below still clears with headroom, so they
       // are left as-is rather than re-baselined against a moving surface.
+      //
+      // 2026-08-06: the blanket `**/index.ts` exclusion was replaced by an
+      // explicit list of real barrels (see `exclude`), adding ~500 lines of
+      // entrypoint to the surface. Measured global went UP anyway, because the
+      // two CLI entrypoints became testable and were tested: 80.05 lines /
+      // 81.55 functions / 72.43 branches / 78.15 statements. The global gates
+      // are again left as-is — the surface moved, and `packages/api/src/index.ts`
+      // (the server bootstrap, referenced by the Dockerfile/compose/Helm) is
+      // now counted at 0% as a VISIBLE gap rather than a hidden one. Closing it
+      // is the next ratchet, not this one.
       thresholds: {
         lines: 75,
         functions: 78,
@@ -128,12 +148,18 @@ export default defineConfig({
         // the usual ~1: they were baselined on Node 24 while CI runs Node 22, and
         // v8's coverage remapping differs slightly between V8 versions. Re-measure
         // on Node 22 before tightening them further.
-        // Measured 2026-08-04: 37.29 lines / 38.00 functions / 40.14 branches / 37.85 statements.
+        // 2026-08-06 ratchet: `**/index.ts` stopped being blanket-excluded, so the
+        // CLI's 216-line dispatch entrypoint joined the measured surface. It was
+        // untestable until then — the module ended in a bare top-level `main()`,
+        // so importing it RAN the CLI; splitting the executable into `bin.ts` is
+        // what made the routing testable. Coverage went UP despite the larger
+        // denominator: 37.29/38.00/40.14/37.85 → 41.33/46.21/43.19/41.76.
+        // Measured 2026-08-06: 41.33 lines / 46.21 functions / 43.19 branches / 41.76 statements.
         "packages/cli/src/**/*.ts": {
-          lines: 35,
-          functions: 36,
-          branches: 37,
-          statements: 35,
+          lines: 38,
+          functions: 43,
+          branches: 40,
+          statements: 38,
         },
         // Newly gated (was measured by nothing). Already well covered by
         // render.test.ts — this pins it so it stays that way.

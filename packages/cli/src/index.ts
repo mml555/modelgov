@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 import { runDoctorProduction } from "./doctorProduction.js";
 import { runExplain, type ExplainFlags } from "./explain.js";
 import { DEFAULT_BASE_URL, flagValue } from "./flags.js";
@@ -31,7 +30,13 @@ Commands:
 Run 'modelgov <command> --help' for command options.
 `;
 
-function main(): void {
+/**
+ * The CLI. Exported and side-effect-free at import time — `bin.ts` invokes it.
+ * This module used to end in a bare top-level call, so importing it RAN the
+ * CLI; that is why none of the dispatch logic could be tested, and why the
+ * blanket index.ts coverage exclusion hid 216 lines of it.
+ */
+export function main(): void {
   const args = process.argv.slice(2);
   if (args[0] === "--") args.shift();
   if (args.length === 0 || args[0] === "-h" || args[0] === "--help") {
@@ -59,7 +64,7 @@ function main(): void {
  * numeric exit code when the command wants to signal a specific non-zero exit
  * without it being an error (thrown errors are the normal failure channel).
  */
-async function dispatch(command: string, rest: string[]): Promise<number | void> {
+export async function dispatch(command: string, rest: string[]): Promise<number | void> {
   switch (command) {
     case "doctor":
       if (rest[0] === "production") {
@@ -241,5 +246,3 @@ function requireValue(flag: string, value: string | undefined): string {
   }
   return value;
 }
-
-main();

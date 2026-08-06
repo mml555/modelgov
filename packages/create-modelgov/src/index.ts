@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { cancel, confirm, group, intro, isCancel, multiselect, note, outro, select, text } from "@clack/prompts";
@@ -19,7 +18,7 @@ interface Flags {
   dir?: string;
 }
 
-function parseFlags(argv: string[]): Flags {
+export function parseFlags(argv: string[]): Flags {
   const f: Flags = {};
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]!;
@@ -36,22 +35,45 @@ function parseFlags(argv: string[]): Flags {
   return f;
 }
 
+const FRAMEWORKS: readonly Framework[] = ["nextjs", "express", "fastify", "fastapi", "none"];
+const SAFETY_PRESETS: readonly SafetyPreset[] = ["dev", "balanced", "strict"];
+const DEPLOY_MODES: readonly DeployMode[] = ["simple", "full"];
+
+/**
+ * Reject an unrecognised flag value instead of casting it through.
+ *
+ * `--framework next` (a plausible typo for `nextjs`) used to reach `adapterFor`,
+ * which has no default case, and crash with "Cannot read properties of
+ * undefined (reading 'files')". Worse, `--safety bogus` SUCCEEDED and wrote
+ * `preset: bogus` straight into modelgov.yaml — a scaffold that looks fine and
+ * fails at gateway boot. Both are exactly the "misconfigures every new install"
+ * failure this package is measured to prevent.
+ */
+function oneOf<T extends string>(value: string, valid: readonly T[], flag: string): T {
+  if ((valid as readonly string[]).includes(value)) return value as T;
+  throw new Error(`unknown ${flag} '${value}' (one of: ${valid.join(", ")})`);
+}
+
 /** Non-interactive resolution when enough flags are given (scripts / CI). */
-function resolveNonInteractive(flags: Flags): ProjectOptions | null {
+export function resolveNonInteractive(flags: Flags): ProjectOptions | null {
   if (!flags.template) return null;
   const template = TEMPLATES[flags.template];
   if (!template) throw new Error(`unknown template '${flags.template}' (one of: ${TEMPLATE_IDS.join(", ")})`);
+  const framework = flags.framework ? oneOf(flags.framework, FRAMEWORKS, "framework") : "none";
+  const safetyPreset = flags.safety ? oneOf(flags.safety, SAFETY_PRESETS, "safety preset") : "balanced";
+  const mode = flags.mode ? oneOf(flags.mode, DEPLOY_MODES, "mode") : "simple";
+  for (const p of flags.providers ?? []) oneOf(p, WIZARD_PROVIDERS, "provider");
   return {
     projectName: flags.name ?? "my-app",
-    framework: flags.framework ?? "none",
+    framework,
     template,
     providers: template.localOnly ? [] : flags.providers ?? ["openai"],
-    safetyPreset: flags.safety ?? "balanced",
-    mode: flags.mode ?? "simple",
+    safetyPreset,
+    mode,
   };
 }
 
-async function promptOptions(flags: Flags): Promise<ProjectOptions> {
+export async function promptOptions(flags: Flags): Promise<ProjectOptions> {
   intro("create-modelgov");
   const answers = await group(
     {
@@ -119,7 +141,13 @@ async function promptOptions(flags: Flags): Promise<ProjectOptions> {
   };
 }
 
-async function main(): Promise<void> {
+/**
+ * The whole wizard. Exported and side-effect-free at import time — `bin.ts` is
+ * what actually invokes it. This module used to end in a bare top-level call to
+ * it, so importing the module RAN the scaffolder; that is why none of this file
+ * could be tested, and why the blanket index.ts coverage exclusion hid it.
+ */
+export async function main(): Promise<void> {
   const flags = parseFlags(process.argv.slice(2));
   const targetDir = resolve(flags.dir ?? ".");
 
@@ -153,5 +181,3 @@ async function main(): Promise<void> {
   if (typeof note === "function") note(lines.join("\n"), "Done");
   if (typeof outro === "function") outro("Modelgov is ready to enforce your AI policy.");
 }
-
-void main();
