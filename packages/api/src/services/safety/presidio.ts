@@ -80,7 +80,7 @@ export class PresidioPiiGuard implements PiiGuard {
     // choke on a data URI — and each text part is masked independently so
     // anonymizer offsets stay valid.
     const texts: string[] = [];
-    const slots: Array<(masked: string, findings: SafetyFinding[]) => void> = [];
+    const slots: Array<(masked: string) => void> = [];
 
     const out: ChatMessage[] = messages.map((message) => {
       if (Array.isArray(message.content)) {
@@ -108,7 +108,7 @@ export class PresidioPiiGuard implements PiiGuard {
       this.maskText(text, policy),
     );
     results.forEach((r, i) => {
-      slots[i]?.(r.content, r.findings);
+      slots[i]?.(r.content);
       findings.push(...r.findings);
     });
 
