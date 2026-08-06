@@ -1,5 +1,6 @@
 import { applySchema } from "../src/db/init";
 import { createPool } from "../src/db/pool";
+import { assertTestDatabase } from "./assertTestDatabase";
 
 /**
  * Apply the schema ONCE for the whole test run, before any test file.
@@ -16,6 +17,7 @@ import { createPool } from "../src/db/pool";
 export default async function setup(): Promise<void> {
   const url = process.env.DATABASE_URL;
   if (!url) return;
+  assertTestDatabase(url);
   const pool = createPool(url);
   try {
     await applySchema(pool);
