@@ -67,6 +67,10 @@ function mockDocClient(extract: DocumentProviderAdapter["extract"]): DocumentAiC
       pages: 2,
       model: `azure-di/${opts?.model ?? "prebuilt-read"}`,
       tables: [{ rowCount: 1, columnCount: 1, cells: [{ rowIndex: 0, columnIndex: 0, content: "cell" }] }],
+      fields: {
+        insured: { content: "Jane Roe", value: "Jane Roe" },
+        policyNumber: { content: "SSN 123-45-6789", value: 42 },
+      },
     }),
   };
   const map: Record<string, DocumentProviderAdapter> = { tesseract, "azure-di": azureDi };
@@ -80,6 +84,38 @@ const maskingGuard: SafetyGuard = {
   inspectInput: new NoopGuard().inspectInput,
   async inspectOutput(_content: string, _plan: SafetyPlan): Promise<OutputSafetyResult> {
     return { action: "allow", content: "<MASKED>", piiMasked: true, findings: [{ type: "pii", detail: "US_SSN" }] };
+  },
+};
+
+/**
+ * Batch-capable guard: redacts digit runs, leaves everything else. Stands in for
+ * a per-entity policy that allows PERSON and masks the rest, so the structured
+ * payload can be returned instead of withheld.
+ */
+const batchMaskingGuard: SafetyGuard = {
+  inspectInput: new NoopGuard().inspectInput,
+  async inspectOutput(content: string): Promise<OutputSafetyResult> {
+    const masked = content.replace(/\d[\d-]{4,}/g, "[REDACTED]");
+    return {
+      action: "allow",
+      content: masked,
+      piiMasked: masked !== content,
+      findings: masked !== content ? [{ type: "pii", detail: "US_SSN", disposition: "mask" }] : [],
+    };
+  },
+  async inspectOutputMany(contents: string[]) {
+    const out = contents.map((c) => c.replace(/\d[\d-]{4,}/g, "[REDACTED]"));
+    const changed = out.some((c, i) => c !== contents[i]);
+    return {
+      action: "allow" as const,
+      contents: out,
+      piiMasked: changed,
+      findings: [
+        ...(changed ? [{ type: "pii" as const, detail: "US_SSN", disposition: "mask" as const }] : []),
+        // A detected-but-allowed entity: recorded, never redacted.
+        { type: "pii" as const, detail: "PERSON", disposition: "allow" as const },
+      ],
+    };
   },
 };
 
@@ -224,9 +260,34 @@ describe.skipIf(!DATABASE_URL)("document extraction (integration)", () => {
     expect(res.json().error.code).toBe("unsupported_model");
   });
 
-  it("withholds structured output in mask mode (it would carry unmasked PII)", async () => {
-    // balanced preset ⇒ pii: mask. `text` is masked; the structured output would
-    // still carry the raw PII, so it is withheld entirely rather than leaked.
+  it("masks structured leaves in place and returns the payload", async () => {
+    // The point of per-entity policy: an extraction feature keeps the fields it
+    // exists to extract (the allowed PERSON) while the rest is redacted, instead
+    // of losing the whole structured payload to a blanket mask.
+    const a = app({ safety: batchMaskingGuard });
+    const res = await extract(a, {
+      provider: "azure-di",
+      model: "prebuilt-layout",
+      feature: "doc_review_masked",
+      document: { base64: "ZmFrZQ==" },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.safety.structuredWithheld).toBe(false);
+    expect(body.safety.piiMasked).toBe(true);
+    // Allowed entity survives; masked one is redacted, in the SAME payload.
+    expect(body.fields.insured.content).toBe("Jane Roe");
+    expect(body.fields.policyNumber.content).toBe("SSN [REDACTED]");
+    // A non-string value is left alone rather than coerced to text.
+    expect(body.fields.policyNumber.value).toBe(42);
+    expect(body.tables[0].cells[0].content).toBe("cell");
+  });
+
+  it("withholds structured output when the guard cannot mask leaves in batch", async () => {
+    // balanced preset ⇒ pii: mask. This guard implements only the single-string
+    // inspectOutput, so the structured leaves cannot be screened in one pass —
+    // the fallback withholds rather than returning an unscreened payload. A
+    // guard with inspectOutputMany masks in place instead (test below).
     const a = app({ safety: maskingGuard });
     const res = await extract(a, {
       provider: "azure-di",

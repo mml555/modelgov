@@ -1,3 +1,4 @@
+import type { PiiDisposition, PiiEntityPolicy } from "@modelgov/policy-engine";
 import type { ChatMessage } from "../../types";
 import { SafetyServiceError, type PiiGuard, type SafetyFinding } from "./contracts";
 
@@ -38,6 +39,7 @@ export class PresidioPiiGuard implements PiiGuard {
 
   async process(
     messages: ChatMessage[],
+    policy?: PiiEntityPolicy,
   ): Promise<{ messages: ChatMessage[]; findings: SafetyFinding[] }> {
     // Screen messages concurrently: a long conversation would otherwise incur
     // 2N sequential Presidio round-trips on the request hot path. Promise.all
@@ -53,7 +55,7 @@ export class PresidioPiiGuard implements PiiGuard {
               if (part.type !== "text" || !part.text) {
                 return { part, findings: [] as SafetyFinding[] };
               }
-              return this.maskText(part.text).then((r) => ({
+              return this.maskText(part.text, policy).then((r) => ({
                 part: { ...part, text: r.content },
                 findings: r.findings,
               }));
@@ -66,7 +68,7 @@ export class PresidioPiiGuard implements PiiGuard {
         }
 
         if (!message.content) return { message, findings: [] as SafetyFinding[] };
-        const { content, findings } = await this.maskText(message.content);
+        const { content, findings } = await this.maskText(message.content, policy);
         return { message: { ...message, content }, findings };
       }),
     );
@@ -81,14 +83,31 @@ export class PresidioPiiGuard implements PiiGuard {
    * text and any PII findings. No round-trip when the text is clean. */
   private async maskText(
     text: string,
+    policy?: PiiEntityPolicy,
   ): Promise<{ content: string; findings: SafetyFinding[] }> {
+    // Always analyze for EVERY entity type, even under a deny-list policy that
+    // will pass most of them through: the findings are the audit record, and
+    // restricting the analyzer would make "no PERSON was present" and "we never
+    // looked for PERSON" indistinguishable afterwards.
     const entities = await this.analyze(text);
     if (entities.length === 0) return { content: text, findings: [] };
+
     const findings: SafetyFinding[] = entities.map((e) => ({
       type: "pii",
       detail: e.entity_type,
+      ...(policy ? { disposition: dispositionFor(e.entity_type, policy) } : {}),
     }));
-    const anonymized = await this.anonymize(text, entities);
+
+    // Only `mask` entities go to the anonymizer. `allow` stays in the text by
+    // definition; `block` is left intact too — the caller rejects the request,
+    // and redacting the evidence first would only make the rejection harder to
+    // explain.
+    const toMask = policy
+      ? entities.filter((e) => dispositionFor(e.entity_type, policy) === "mask")
+      : entities;
+    if (toMask.length === 0) return { content: text, findings };
+
+    const anonymized = await this.anonymize(text, toMask);
     return { content: anonymized, findings };
   }
 
@@ -159,4 +178,16 @@ export class PresidioPiiGuard implements PiiGuard {
     }
     return json.text;
   }
+}
+
+/**
+ * Disposition for one detected entity type. Explicit lists win over `default`;
+ * an entity cannot appear in two lists (config validation rejects that), so the
+ * order these are checked in is not load-bearing.
+ */
+function dispositionFor(entityType: string, policy: PiiEntityPolicy): PiiDisposition {
+  if (policy.block?.includes(entityType)) return "block";
+  if (policy.mask?.includes(entityType)) return "mask";
+  if (policy.allow?.includes(entityType)) return "allow";
+  return policy.default;
 }

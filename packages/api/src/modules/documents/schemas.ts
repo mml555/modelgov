@@ -106,7 +106,11 @@ export const documentSuccessJsonSchema = {
         // ships a replay can return a body cached before the field existed.
         // Marking it required would make the published spec lie for that
         // window. Absent means false; every freshly-computed response sets it.
-        structuredWithheld: { type: "boolean" },
+        structuredWithheld: {
+          type: "boolean",
+          description:
+            "True when the structured payload was dropped instead of returned. Only happens when the configured SafetyGuard cannot mask structured leaves in batch; the built-in guard masks them in place and returns the payload.",
+        },
       },
     },
     requestId: { type: "string" },

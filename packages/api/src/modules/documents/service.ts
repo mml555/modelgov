@@ -6,6 +6,7 @@ import {
   type AiRequest,
   type BudgetRemaining,
   type PolicyDecision,
+  type SafetyPlan,
 } from "@modelgov/policy-engine";
 import type { FastifyBaseLogger } from "fastify";
 import type { Pool } from "pg";
@@ -17,7 +18,7 @@ import { createFlatProviderBudget } from "../chat/providerBudget";
 import { logRequest } from "../usage/auditLogRepo";
 import { baseLog, baseObs, remainingAfter } from "../chat/mapper";
 import type { Observability } from "../../services/observability";
-import { SafetyServiceError, type SafetyGuard } from "../../services/safety";
+import { SafetyServiceError, type SafetyFinding, type SafetyGuard } from "../../services/safety";
 import {
   assertFetchableDocumentUrl,
   DocumentClientError,
@@ -65,7 +66,11 @@ export interface DocumentSuccessBody {
   budgetRemaining: BudgetRemaining | null;
   safety: {
     piiMasked: boolean;
-    /** True when output PII masking dropped the structured payload (#37). */
+    /**
+     * True when the structured payload was dropped rather than returned. Since
+     * per-entity PII policy, the leaves are masked IN PLACE instead — this is
+     * now only the fallback for a SafetyGuard without `inspectOutputMany`.
+     */
     structuredWithheld: boolean;
   };
   requestId: string;
@@ -431,15 +436,44 @@ export async function handleDocumentExtract(
     }
     text = out.content;
     piiMasked = out.piiMasked;
-    // The structured output holds the SAME content as `text`, so in MASK mode it
-    // would carry the PII that was only redacted from `text` — withhold it. (In
-    // `block` mode a PII document already 403'd above via the text screen, so a
-    // document that reaches here is clean and its structured output is safe; in
-    // `off` mode there is nothing to mask.) Callers needing structured extraction
-    // use pii:off (they own PII handling) or pii:block.
+    // The structured output holds the SAME content as `text`, so under masking
+    // it would carry the PII that was only redacted from `text`. Mask its leaves
+    // in place rather than withholding the payload (#37's stand-in). A
+    // per-entity policy is what makes the result useful: an extraction feature
+    // can allow the entity types it exists to extract and still redact the rest.
+    //
+    // (In `block` mode a PII document already 403'd above via the text screen,
+    // so a document reaching here is clean; in `off` mode there is nothing to
+    // mask. Both skip this entirely.)
     if (decision.safetyPlan.pii === "mask" && hasStructuredContent(structured)) {
-      structured = {};
-      structuredWithheld = true;
+      const masking = await maskStructured(deps, structured, decision.safetyPlan);
+      if (masking.blocked) {
+        const blocked = await failure({
+          status: "safety_blocked",
+          resolvedModel,
+          actualCostUsd,
+          error: "output_pii_detected",
+          obsStatus: "safety_blocked",
+          obsReason: "output_pii_detected",
+          http: {
+            status: 403,
+            code: "safety_blocked",
+            details: { reason: "output_pii_detected", findings: masking.findings },
+            message: "Safety Blocked",
+          },
+        });
+        await settleBilling(blocked.auditRequestId ?? "");
+        return blocked;
+      }
+      if (masking.masked) {
+        // Report masking if EITHER the text or the structured leaves changed.
+        piiMasked = piiMasked || masking.findings.some((f) => f.disposition !== "allow");
+      } else {
+        // No batch support on this guard — fall back to withholding rather than
+        // returning a payload we could not screen.
+        structured = {};
+        structuredWithheld = true;
+      }
     }
   } catch (err) {
     if (err instanceof SafetyServiceError) {
@@ -510,6 +544,78 @@ export async function handleDocumentExtract(
       requestId: auditRequestId,
     },
   };
+}
+
+/**
+ * Every string leaf in the structured payload that could carry PII, as a flat
+ * list plus the writers that put the masked values back. Collect-then-write
+ * keeps the traversal in one place: masking is a single batched call, and the
+ * shape is walked exactly once instead of once per pass.
+ */
+function structuredLeaves(s: StructuredOutput): {
+  values: string[];
+  write: (masked: string[]) => void;
+} {
+  const values: string[] = [];
+  const writers: Array<(v: string) => void> = [];
+
+  const addField = (f: DocumentField) => {
+    if (typeof f.content === "string") {
+      values.push(f.content);
+      writers.push((v) => (f.content = v));
+    }
+    // Only string values: a number or boolean cannot hold a PII substring, and
+    // coercing one to text would change the field's type in the response.
+    if (typeof f.value === "string") {
+      values.push(f.value);
+      writers.push((v) => (f.value = v));
+    }
+  };
+
+  for (const table of s.tables ?? []) {
+    for (const cell of table.cells) {
+      values.push(cell.content);
+      writers.push((v) => (cell.content = v));
+    }
+  }
+  for (const f of Object.values(s.fields ?? {})) addField(f);
+  for (const doc of s.documents ?? []) for (const f of Object.values(doc.fields)) addField(f);
+
+  return {
+    values,
+    write: (masked) => masked.forEach((v, i) => writers[i]?.(v)),
+  };
+}
+
+/**
+ * Mask the structured payload in place, so a caller gets its tables and fields
+ * back instead of the empty object #37 had to substitute.
+ *
+ * Withholding was only ever a stand-in for this: the structured output holds
+ * the same content as `text`, so under a blanket mask it would carry the PII
+ * that was redacted from `text`. Masking the leaves removes that reason. A
+ * per-entity policy is what makes the result USEFUL — an extraction feature can
+ * allow the entity types it exists to extract and still redact the rest.
+ *
+ * Returns false when the payload had to be withheld anyway (no batch support on
+ * the guard, or the backend refused), so the caller can keep reporting it.
+ */
+async function maskStructured(
+  deps: DocumentServiceDeps,
+  structured: StructuredOutput,
+  plan: SafetyPlan,
+): Promise<{ masked: boolean; blocked: boolean; findings: SafetyFinding[] }> {
+  const { values, write } = structuredLeaves(structured);
+  if (values.length === 0) return { masked: true, blocked: false, findings: [] };
+  // inspectOutputMany is optional on the interface; without it we cannot mask
+  // the leaves in one pass, so fall back to the old withhold behaviour rather
+  // than issue one round-trip per cell.
+  if (!deps.safety.inspectOutputMany) return { masked: false, blocked: false, findings: [] };
+
+  const res = await deps.safety.inspectOutputMany(values, plan);
+  if (res.action === "block") return { masked: false, blocked: true, findings: res.findings };
+  write(res.contents);
+  return { masked: true, blocked: false, findings: res.findings };
 }
 
 /**

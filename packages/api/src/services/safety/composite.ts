@@ -2,6 +2,7 @@ import type { SafetyPlan } from "@modelgov/policy-engine";
 import { messageText, type ChatMessage } from "../../types";
 import type {
   InjectionDetector,
+  OutputSafetyBatchResult,
   OutputSafetyResult,
   PiiGuard,
   SafetyFinding,
@@ -15,6 +16,25 @@ import { SafetyServiceError as SafetyBackendError } from "./contracts";
  * Order matters: PII masking happens first so the injection classifier never
  * sees raw PII. Requested checks fail closed when their backend is missing.
  */
+/**
+ * Did this pass turn up anything the plan says must reject the request?
+ *
+ * Under per-entity policy the coarse `plan.pii === "block"` is too blunt: it is
+ * set to "block" whenever ANY entity type could block, so using it directly
+ * would reject a request whose only finding was an explicitly-allowed PERSON.
+ * Consult the dispositions the guard actually assigned instead.
+ */
+function shouldBlock(findings: SafetyFinding[], plan: SafetyPlan): boolean {
+  if (plan.piiEntities) return findings.some((f) => f.disposition === "block");
+  return plan.pii === "block";
+}
+
+/** Findings that changed the text, i.e. the ones `piiMasked` is claiming. */
+function maskedAnything(findings: SafetyFinding[], plan: SafetyPlan): boolean {
+  if (plan.piiEntities) return findings.some((f) => f.disposition === "mask");
+  return findings.length > 0;
+}
+
 export class CompositeGuard implements SafetyGuard {
   constructor(
     private readonly pii: PiiGuard | null,
@@ -73,10 +93,10 @@ export class CompositeGuard implements SafetyGuard {
       if (!pii) {
         throw new SafetyBackendError("PII protection is enabled but Presidio is not configured");
       }
-      const result = await pii.process(working);
+      const result = await pii.process(working, plan.piiEntities);
       if (result.findings.length > 0) {
         findings.push(...result.findings);
-        if (plan.pii === "block") {
+        if (shouldBlock(result.findings, plan)) {
           return {
             action: "block",
             messages: working,
@@ -87,9 +107,10 @@ export class CompositeGuard implements SafetyGuard {
             safetyCostUsd,
           };
         }
-        // mask
         working = result.messages;
-        piiMasked = true;
+        // Only claim masking when something was actually redacted — under a
+        // per-entity policy a pass can detect plenty and change nothing.
+        piiMasked = maskedAnything(result.findings, plan);
       }
     }
 
@@ -106,7 +127,7 @@ export class CompositeGuard implements SafetyGuard {
       // is still un-masked), mask a COPY just for the classifier.
       let classifierInput = working;
       if (!piiOnInput && plan.pii !== "off" && pii) {
-        classifierInput = (await pii.process(working)).messages;
+        classifierInput = (await pii.process(working, plan.piiEntities)).messages;
       }
       const inj = await injection.detect(classifierInput);
       safetyCostUsd += inj.costUsd;
@@ -134,6 +155,53 @@ export class CompositeGuard implements SafetyGuard {
     };
   }
 
+  /**
+   * Batch form: one Presidio pass over every string, rather than one pass per
+   * string. A 200-cell table would otherwise be 400 sequential round-trips on
+   * the response path.
+   */
+  async inspectOutputMany(
+    contents: string[],
+    plan: SafetyPlan,
+  ): Promise<OutputSafetyBatchResult> {
+    if (plan.pii === "off" || plan.piiScope === "input" || contents.length === 0) {
+      return { action: "allow", contents, piiMasked: false, findings: [] };
+    }
+    if (!this.pii) {
+      throw new SafetyBackendError("PII protection is enabled but Presidio is not configured");
+    }
+    const result = await this.pii.process(
+      contents.map((content) => ({ role: "assistant" as const, content })),
+      plan.piiEntities,
+    );
+    if (result.findings.length === 0) {
+      return { action: "allow", contents, piiMasked: false, findings: [] };
+    }
+    if (shouldBlock(result.findings, plan)) {
+      // One blocking entity anywhere rejects the whole payload — the leaves are
+      // one document, and returning the rest would leak by omission.
+      return {
+        action: "block",
+        contents,
+        piiMasked: false,
+        findings: result.findings,
+        blockReason: "output_pii_detected",
+      };
+    }
+    // Fail closed on a shape mismatch rather than pairing masked text with the
+    // wrong leaf — and never fall back to the ORIGINAL string, which still holds
+    // the PII we were asked to redact. (Masking can legitimately yield "".)
+    if (result.messages.length !== contents.length) {
+      throw new SafetyBackendError("PII backend returned a mismatched number of masked outputs");
+    }
+    return {
+      action: "allow",
+      contents: result.messages.map((m) => messageText(m.content)),
+      piiMasked: maskedAnything(result.findings, plan),
+      findings: result.findings,
+    };
+  }
+
   // Output is scanned for PII only (injection is an input-side concern). Fails
   // closed if PII protection is requested but no backend is configured.
   async inspectOutput(
@@ -149,11 +217,11 @@ export class CompositeGuard implements SafetyGuard {
         "PII protection is enabled but Presidio is not configured",
       );
     }
-    const result = await this.pii.process([{ role: "assistant", content }]);
+    const result = await this.pii.process([{ role: "assistant", content }], plan.piiEntities);
     if (result.findings.length === 0) {
       return { action: "allow", content, piiMasked: false, findings: [] };
     }
-    if (plan.pii === "block") {
+    if (shouldBlock(result.findings, plan)) {
       return {
         action: "block",
         content,
@@ -167,7 +235,7 @@ export class CompositeGuard implements SafetyGuard {
     return {
       action: "allow",
       content: result.messages[0] ? messageText(result.messages[0].content) : content,
-      piiMasked: true,
+      piiMasked: maskedAnything(result.findings, plan),
       findings: result.findings,
     };
   }
