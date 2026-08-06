@@ -19,12 +19,24 @@ guarantees in `docs/versioning.md` apply.
 
 - **Structured output on `POST /v1/chat`** — `responseFormat: { type:
   "json_object" }` or `{ type: "json_schema", jsonSchema: { name, schema,
-  strict } }`, forwarded to the provider so extraction callers stop asking for
-  JSON in the prompt and hand-rolling parsers for what comes back. OpenAI-shaped;
-  LiteLLM translates per provider (Gemini `responseSchema`, Anthropic
-  tool-forcing). Works on the streaming and non-streaming paths, and in both
-  SDKs (`responseFormat` / `response_format`).
+  strict } }`, forwarded to the provider so extraction callers stop hand-rolling
+  parsers for prose-requested JSON. OpenAI-shaped; LiteLLM translates per
+  provider (Gemini `responseSchema`, Anthropic tool-forcing). Works on the
+  streaming and non-streaming paths, and in both SDKs (`responseFormat` /
+  `response_format`). Note `json_object` constrains the *format* only — keep the
+  instruction in your prompt, or use `json_schema`, where the schema carries it.
   ([#38](https://github.com/mml555/modelgov/issues/38))
+
+### Fixed
+
+- **Document extraction now reports when structured output was withheld.** With
+  output PII masking on, `tables`/`fields`/`documents` are dropped (they carry
+  the same content that was redacted from `text`) — but the response gave no
+  sign, so an empty payload was indistinguishable from a document that genuinely
+  had no tables, and a config mistake read as a model-quality problem. The
+  response now carries `safety.structuredWithheld` and the audit row records
+  `reasonCode = structured_withheld`.
+  ([#37](https://github.com/mml555/modelgov/issues/37))
 
 ## [1.7.2] - 2026-08-05
 

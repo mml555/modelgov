@@ -6166,6 +6166,9 @@
                       "properties": {
                         "piiMasked": {
                           "type": "boolean"
+                        },
+                        "structuredWithheld": {
+                          "type": "boolean"
                         }
                       }
                     },
