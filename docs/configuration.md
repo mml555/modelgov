@@ -255,7 +255,7 @@ routing:
 | Field | Description |
 | --- | --- |
 | `preset` | `dev` \| `balanced` \| `strict` \| `custom` |
-| `protect.pii` | `mask` \| `block` \| `off` |
+| `protect.pii` | `mask` \| `block` \| `off`, or a per-entity block (below) |
 | `protect.prompt_injection` | `block` \| `off` |
 | `injection_model` | LiteLLM model name for injection classifier |
 | `grounding` | `off` \| `strict`, or a block (below) |
@@ -264,6 +264,62 @@ Feature-level `safety:` overrides the global preset.
 
 Presidio URLs must be set in the environment for PII enforcement. If missing,
 the API logs a warning and PII rules are not enforced.
+
+### `protect.pii` — per-entity policy
+
+A single mode is the wrong granularity when the PII *is* the payload. Document
+extraction is the case: the fields worth extracting — named insured, property
+address, policy number — are exactly what a blanket `pii: mask` destroys, so
+those features had to turn PII off entirely and got no safety layer at all,
+including on the free-text fields nobody wanted sent upstream.
+
+```yaml
+features:
+  policy_extract:
+    model_class: cheap
+    max_tokens: 500
+    safety:
+      protect:
+        pii:
+          allow: [PERSON, LOCATION]      # the fields this feature exists to extract
+          block: [CREDIT_CARD]           # presence rejects the request
+          mask:  [EMAIL_ADDRESS]         # redacted
+          default: mask                  # everything else
+```
+
+| Field | Description |
+| --- | --- |
+| `mask` | Entity types to redact |
+| `block` | Entity types whose presence rejects the request |
+| `allow` | Entity types passed through untouched |
+| `default` | Disposition for any type in none of the lists. Defaults to `mask`. |
+
+`pii: mask` (the bare mode) remains valid and applies uniformly.
+
+Entity names are Presidio's, and are **not** validated against a fixed list —
+deployments register their own recognizers, so a closed enum would reject valid
+config. Only the shape is checked (upper snake case), to catch a typo.
+
+Notes that matter in practice:
+
+- **`default` is `mask`.** A config naming three entity types and forgetting a
+  fourth must not leak it. Write `default: allow` for deny-list semantics —
+  mask only what is listed — which is what an extraction feature with dozens of
+  legitimate entity types needs.
+- **An entity in two lists is a config error**, not a silent precedence rule.
+- **A feature's `pii` replaces the global one entirely**, mode and lists
+  together. A feature whose author wrote `pii: mask` never inherits a global
+  `allow` list they did not know about.
+- **Allowed entities are still recorded as findings.** "We detected a PERSON and
+  deliberately passed it through" is the claim a compliance review needs, and
+  silence cannot make it.
+- **Structured document output is masked in place** rather than withheld. This
+  is what makes `POST /v1/documents` usable with masking on: the extracted
+  tables and fields come back with allowed entities intact and the rest
+  redacted. (A custom `SafetyGuard` that does not implement `inspectOutputMany`
+  still falls back to withholding — see `safety.structuredWithheld`.)
+
+---
 
 ### `grounding`
 

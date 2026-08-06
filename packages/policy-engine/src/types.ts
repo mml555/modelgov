@@ -5,6 +5,36 @@
 
 export type SafetyPresetName = "dev" | "balanced" | "strict" | "custom";
 export type PiiMode = "mask" | "block" | "off";
+/** What happens to one detected PII entity type. */
+export type PiiDisposition = "mask" | "block" | "allow";
+/**
+ * Per-entity PII policy, for features where the PII *is* the payload.
+ *
+ * Document extraction is the motivating case: the fields worth extracting
+ * (named insured, property address, policy number) are exactly the entities a
+ * blanket `pii: mask` destroys, so today those features have to turn PII off
+ * entirely and get no safety layer at all — including on the free-text fields
+ * nobody wanted sent upstream.
+ *
+ * Entity names are Presidio's (`EMAIL_ADDRESS`, `US_SSN`, custom recognizers).
+ * They are NOT validated against a fixed list: Presidio deployments register
+ * their own recognizers, so a closed enum here would reject valid config.
+ */
+export interface PiiEntityPolicy {
+  /** Entity types to redact. */
+  mask?: string[];
+  /** Entity types whose presence rejects the request outright. */
+  block?: string[];
+  /** Entity types to pass through untouched — the point of the feature. */
+  allow?: string[];
+  /**
+   * Disposition for any entity type in none of the lists. Defaults to `mask`:
+   * a config that names three entities and forgets a fourth must not leak it.
+   * Set `allow` for deny-list semantics (mask only what is listed), which is
+   * what an extraction feature with dozens of legitimate entity types needs.
+   */
+  default: PiiDisposition;
+}
 /** Which side(s) of a request PII handling applies to. `input` masks the user's
  * prompt (privacy before the model/logs); `output` masks the model's completion
  * (e.g. redact extracted PII); `both` (default) does both. */
@@ -128,6 +158,12 @@ export interface FeatureBudget {
 
 export interface ProtectConfig {
   pii?: PiiMode;
+  /**
+   * Per-entity policy, when `pii` was authored as an object rather than a mode
+   * string. Both forms are accepted; `pii` still carries the coarse mode so
+   * every existing `pii === "off"` / `=== "block"` check keeps working.
+   */
+  piiEntities?: PiiEntityPolicy;
   /** Which side(s) PII handling applies to. Absent = "both". */
   piiScope?: PiiScope;
   promptInjection?: InjectionMode;
@@ -302,6 +338,13 @@ export interface EvaluateInput {
 export interface SafetyPlan {
   preset: SafetyPresetName;
   pii: PiiMode;
+  /**
+   * Per-entity dispositions, when the feature configured them. Present means
+   * the guard decides mask/block/allow per detected entity instead of applying
+   * `pii` uniformly. `pii` is still set to the strictest thing that can happen
+   * (`block` when any entity may block), so coarse checks stay conservative.
+   */
+  piiEntities?: PiiEntityPolicy;
   /** Which side(s) PII handling applies to ("both" when unset). */
   piiScope: PiiScope;
   promptInjection: InjectionMode;

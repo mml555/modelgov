@@ -7,13 +7,16 @@ import type {
   ProtectConfig,
   SafetyPlan,
   SafetyPresetName,
+  PiiEntityPolicy,
 } from "./types";
 
 // Per-preset defaults. The pure engine resolves WHICH protections apply; the
 // API's Safety service performs the actual I/O enforcement.
+// Presets are coarse by definition — per-entity policy is always explicit, so
+// it is excluded here rather than given a meaningless preset default.
 export const PRESET_DEFAULTS: Record<
   SafetyPresetName,
-  Required<ProtectConfig>
+  Required<Omit<ProtectConfig, "piiEntities">>
 > = {
   dev: { pii: "off", piiScope: "both", promptInjection: "off" },
   balanced: { pii: "mask", piiScope: "both", promptInjection: "block" },
@@ -43,17 +46,28 @@ export function resolveSafetyPlan(
   const effectivePreset: SafetyPresetName = override?.preset ?? globalPreset;
 
   // Global-scope effective value: explicit global protect, else global preset default.
-  const globalPii: PiiMode =
-    config.safety.protect.pii ?? PRESET_DEFAULTS[globalPreset].pii;
+  // `pii` and `piiEntities` resolve as ONE unit at whichever tier supplies the
+  // mode. Resolving them independently would let a feature that writes the
+  // plain `pii: mask` silently inherit the global's per-entity allowances —
+  // i.e. keep passing PERSON through on a feature whose author asked for a
+  // blanket mask.
+  type PiiSetting = { mode: PiiMode; entities?: PiiEntityPolicy };
+  const globalPiiSetting: PiiSetting = config.safety.protect.pii
+    ? { mode: config.safety.protect.pii, entities: config.safety.protect.piiEntities }
+    : { mode: PRESET_DEFAULTS[globalPreset].pii };
+  const globalPii: PiiMode = globalPiiSetting.mode;
   const globalInjection: InjectionMode =
     config.safety.protect.promptInjection ??
     PRESET_DEFAULTS[globalPreset].promptInjection;
 
   // Feature-scope value: explicit feature protect, else the feature preset's
   // default (undefined when the feature didn't override the preset).
-  const featurePii: PiiMode | undefined =
-    override?.protect?.pii ??
-    (override?.preset ? PRESET_DEFAULTS[override.preset].pii : undefined);
+  const featurePiiSetting: PiiSetting | undefined = override?.protect?.pii
+    ? { mode: override.protect.pii, entities: override.protect.piiEntities }
+    : override?.preset
+      ? { mode: PRESET_DEFAULTS[override.preset].pii }
+      : undefined;
+  const featurePii: PiiMode | undefined = featurePiiSetting?.mode;
   const featureInjection: InjectionMode | undefined =
     override?.protect?.promptInjection ??
     (override?.preset
@@ -77,9 +91,14 @@ export function resolveSafetyPlan(
     config.safety.protect.piiScope ??
     PRESET_DEFAULTS[globalPreset].piiScope;
 
+  const piiSetting = featurePiiSetting ?? globalPiiSetting;
+
   return {
     preset: effectivePreset,
     pii: featurePii ?? globalPii,
+    // Absent unless per-entity policy was actually configured, so a plan can be
+    // read as "coarse mode" without checking for an empty object.
+    ...(piiSetting.entities ? { piiEntities: piiSetting.entities } : {}),
     piiScope,
     promptInjection: featureInjection ?? globalInjection,
     injectionModel: config.safety.injectionModel,

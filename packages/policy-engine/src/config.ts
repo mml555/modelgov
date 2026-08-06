@@ -8,6 +8,8 @@ import {
   type ModelgovConfig,
   type FeatureSafetyOverride,
   type GroundingConfig,
+  type PiiEntityPolicy,
+  type PiiMode,
 } from "./types";
 
 // modelgov.yaml is authored in snake_case; we validate it and transform to the
@@ -20,14 +22,85 @@ const presetEnum = z.enum(["dev", "balanced", "strict", "custom"]);
 // control, so a misspelled key (e.g. `promptInjection` in camelCase, or a typo)
 // must be a loud config error, never silently dropped — a dropped protect key
 // would fall back to the preset default and can fail OPEN (injection/pii off).
+// Presidio entity name. NOT a closed enum: deployments register their own
+// recognizers, so validating against a fixed list would reject valid config.
+// Shape is still constrained (upper snake case) to catch a lower-case typo.
+const piiEntityName = z
+  .string()
+  .regex(/^[A-Z][A-Z0-9_]*$/, "PII entity types are upper snake case, e.g. EMAIL_ADDRESS");
+
+/**
+ * `pii: mask` (the original shape) or a per-entity block. Both stay valid, so
+ * every existing modelgov.yaml keeps working unchanged.
+ */
+const piiSchema = z.union([
+  z.enum(["mask", "block", "off"]),
+  z
+    .object({
+      mask: z.array(piiEntityName).nonempty().optional(),
+      block: z.array(piiEntityName).nonempty().optional(),
+      allow: z.array(piiEntityName).nonempty().optional(),
+      // Fail-safe: a config naming three entities and forgetting a fourth must
+      // not leak it. Authors wanting deny-list semantics write `default: allow`.
+      default: z.enum(["mask", "block", "allow"]).default("mask"),
+    })
+    .strict()
+    .superRefine((v, ctx) => {
+      // One entity in two lists has no defensible resolution order, so it is a
+      // config error rather than a silent precedence rule nobody can predict.
+      const seen = new Map<string, string>();
+      for (const list of ["mask", "block", "allow"] as const) {
+        for (const e of v[list] ?? []) {
+          const prior = seen.get(e);
+          if (prior) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              message: `PII entity ${e} is listed in both '${prior}' and '${list}'`,
+            });
+          } else {
+            seen.set(e, list);
+          }
+        }
+      }
+      if (seen.size === 0) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message:
+            "pii block lists no entities; use the string form (`pii: mask`) for a blanket policy",
+        });
+      }
+    }),
+]);
+
 const protectSchema = z
   .object({
-    pii: z.enum(["mask", "block", "off"]).optional(),
+    pii: piiSchema.optional(),
     pii_scope: z.enum(["input", "output", "both"]).optional(),
     prompt_injection: z.enum(["block", "off"]).optional(),
   })
   .strict()
-  .transform((p) => ({ pii: p.pii, piiScope: p.pii_scope, promptInjection: p.prompt_injection }));
+  .transform((p) => ({
+    ...normalizePii(p.pii),
+    piiScope: p.pii_scope,
+    promptInjection: p.prompt_injection,
+  }));
+
+/**
+ * Collapse either `pii` form into { pii, piiEntities }.
+ *
+ * The coarse mode is kept for the many `pii === "off"` / `=== "block"` checks
+ * across the engine and guard. For the object form it is set to the STRICTEST
+ * thing that can happen — `block` when any entity may block — so conservative
+ * checks (e.g. refusing an unscannable image) stay conservative.
+ */
+function normalizePii(
+  pii: z.infer<typeof piiSchema> | undefined,
+): { pii?: PiiMode; piiEntities?: PiiEntityPolicy } {
+  if (pii === undefined) return {};
+  if (typeof pii === "string") return { pii };
+  const canBlock = (pii.block?.length ?? 0) > 0 || pii.default === "block";
+  return { pii: canBlock ? "block" : "mask", piiEntities: pii };
+}
 
 const projectSchema = z
   .object({
