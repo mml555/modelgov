@@ -32,12 +32,13 @@ describe("grounding persona and refusal copy", () => {
     expect(sys).not.toContain(DEFAULT_GROUNDING_PERSONA);
   });
 
-  it("falls back to a persona that names no industry or channel", () => {
+  it("keeps the pre-existing default when nothing is configured", () => {
+    // The default is DELIBERATELY unchanged, so upgrading does not silently
+    // reword live traffic. It is a support-desk voice — wrong for most
+    // deployments, which is exactly why `persona` is configurable.
     const sys = systemOf(buildGroundedMessages(messages, PLAIN));
     expect(sys.startsWith(DEFAULT_GROUNDING_PERSONA)).toBe(true);
-    // The old default hard-coded a support desk. A deployment that never
-    // configures anything must not claim to be one.
-    expect(sys.toLowerCase()).not.toContain("customer-support");
+    expect(DEFAULT_GROUNDING_PERSONA).toBe("You are a customer-support assistant.");
   });
 
   it("returns the configured refusal when verification fails", () => {
@@ -51,11 +52,13 @@ describe("grounding persona and refusal copy", () => {
     expect(v.verifiedQuotes).toBe(1);
   });
 
-  it("promises no human handoff by default", () => {
+  it("keeps the pre-existing refusal when nothing is configured", () => {
     const v = verifyGrounding("garbage", PLAIN);
     expect(v.answer).toBe(GROUNDING_REFUSAL);
-    // A deployment with no support desk would be lying to its users.
-    expect(GROUNDING_REFUSAL.toLowerCase()).not.toContain("support agent");
+    // Unchanged on purpose. It promises a human handoff, which a deployment
+    // without a support desk cannot honour — such deployments set `refusal`,
+    // and the test above proves that override reaches the user.
+    expect(GROUNDING_REFUSAL).toContain("human support agent");
   });
 
   it("keeps the enforcement rules regardless of the persona", () => {

@@ -15,17 +15,24 @@ import type { ChatMessage } from "../../types";
  * config. What is never configurable is whether verification runs.
  */
 
-/** Neutral default persona — no industry, no channel, no promise of a handoff. */
-export const DEFAULT_GROUNDING_PERSONA =
-  "You are a careful assistant answering strictly from supplied source material.";
+/**
+ * Default persona. Unchanged from before grounding copy became configurable, so
+ * upgrading alters nothing a deployment already ships to its users.
+ *
+ * It IS a customer-support voice, which is wrong for most deployments — that is
+ * the whole reason `persona` exists. Any feature outside a support desk should
+ * set it. Changing the default instead would silently reword live traffic on a
+ * patch upgrade, which is not the gateway's call to make.
+ */
+export const DEFAULT_GROUNDING_PERSONA = "You are a customer-support assistant.";
 
 /**
  * Default refusal, shown whenever the answer can't be verified against the
- * context. Deliberately says nothing about support agents: a deployment that
- * has no humans to escalate to would be lying to its users.
+ * context. Also unchanged — note it promises a handoff to a human agent, which
+ * a deployment with no support desk cannot honour. Set `refusal` for those.
  */
 export const GROUNDING_REFUSAL =
-  "I'm sorry — I couldn't find that in the provided sources, so I don't want to guess.";
+  "I'm sorry — I couldn't find that in our knowledge base, so I don't want to guess. Let me connect you with a human support agent.";
 
 /**
  * A retrieved passage. Callers may pass a bare string (the original shape); the
