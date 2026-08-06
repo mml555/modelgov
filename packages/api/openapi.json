@@ -5468,6 +5468,12 @@
                   "modelClass": {
                     "type": "string"
                   },
+                  "dimensions": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 16384,
+                    "description": "Output vector width (Matryoshka models: text-embedding-3-*, gemini-embedding-001). Omit for the model's native width. The response reports the width ACTUALLY returned — which may differ, since a provider can ignore or clamp this on a non-MRL model."
+                  },
                   "inputTokensEstimate": {
                     "type": "integer",
                     "minimum": 1
@@ -5517,6 +5523,13 @@
                     },
                     "model": {
                       "type": "string"
+                    },
+                    "dimensions": {
+                      "type": [
+                        "null",
+                        "integer"
+                      ],
+                      "description": "Width of the vectors actually returned (not an echo of the request). Null when unknown: a legacy idempotency replay, or a batch whose vectors are not all the same width."
                     },
                     "provider": {
                       "type": "string"

@@ -276,6 +276,34 @@ describe("LiteLLM embeddings", () => {
   });
 });
 
+describe("embeddings dimensions", () => {
+  function capturing(): { sent: () => Record<string, unknown>; fetchImpl: typeof fetch } {
+    let body: Record<string, unknown> = {};
+    const fetchImpl: typeof fetch = async (_url, init) => {
+      body = JSON.parse(String((init as RequestInit).body)) as Record<string, unknown>;
+      return jsonResponse({ data: [{ embedding: [0.1, 0.2] }], model: "m", usage: { prompt_tokens: 3 } });
+    };
+    return { sent: () => body, fetchImpl };
+  }
+
+  it("omits dimensions from the serialized request when unset", async () => {
+    // The service-level test uses a fake client and never serializes, so this
+    // is the only place that proves a non-MRL provider sees the same body it
+    // always saw — absent, not null.
+    const { sent, fetchImpl } = capturing();
+    const client = createLiteLLMClient({ baseUrl: "http://x", fetchImpl });
+    await client.embed!({ model: "m", input: ["a"] });
+    expect("dimensions" in sent()).toBe(false);
+  });
+
+  it("sends dimensions when set", async () => {
+    const { sent, fetchImpl } = capturing();
+    const client = createLiteLLMClient({ baseUrl: "http://x", fetchImpl });
+    await client.embed!({ model: "m", input: ["a"], dimensions: 512 });
+    expect(sent().dimensions).toBe(512);
+  });
+});
+
 describe("structured output (response_format)", () => {
   /** Capture the JSON body the client actually puts on the wire. */
   function capturing(): { sent: () => Record<string, unknown>; fetchImpl: typeof fetch } {

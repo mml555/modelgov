@@ -399,6 +399,7 @@ class ModelgovClient:
         input: Union[str, Sequence[str]],
         model_class: Optional[str] = None,
         requested_model_class: Optional[str] = None,
+        dimensions: Optional[int] = None,
         input_tokens_estimate: Optional[int] = None,
         project_id: Optional[str] = None,
         environment: Optional[str] = None,
@@ -414,6 +415,12 @@ class ModelgovClient:
         Args:
             input: A single text, or a batch of texts to embed. A list is sent
                 as a JSON array (one vector is returned per input, in order).
+            dimensions: Output vector width for Matryoshka models
+                (``text-embedding-3-*``, ``gemini-embedding-001``). Omit for the
+                model's native width. Dimension defines the vector space, so a
+                corpus embedded at a different width is not comparable — check
+                ``dimensions`` on the response rather than assuming this was
+                honoured.
             request_id: Sets the ``x-request-id`` correlation header — see
                 :meth:`chat` — to roll this call up with related requests.
 
@@ -430,6 +437,8 @@ class ModelgovClient:
         resolved_model_class = model_class or requested_model_class
         if resolved_model_class is not None:
             body["modelClass"] = resolved_model_class
+        if dimensions is not None:
+            body["dimensions"] = dimensions
         if input_tokens_estimate is not None:
             body["inputTokensEstimate"] = input_tokens_estimate
         if project_id is not None:

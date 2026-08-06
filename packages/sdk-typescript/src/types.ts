@@ -130,6 +130,13 @@ export interface EmbeddingsRequest {
   /** One text or a batch of texts to embed. */
   input: string | string[];
   modelClass?: ModelClassName;
+  /**
+   * Output vector width for Matryoshka models (text-embedding-3-*,
+   * gemini-embedding-001). Omit for the model's native width. Dimension
+   * defines the vector space — a corpus embedded at a different width is not
+   * comparable to this one.
+   */
+  dimensions?: number;
   inputTokensEstimate?: number;
   projectId?: string;
   environment?: string;
@@ -140,6 +147,16 @@ export interface EmbeddingsResponse {
   /** One vector per input, in request order. */
   embeddings: number[][];
   model: string;
+  /**
+   * Width of the vectors actually returned — assert this rather than assuming
+   * your requested width was honoured, since a provider may ignore
+   * `dimensions` on a non-MRL model.
+   *
+   * Null when the gateway cannot name one width (a batch whose vectors differ
+   * in length). Absent entirely on a response replayed from an idempotency row
+   * cached before this field existed, which is why it is optional.
+   */
+  dimensions?: number | null;
   provider: string;
   decision: "allow" | "degrade" | "fallback";
   reason?: string;
