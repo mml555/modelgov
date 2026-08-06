@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { assertTestDatabase, UnsafeTestDatabaseError } from "./assertTestDatabase";
 
 // The test suite TRUNCATEs every table in `public` before each file, against
@@ -7,8 +7,18 @@ import { assertTestDatabase, UnsafeTestDatabaseError } from "./assertTestDatabas
 
 const OVERRIDE = "MODELGOV_ALLOW_DESTRUCTIVE_TEST_DB";
 
-afterEach(() => {
+// The override is a legitimate way to RUN this suite, so it may already be set
+// in the environment. Clearing it unconditionally would strip it for every test
+// file that runs after this one — breaking setup.ts's guard for the rest of the
+// run. Capture, clear for isolation, restore.
+const priorOverride = process.env[OVERRIDE];
+
+beforeEach(() => {
   delete process.env[OVERRIDE];
+});
+afterEach(() => {
+  if (priorOverride === undefined) delete process.env[OVERRIDE];
+  else process.env[OVERRIDE] = priorOverride;
 });
 
 describe("assertTestDatabase — allows the repo's own throwaway databases", () => {
