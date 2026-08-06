@@ -174,6 +174,16 @@ export function buildServer(opts: BuildServerOptions): FastifyInstance {
     bodyLimit: opts.bodyLimitBytes,
     trustProxy: opts.trustProxy ?? false,
     requestTimeout: opts.requestTimeoutMs ?? 0,
+    ajv: {
+      customOptions: {
+        // `context` items are `type: ["string", "object"]` — a grounded feature
+        // accepts plain passages or structured ones. Ajv's strict mode logs a
+        // warning for every union type at startup; opting in silences the noise
+        // without loosening validation (zod is the strict layer for the object
+        // branch, see chat/schemas.ts).
+        allowUnionTypes: true,
+      },
+    },
   });
 
   registerRequestContext(app);

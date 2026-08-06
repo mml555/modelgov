@@ -141,6 +141,33 @@ describe.skipIf(!DATABASE_URL)("grounding (integration)", () => {
     expect(res.json().error.details.required).toEqual(["page"]);
   });
 
+  it("still enforces the per-passage length limit on the string branch", async () => {
+    // The union widened `items.type`; minLength/maxLength apply only to the
+    // string branch, and losing them would let a caller ship a 100k+ passage.
+    const app = appWith(chatReturning("{}"));
+    const res = await post(app, {
+      userId: "u1",
+      userType: "logged_in",
+      feature: "grounded_support",
+      messages: [{ role: "user", content: "how long do refunds take?" }],
+      context: ["x".repeat(100_001)],
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it("rejects an unknown key on a structured passage", async () => {
+    // Ajv sees only `type: object` here, so zod is what keeps the shape strict.
+    const app = appWith(chatReturning("{}"));
+    const res = await post(app, {
+      userId: "u1",
+      userType: "logged_in",
+      feature: "grounded_support",
+      messages: [{ role: "user", content: "how long do refunds take?" }],
+      context: [{ text: CONTEXT[0]!, pge: 12 }],
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
   it("uses the configured persona and verifies the cited page end-to-end", async () => {
     let seen: LiteLLMChatParams | undefined;
     const answer = JSON.stringify({

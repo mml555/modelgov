@@ -213,7 +213,9 @@ export const chatBodyJsonSchema = {
       // runs with removeAdditional, and declaring the object branch's
       // properties here would strip passage metadata while validating the
       // string branch. Zod is the strict layer.
-      items: { type: ["string", "object"] },
+      // minLength/maxLength apply only to the string branch (JSON Schema ignores
+      // them for objects), so the documented bound survives the union.
+      items: { type: ["string", "object"], minLength: 1, maxLength: 100000 },
     },
     inputTokensEstimate: { type: "integer", minimum: 1 },
     temperature: { type: "number", minimum: 0, maximum: 2 },
