@@ -55,7 +55,7 @@ export function toPassages(context: Array<string | GroundingPassage>): Grounding
 /** The passage fields a feature may require, in a stable order for prompts. */
 const CITE_FIELDS: readonly GroundingCitationField[] = ["page", "section", "title", "url"];
 
-function citeFields(opts: GroundingOptions | undefined): GroundingCitationField[] {
+export function citeFields(opts: GroundingOptions | undefined): GroundingCitationField[] {
   const requested = opts?.cite;
   if (!requested || requested.length === 0) return [];
   return CITE_FIELDS.filter((f) => requested.includes(f));
@@ -67,6 +67,22 @@ function metaLine(p: GroundingPassage, fields: GroundingCitationField[]): string
     .map((f) => (p[f] === undefined ? null : `${f}=${JSON.stringify(p[f])}`))
     .filter((x): x is string => x !== null);
   return parts.length > 0 ? ` (${parts.join(" ")})` : "";
+}
+
+/**
+ * Render each passage exactly as it appears in the grounded prompt.
+ *
+ * Injection screening MUST classify this, not the bare `text`. Metadata is
+ * externally sourced like the passage body, and once `cite` is configured it is
+ * rendered into the system prompt — so a passage could otherwise carry an
+ * instruction in its `title` or `url` and reach the model unscreened. One
+ * formatter, used by both, is what keeps the two from drifting apart again.
+ */
+export function renderPassages(
+  passages: GroundingPassage[],
+  fields: GroundingCitationField[],
+): string[] {
+  return passages.map((p, i) => `[${i + 1}]${metaLine(p, fields)} ${p.text}`);
 }
 
 function systemPrompt(
@@ -121,9 +137,7 @@ export function buildGroundedMessages(
 ): ChatMessage[] {
   const passages = toPassages(context);
   const fields = citeFields(opts);
-  const joined = passages
-    .map((p, i) => `[${i + 1}]${metaLine(p, fields)} ${p.text}`)
-    .join("\n---\n");
+  const joined = renderPassages(passages, fields).join("\n---\n");
   const persona = opts?.persona ?? DEFAULT_GROUNDING_PERSONA;
   return [{ role: "system", content: systemPrompt(joined, persona, fields) }, ...messages];
 }
@@ -265,7 +279,12 @@ function numbersGrounded(answer: string, passages: GroundingPassage[]): boolean 
   // Metadata counts as context: with `cite: [page]` the model is shown page
   // numbers and may legitimately write "see page 12" in the answer.
   const haystack = passages
-    .map((p) => [p.text, p.page, p.section, p.title, p.url].filter(Boolean).join(" "))
+    .map((p) =>
+      // `!== undefined`, not filter(Boolean): a page of 0 is a real page, and
+      // dropping it would refuse an answer the context actually supports.
+      // Matches the same enumeration in estimateInputTokensFromMessages.
+      [p.text, p.page, p.section, p.title, p.url].filter((v) => v !== undefined).join(" "),
+    )
     .join(" ");
   const contextNums = new Set(haystack.match(/\d+/g) ?? []);
   return answerNums.every((n) => contextNums.has(n));

@@ -24,6 +24,8 @@ import {
 import { fail } from "./mapper";
 import {
   buildGroundedMessages,
+  citeFields,
+  renderPassages,
   toPassages,
   type GroundingOptions,
   type GroundingPassage,
@@ -157,8 +159,9 @@ function applyGrounding(
 /**
  * Screen the retrieved grounding context for prompt injection. RAG context is
  * externally sourced, so a poisoned passage could otherwise hijack the grounded
- * answer (and cite itself past the verifier). Only runs when the feature already
- * blocks injection. PII is deliberately NOT masked here — verbatim citation
+ * answer (and cite itself past the verifier). Screens the rendered passage —
+ * citation metadata included, since that is externally sourced too and lands in
+ * the same system prompt. Only runs when the feature already blocks injection. PII is deliberately NOT masked here — verbatim citation
  * matching needs the raw text — so this screens for injection only.
  *
  * Note: the context is still sent to the provider un-masked by design (grounding
@@ -173,10 +176,14 @@ async function screenGroundingContext(
   if (decision.safetyPlan.promptInjection !== "block") return { costUsd: 0, failure: null };
   if (!body.context || body.context.length === 0) return { costUsd: 0, failure: null };
 
-  const ctxMessages: ChatMessage[] = toPassages(body.context).map((p) => ({
-    role: "user",
-    content: p.text,
-  }));
+  // Screen exactly what the prompt will contain — the SAME rendering, metadata
+  // included. Screening only `p.text` would let a poisoned `title` or `url`
+  // reach the model unscreened once `cite` is configured.
+  const rendered = renderPassages(
+    toPassages(body.context),
+    citeFields(decision.safetyPlan.groundingOptions),
+  );
+  const ctxMessages: ChatMessage[] = rendered.map((content) => ({ role: "user", content }));
   const injOnlyPlan: SafetyPlan = { ...decision.safetyPlan, pii: "off", grounding: "off" };
   try {
     const res = await deps.safety.inspectInput(ctxMessages, injOnlyPlan);

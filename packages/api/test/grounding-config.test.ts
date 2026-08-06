@@ -45,6 +45,10 @@ describe("grounding persona and refusal copy", () => {
     const v = verifyGrounding(out, PLAIN, { refusal: "Not in the policy documents." });
     expect(v.grounded).toBe(false);
     expect(v.answer).toBe("Not in the policy documents.");
+    // This refuses on the numeric guard ("900 days"), not the quote — which
+    // verified. The non-zero count is the audit signal that distinguishes the
+    // two failure modes, so pin it.
+    expect(v.verifiedQuotes).toBe(1);
   });
 
   it("promises no human handoff by default", () => {
@@ -63,6 +67,17 @@ describe("grounding persona and refusal copy", () => {
 });
 
 describe("grounding citation fields", () => {
+  it("treats a page of 0 as a real page in the numeric guard", () => {
+    // filter(Boolean) used to drop it, refusing an answer the context supports.
+    const zeroPage: GroundingPassage[] = [{ text: "The cover page states the policy number.", page: 0 }];
+    const out = JSON.stringify({
+      found: true,
+      answer: "See page 0.",
+      citations: [{ quote: "The cover page states the policy number.", page: 0 }],
+    });
+    expect(verifyGrounding(out, zeroPage, { cite: ["page"] }).grounded).toBe(true);
+  });
+
   it("shows the required metadata beside each passage in the prompt", () => {
     const sys = systemOf(buildGroundedMessages(messages, PAGED, { cite: ["page", "section"] }));
     expect(sys).toContain('[1] (page=12 section="4.2")');
