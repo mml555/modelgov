@@ -1,5 +1,6 @@
 import { beforeAll } from "vitest";
 import { createPool } from "../src/db/pool";
+import { assertTestDatabase } from "./assertTestDatabase";
 
 /**
  * Give every test FILE a clean database before it runs. This hook is registered
@@ -13,6 +14,10 @@ import { createPool } from "../src/db/pool";
  * that bleed surfaced non-deterministically. Truncating every table here removes
  * cross-file bleed at the root — no per-file truncation list to drift.
  *
+ * Because that TRUNCATE is unconditional and aimed at whatever DATABASE_URL
+ * holds, `assertTestDatabase` runs first: a stale export pointing at a dev or
+ * staging database would otherwise be destroyed by `pnpm test`, silently.
+ *
  * The table list is discovered from the catalog (not hard-coded) so a new
  * migration's table is covered automatically. `schema_migrations` is excluded:
  * globalSetup applied the schema and this must not undo that record. No-op when
@@ -21,6 +26,7 @@ import { createPool } from "../src/db/pool";
 beforeAll(async () => {
   const url = process.env.DATABASE_URL;
   if (!url) return;
+  assertTestDatabase(url);
   const pool = createPool(url);
   try {
     const { rows } = await pool.query<{ tablename: string }>(
