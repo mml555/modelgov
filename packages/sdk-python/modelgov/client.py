@@ -27,6 +27,7 @@ from .types import (
     DocumentExtractResult,
     EmbeddingsResult,
     ExplainResult,
+    GroundingPassage,
     ProviderHealthResult,
     TransactionsResult,
     UsageResult,
@@ -134,7 +135,7 @@ class ModelgovClient:
         user_type: str,
         feature: str,
         messages: Sequence[ChatMessage],
-        context: Optional[Sequence[str]] = None,
+        context: Optional[Sequence[Union[str, GroundingPassage]]] = None,
         model_class: Optional[str] = None,
         requested_model_class: Optional[str] = None,
         input_tokens_estimate: Optional[int] = None,
@@ -224,7 +225,7 @@ class ModelgovClient:
         user_type: str,
         feature: str,
         messages: Sequence[ChatMessage],
-        context: Optional[Sequence[str]] = None,
+        context: Optional[Sequence[Union[str, GroundingPassage]]] = None,
         model_class: Optional[str] = None,
         requested_model_class: Optional[str] = None,
         input_tokens_estimate: Optional[int] = None,
@@ -649,7 +650,7 @@ class ModelgovClient:
         user_type: str,
         feature: str,
         messages: Sequence[ChatMessage],
-        context: Optional[Sequence[str]],
+        context: Optional[Sequence[Union[str, GroundingPassage]]],
         model_class: Optional[str],
         requested_model_class: Optional[str],
         input_tokens_estimate: Optional[int],
@@ -667,7 +668,10 @@ class ModelgovClient:
             "messages": [dict(m) for m in messages],
         }
         if context is not None:
-            body["context"] = list(context)
+            # Passages may be plain strings or mappings carrying page/section
+            # metadata; copy mappings so a caller's dict cannot be aliased into
+            # the request body.
+            body["context"] = [c if isinstance(c, str) else dict(c) for c in context]
         resolved_model_class = model_class or requested_model_class
         if resolved_model_class is not None:
             body["modelClass"] = resolved_model_class

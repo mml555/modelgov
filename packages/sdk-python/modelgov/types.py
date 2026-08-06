@@ -50,6 +50,22 @@ class ImagePart(TypedDict):
 ContentPart = Union[TextPart, ImagePart]
 
 
+class GroundingPassage(TypedDict):
+    """A retrieved passage for a grounded feature.
+
+    A bare ``str`` is still accepted wherever a passage is. The metadata fields
+    exist so a feature configured with ``cite: [page, section]`` can require
+    citations to name them — and so the gateway can VERIFY the cited value
+    against the passage the quote came from, rather than pass it through.
+    """
+
+    text: str
+    page: NotRequired[Union[int, str]]
+    section: NotRequired[str]
+    title: NotRequired[str]
+    url: NotRequired[str]
+
+
 class ChatMessage(TypedDict):
     """A single chat message. ``role`` is one of system/user/assistant/tool.
 
@@ -348,6 +364,7 @@ __all__ = [
     "DocumentTableCell",
     "DocumentTable",
     "DocumentField",
+    "GroundingPassage",
     "DocumentEntity",
     "DocumentExtractResponse",
     "DocumentExtractResult",
