@@ -15,7 +15,33 @@ export interface PresidioOptions {
   language?: string;
   /** Per-call timeout; a hung Presidio must not stall the whole request. */
   timeoutMs?: number;
+  /**
+   * Maximum texts screened at once. Structured document output can be hundreds
+   * of leaves (a 200-cell table), and dispatching all of them concurrently
+   * would open ~200 sockets and can overwhelm a single Presidio replica.
+   */
+  maxConcurrency?: number;
   fetchImpl?: typeof fetch;
+}
+
+/**
+ * Run `worker` over every item with at most `limit` in flight, preserving order.
+ * Small enough to keep in-tree rather than take a dependency for one use.
+ */
+async function mapLimit<T, R>(
+  items: T[],
+  limit: number,
+  worker: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let next = 0;
+  const runners = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    for (let i = next++; i < items.length; i = next++) {
+      results[i] = await worker(items[i] as T, i);
+    }
+  });
+  await Promise.all(runners);
+  return results;
 }
 
 /**
@@ -27,6 +53,7 @@ export class PresidioPiiGuard implements PiiGuard {
   private readonly anonymizerUrl: string;
   private readonly language: string;
   private readonly timeoutMs: number;
+  private readonly maxConcurrency: number;
   private readonly fetchImpl: typeof fetch;
 
   constructor(opts: PresidioOptions) {
@@ -34,6 +61,7 @@ export class PresidioPiiGuard implements PiiGuard {
     this.anonymizerUrl = opts.anonymizerUrl.replace(/\/$/, "");
     this.language = opts.language ?? "en";
     this.timeoutMs = opts.timeoutMs ?? 10_000;
+    this.maxConcurrency = Math.max(1, opts.maxConcurrency ?? 8);
     this.fetchImpl = opts.fetchImpl ?? fetch;
   }
 
@@ -41,11 +69,12 @@ export class PresidioPiiGuard implements PiiGuard {
     messages: ChatMessage[],
     policy?: PiiEntityPolicy,
   ): Promise<{ messages: ChatMessage[]; findings: SafetyFinding[] }> {
-    // Screen messages concurrently: a long conversation would otherwise incur
-    // 2N sequential Presidio round-trips on the request hot path. Promise.all
-    // preserves order, so masked messages stay aligned with their originals.
-    const processed = await Promise.all(
-      messages.map(async (message) => {
+    // Screen messages concurrently, but BOUNDED: sequential would incur 2N
+    // round-trips on the hot path, while unbounded would open one socket per
+    // leaf — a 200-cell document table is 200 in-flight analyze calls against a
+    // single Presidio replica. mapLimit preserves order, so masked messages stay
+    // aligned with their originals.
+    const processed = await mapLimit(messages, this.maxConcurrency, async (message) => {
         // Multimodal message: mask each text part independently (so anonymizer
         // offsets stay valid) and pass image parts through untouched — Presidio
         // is text-only and would choke on a data URI.
@@ -70,8 +99,7 @@ export class PresidioPiiGuard implements PiiGuard {
         if (!message.content) return { message, findings: [] as SafetyFinding[] };
         const { content, findings } = await this.maskText(message.content, policy);
         return { message: { ...message, content }, findings };
-      }),
-    );
+    });
 
     return {
       messages: processed.map((p) => p.message),

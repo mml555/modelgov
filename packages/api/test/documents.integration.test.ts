@@ -34,6 +34,17 @@ const config = parseConfigObject({
     // "balanced" preset masks PII (pii: mask) — used to assert structured output
     // is masked, not just `text`.
     doc_review_masked: { safety: "balanced", model_class: "cheap", max_tokens: 500 },
+    // A REAL per-entity policy with a block entry — the shape whose coarse mode
+    // resolves to "block". Extraction keeps PERSON; CREDIT_CARD rejects.
+    doc_review_entities: {
+      safety: {
+        protect: {
+          pii: { allow: ["PERSON"], block: ["CREDIT_CARD"], default: "mask" },
+        },
+      },
+      model_class: "cheap",
+      max_tokens: 500,
+    },
   },
   model_classes: { cheap: { primary: "openai/gpt-4o-mini", fallback: "anthropic/claude-haiku" } },
   safety: { preset: "dev" },
@@ -258,6 +269,53 @@ describe.skipIf(!DATABASE_URL)("document extraction (integration)", () => {
     const res = await extract(a, { provider: "tesseract", model: "prebuilt-layout", document: { base64: "ZmFrZQ==" } });
     expect(res.statusCode).toBe(400);
     expect(res.json().error.code).toBe("unsupported_model");
+  });
+
+  it("masks structured output under a per-entity policy whose coarse mode is BLOCK", async () => {
+    // Regression: the structured pass was gated on `pii === "mask"`. A policy
+    // with a `block` list resolves the coarse mode to "block", so the pass was
+    // skipped — mask-dispositioned entities were redacted from `text` and
+    // returned RAW in the structured payload. The plan here is the real thing
+    // from the policy engine, not a stub disposition.
+    const a = app({ safety: batchMaskingGuard });
+    const res = await extract(a, {
+      provider: "azure-di",
+      model: "prebuilt-layout",
+      feature: "doc_review_entities",
+      document: { base64: "ZmFrZQ==" },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.safety.structuredWithheld).toBe(false);
+    expect(body.fields.policyNumber.content).toBe("SSN [REDACTED]");
+    expect(body.fields.insured.content).toBe("Jane Roe");
+  });
+
+  it("blocks the response when a structured leaf carries a blocking entity", async () => {
+    const blockingGuard: SafetyGuard = {
+      inspectInput: new NoopGuard().inspectInput,
+      async inspectOutput(content: string): Promise<OutputSafetyResult> {
+        return { action: "allow", content, piiMasked: false, findings: [] };
+      },
+      async inspectOutputMany(contents: string[]) {
+        return {
+          action: "block" as const,
+          contents,
+          piiMasked: false,
+          findings: [{ type: "pii" as const, detail: "CREDIT_CARD", disposition: "block" as const }],
+          blockReason: "output_pii_detected" as const,
+        };
+      },
+    };
+    const a = app({ safety: blockingGuard });
+    const res = await extract(a, {
+      provider: "azure-di",
+      model: "prebuilt-layout",
+      feature: "doc_review_entities",
+      document: { base64: "ZmFrZQ==" },
+    });
+    expect(res.statusCode).toBe(403);
+    expect(res.json().error.code).toBe("safety_blocked");
   });
 
   it("masks structured leaves in place and returns the payload", async () => {

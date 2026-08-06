@@ -62,9 +62,13 @@ export interface SafetyGuard {
    * lives in hundreds of leaves (document table cells, extracted fields).
    *
    * OPTIONAL so the many hand-rolled test guards implementing this interface do
-   * not all have to grow a method they never exercise. Callers fall back to
-   * per-string `inspectOutput`, which is correct but issues one Presidio
-   * round-trip per leaf; a real backend should implement this.
+   * not all have to grow a method they never exercise.
+   *
+   * IMPLEMENT IT IN ANY REAL GUARD. Omitting it does not degrade to per-string
+   * `inspectOutput` — the document path WITHHOLDS the structured payload
+   * instead (`safety.structuredWithheld`), because issuing one backend
+   * round-trip per table cell is worse than returning nothing. A guard without
+   * this method silently costs its callers their structured output.
    */
   inspectOutputMany?(contents: string[], plan: SafetyPlan): Promise<OutputSafetyBatchResult>;
   /**

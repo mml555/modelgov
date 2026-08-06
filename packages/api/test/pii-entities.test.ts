@@ -115,6 +115,35 @@ describe("PresidioPiiGuard per-entity dispositions", () => {
   });
 });
 
+describe("PresidioPiiGuard concurrency", () => {
+  it("caps in-flight analyzer requests instead of one socket per leaf", async () => {
+    let inFlight = 0;
+    let peak = 0;
+    const fetchImpl = vi.fn(async (url: unknown) => {
+      inFlight += 1;
+      peak = Math.max(peak, inFlight);
+      await new Promise((r) => setTimeout(r, 1));
+      inFlight -= 1;
+      return String(url).includes("/analyze")
+        ? new Response("[]", { status: 200 })
+        : new Response(JSON.stringify({ text: "x" }), { status: 200 });
+    });
+    const guard = new PresidioPiiGuard({
+      analyzerUrl: "http://a",
+      anonymizerUrl: "http://b",
+      maxConcurrency: 4,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+    // A 200-cell table's worth of leaves.
+    const many = Array.from({ length: 200 }, (_, i) => ({ role: "user" as const, content: `c${i}` }));
+    const r = await guard.process(many);
+    expect(peak).toBeLessThanOrEqual(4);
+    expect(fetchImpl).toHaveBeenCalledTimes(200);
+    // Order must survive the bounded dispatch.
+    expect(r.messages.map((m) => m.content)).toEqual(many.map((m) => m.content));
+  });
+});
+
 /** A PiiGuard returning fixed findings, to drive CompositeGuard directly. */
 function stubGuard(findings: SafetyFinding[], masked = "[MASKED]"): PiiGuard {
   return {
