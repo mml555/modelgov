@@ -63,7 +63,7 @@ export const embeddingsBodyJsonSchema = {
       minimum: 1,
       maximum: 16384,
       description:
-        "Output vector width (Matryoshka models: text-embedding-3-*, gemini-embedding-001). Omit for the model's native width. The response echoes it so you can assert vector-space identity.",
+        "Output vector width (Matryoshka models: text-embedding-3-*, gemini-embedding-001). Omit for the model's native width. The response reports the width ACTUALLY returned — which may differ, since a provider can ignore or clamp this on a non-MRL model.",
     },
     inputTokensEstimate: { type: "integer", minimum: 1 },
     projectId: { type: "string" },
@@ -86,7 +86,7 @@ export const embeddingsSuccessJsonSchema = {
     // means "unknown, from an older response", not "zero-width".
     dimensions: {
       type: ["integer", "null"],
-      description: "Width of the returned vectors, read off the response — assert this rather than assuming the model's default.",
+      description: "Width of the vectors actually returned (not an echo of the request). Null when unknown: a legacy idempotency replay, or a batch whose vectors are not all the same width.",
     },
     provider: { type: "string" },
     decision: { type: "string", enum: ["allow", "degrade", "fallback"] },

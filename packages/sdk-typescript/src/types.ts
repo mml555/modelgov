@@ -148,12 +148,15 @@ export interface EmbeddingsResponse {
   embeddings: number[][];
   model: string;
   /**
-   * Width of the returned vectors, read off the response. Assert this rather
-   * than assuming your requested width was honoured — a provider may ignore
-   * `dimensions` on a non-MRL model. Null only on a response replayed from an
-   * idempotency row cached before this field existed.
+   * Width of the vectors actually returned — assert this rather than assuming
+   * your requested width was honoured, since a provider may ignore
+   * `dimensions` on a non-MRL model.
+   *
+   * Null when the gateway cannot name one width (a batch whose vectors differ
+   * in length). Absent entirely on a response replayed from an idempotency row
+   * cached before this field existed, which is why it is optional.
    */
-  dimensions: number | null;
+  dimensions?: number | null;
   provider: string;
   decision: "allow" | "degrade" | "fallback";
   reason?: string;

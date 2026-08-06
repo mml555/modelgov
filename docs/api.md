@@ -325,6 +325,12 @@ than one embedding run.
 Omit `dimensions` and the gateway omits it from the provider call entirely, so a
 non-MRL backend sees exactly the request it always saw.
 
+`dimensions` comes back `null` when the gateway cannot name one width — a batch
+whose vectors are not all the same length (a malfunctioning provider; the set is
+unusable in a vector store either way, so reporting the first row's width would
+be a false claim about the rest). It is absent entirely on a response replayed
+from an idempotency record written before this field existed.
+
 ---
 
 ## `POST /v1/explain`

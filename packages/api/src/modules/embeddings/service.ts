@@ -50,12 +50,17 @@ export interface EmbeddingsSuccessBody {
   embeddings: number[][];
   model: string;
   /**
-   * Width of the returned vectors. Reported ALWAYS, not just when requested:
-   * embedding dimension defines the vector space, so a caller comparing a
-   * corpus embedded elsewhere needs to assert it rather than assume the
-   * model's default has not changed under them.
+   * Width of the vectors actually returned. Embedding dimension defines the
+   * vector space, so a caller comparing a corpus embedded elsewhere needs to
+   * assert it rather than assume the model's default has not changed.
+   *
+   * Null when we cannot name one width: a batch whose vectors differ in length
+   * (a malfunctioning provider — the set is unusable in a vector store either
+   * way, so reporting the first would be a false claim about the rest).
+   * OPTIONAL because a response replayed from an idempotency row cached before
+   * this field existed will omit it entirely.
    */
-  dimensions: number | null;
+  dimensions?: number | null;
   provider: string;
   decision: "allow" | "degrade" | "fallback";
   reason?: string;
@@ -531,9 +536,9 @@ export async function handleEmbeddings(
     body: {
       embeddings: result.embeddings,
       model,
-      // From the RETURNED vector, not the request: if a provider ignores or
+      // From the RETURNED vectors, not the request: if a provider ignores or
       // clamps `dimensions`, the caller must see what it actually got.
-      dimensions: result.embeddings[0]?.length ?? null,
+      dimensions: uniformWidth(result.embeddings, deps),
       provider: providerOf(model),
       decision: responseDecision,
       reason: usedFallback ? "provider failure on primary — routed to fallback model" : decision.reason,
@@ -570,6 +575,31 @@ async function providerFailure(
     reason: code,
   });
   return { ok: false, status: 502, code, details: {}, message, retryable: !isClientError };
+}
+
+/**
+ * The single width shared by every returned vector, or null if they disagree.
+ *
+ * Reporting `embeddings[0].length` would be a claim about the whole batch. A
+ * provider that returns mixed widths is malfunctioning and the set is unusable
+ * in a vector store, so say "unknown" loudly rather than name a width that is
+ * wrong for some of the rows.
+ */
+function uniformWidth(
+  embeddings: number[][],
+  deps: { log?: { warn: (obj: unknown, msg: string) => void } },
+): number | null {
+  const first = embeddings[0]?.length;
+  if (first === undefined) return null;
+  const uniform = embeddings.every((v) => v.length === first);
+  if (!uniform) {
+    deps.log?.warn(
+      { widths: [...new Set(embeddings.map((v) => v.length))] },
+      "provider returned vectors of differing widths in one batch",
+    );
+    return null;
+  }
+  return first;
 }
 
 async function tryLog(

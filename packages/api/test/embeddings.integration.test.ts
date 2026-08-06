@@ -1,76 +1,19 @@
-import { parseConfigObject } from "@modelgov/policy-engine";
-import type { FastifyInstance } from "fastify";
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { applySchema } from "../src/db/init";
-import { createPool, type Pool } from "../src/db/pool";
-import {
-  ProviderError,
-  type LiteLLMClient,
-  type LiteLLMEmbeddingParams,
-} from "../src/services/litellm";
+import { describe, expect, it } from "vitest";
+import { ProviderError, type LiteLLMClient } from "../src/services/litellm";
 import { NoopObservability } from "../src/services/observability";
-import {
-  NoopGuard,
-  SafetyServiceError,
-  type SafetyGuard,
-} from "../src/services/safety";
+import { NoopGuard } from "../src/services/safety";
+import { SafetyServiceError, type SafetyGuard } from "../src/services/safety";
 import { messageText } from "../src/types";
 import { createBillingService } from "../src/modules/billing/service";
 import { buildServer } from "../src/server";
-
-const DATABASE_URL = process.env.DATABASE_URL;
-
-const RAW_CONFIG = {
-  project: { name: "test", environment: "test" },
-  budgets: {
-    global: { monthly_usd: 1000, hard_stop_at_percent: 100 },
-    by_user_type: {
-      workflow: { daily_usd: 1, daily_requests: 100, models: ["embed"] },
-      // Permits chat models only — the embed feature's class is not allowed.
-      chatonly: { daily_usd: 1, daily_requests: 100, models: ["cheap"] },
-      // Zero request budget — trips the daily request limit immediately.
-      blocked: { daily_usd: 1, daily_requests: 0, models: ["embed"] },
-    },
-  },
-  features: {
-    kb_embedding: { model_class: "embed", max_tokens: 1 },
-    // Restricted data: only the openai provider is approved (fallback is ollama).
-    restricted_embed: { model_class: "embed", max_tokens: 1, data_sensitivity: "restricted" },
-  },
-  model_classes: {
-    embed: { primary: "openai/text-embedding-3-small", fallback: "ollama/nomic-embed-text" },
-    cheap: { primary: "openai/gpt-4o-mini" },
-  },
-  data_classes: {
-    restricted: { allowed_providers: ["openai"] },
-  },
-  pricing: {
-    "openai/text-embedding-3-small": { input_per_1k: 0.00002, output_per_1k: 0 },
-  },
-  safety: { preset: "dev" },
-};
-
-const config = parseConfigObject(RAW_CONFIG);
-
-/** A fake embeddings client: one 3-dim vector per input, tiny fixed cost. */
-function fakeEmbedClient(
-  embed: (p: LiteLLMEmbeddingParams) => ReturnType<NonNullable<LiteLLMClient["embed"]>>,
-): LiteLLMClient {
-  return {
-    chat: async () => {
-      throw new Error("chat not used in embeddings tests");
-    },
-    embed,
-  };
-}
-
-const okEmbed = fakeEmbedClient(async (p) => ({
-  embeddings: p.input.map(() => [0.1, 0.2, 0.3]),
-  model: p.model,
-  actualCostUsd: 0.00001,
-  inputTokens: 8,
-  raw: {},
-}));
+import { parseConfigObject } from "@modelgov/policy-engine";
+import {
+  DATABASE_URL,
+  RAW_CONFIG,
+  fakeEmbedClient,
+  okEmbed,
+  setupEmbeddings,
+} from "./embeddingsHarness";
 
 const SSN = /\d{3}-\d{2}-\d{4}/g;
 // Fake safety guards exercising the embeddings input-PII contract without Presidio.
@@ -120,45 +63,7 @@ const throwGuard = (): SafetyGuard => ({
 });
 
 describe.skipIf(!DATABASE_URL)("POST /v1/embeddings (integration)", () => {
-  let pool: Pool;
-
-  beforeAll(async () => {
-    pool = createPool(DATABASE_URL!);
-    await applySchema(pool);
-  });
-  afterAll(async () => {
-    await pool.end();
-  });
-  beforeEach(async () => {
-    await pool.query(
-      `TRUNCATE budget_counters, request_logs, idempotency_keys,
-       billing_accounts, billing_reservation_leases, meter_events`,
-    );
-  });
-
-  function appWith(litellm: LiteLLMClient): FastifyInstance {
-    return buildServer({
-      config,
-      pool,
-      litellm,
-      safety: new NoopGuard(),
-      observability: new NoopObservability(),
-      logger: false,
-      allowUnauthenticated: true,
-    });
-  }
-
-  function appWithSafety(litellm: LiteLLMClient, safety: SafetyGuard): FastifyInstance {
-    return buildServer({
-      config,
-      pool,
-      litellm,
-      safety,
-      observability: new NoopObservability(),
-      logger: false,
-      allowUnauthenticated: true,
-    });
-  }
+  const { pool: getPool, appWith, appWithSafety, post } = setupEmbeddings();
 
   /** An embed client that records the exact input it received. */
   function capturingEmbed(): { client: LiteLLMClient; seen: () => string[] | undefined } {
@@ -169,92 +74,6 @@ describe.skipIf(!DATABASE_URL)("POST /v1/embeddings (integration)", () => {
     });
     return { client, seen: () => captured };
   }
-
-  const post = (app: FastifyInstance, body: Record<string, unknown>) =>
-    app.inject({ method: "POST", url: "/v1/embeddings", payload: body });
-
-  it("forwards dimensions to the provider and echoes the width actually returned", async () => {
-    // Vector width defines the vector space: a corpus embedded at a different
-    // width cannot be compared against this one, so the caller has to be able
-    // to assert what it got rather than trust the model's default.
-    let seen: number | undefined;
-    const client = fakeEmbedClient(async (p) => {
-      seen = p.dimensions;
-      return {
-        embeddings: p.input.map(() => Array.from({ length: p.dimensions ?? 3 }, () => 0.1)),
-        model: p.model,
-        actualCostUsd: 0.00001,
-        inputTokens: 8,
-        raw: {},
-      };
-    });
-    const res = await post(appWith(client), {
-      userId: "svc-dim",
-      userType: "workflow",
-      feature: "kb_embedding",
-      input: ["chunk"],
-      dimensions: 512,
-    });
-    expect(res.statusCode).toBe(200);
-    expect(seen).toBe(512);
-    expect(res.json().dimensions).toBe(512);
-    expect(res.json().embeddings[0]).toHaveLength(512);
-  });
-
-  it("omits dimensions from the provider call when unset, and still reports the width", async () => {
-    // Absent, not null — a non-MRL provider must see the request it always saw.
-    let sawKey = true;
-    const client = fakeEmbedClient(async (p) => {
-      sawKey = "dimensions" in p && p.dimensions !== undefined;
-      return { embeddings: [[0.1, 0.2, 0.3]], model: p.model, actualCostUsd: 0.00001, inputTokens: 8, raw: {} };
-    });
-    const res = await post(appWith(client), {
-      userId: "svc-dim2",
-      userType: "workflow",
-      feature: "kb_embedding",
-      input: ["chunk"],
-    });
-    expect(res.statusCode).toBe(200);
-    expect(sawKey).toBe(false);
-    // Reported regardless, read off the returned vector.
-    expect(res.json().dimensions).toBe(3);
-  });
-
-  it("reports the ACTUAL width when a provider ignores the requested dimensions", async () => {
-    // Some providers silently ignore `dimensions` on non-MRL models. Echoing
-    // the request back would tell the caller a comfortable lie; the response
-    // must reflect the vector they actually received.
-    const client = fakeEmbedClient(async (p) => ({
-      embeddings: [[0.1, 0.2, 0.3, 0.4]], // full width, request ignored
-      model: p.model,
-      actualCostUsd: 0.00001,
-      inputTokens: 8,
-      raw: {},
-    }));
-    const res = await post(appWith(client), {
-      userId: "svc-dim3",
-      userType: "workflow",
-      feature: "kb_embedding",
-      input: ["chunk"],
-      dimensions: 512,
-    });
-    expect(res.statusCode).toBe(200);
-    expect(res.json().dimensions).toBe(4);
-  });
-
-  it("rejects a non-positive or absurd dimensions value", async () => {
-    const app = appWith(okEmbed);
-    for (const dimensions of [0, -1, 1.5, 999_999]) {
-      const res = await post(app, {
-        userId: "svc-dim4",
-        userType: "workflow",
-        feature: "kb_embedding",
-        input: ["chunk"],
-        dimensions,
-      });
-      expect(res.statusCode, `dimensions=${dimensions}`).toBe(400);
-    }
-  });
 
   it("embeds inputs, records spend, and returns one vector per input", async () => {
     const app = appWith(okEmbed);
@@ -274,12 +93,12 @@ describe.skipIf(!DATABASE_URL)("POST /v1/embeddings (integration)", () => {
     expect(json.cost.actualUsd).toBeCloseTo(0.00001, 6);
     expect(json.requestId).toEqual(expect.any(String));
 
-    const snap = await pool.query(
+    const snap = await getPool().query(
       "SELECT used_usd FROM budget_counters WHERE scope='user_daily' AND key='svc1'",
     );
     expect(Number(snap.rows[0].used_usd)).toBeCloseTo(0.00001, 6);
 
-    const logged = await pool.query(
+    const logged = await getPool().query(
       "SELECT feature, status, decision FROM request_logs WHERE user_id='svc1'",
     );
     expect(logged.rows[0]).toMatchObject({ feature: "kb_embedding", status: "ok", decision: "allow" });
@@ -407,7 +226,7 @@ describe.skipIf(!DATABASE_URL)("POST /v1/embeddings (integration)", () => {
       // The provider must never see the raw SSN.
       expect(seen()).toEqual(["my ssn is [REDACTED]", "no pii here"]);
       // The success audit row records that masking occurred (parity with chat).
-      const log = await pool.query(
+      const log = await getPool().query(
         "SELECT pii_masked FROM request_logs WHERE user_id='svc_pii'",
       );
       expect(log.rows[0].pii_masked).toBe(true);
@@ -426,7 +245,7 @@ describe.skipIf(!DATABASE_URL)("POST /v1/embeddings (integration)", () => {
       expect(res.json().error.code).toBe("safety_blocked");
       expect(res.json().error.details.reason).toBe("pii_detected");
       expect(seen()).toBeUndefined(); // provider never called
-      const logs = await pool.query(
+      const logs = await getPool().query(
         "SELECT status, error FROM request_logs WHERE user_id='svc_block'",
       );
       expect(logs.rows[0]).toMatchObject({ status: "safety_blocked", error: "pii_detected" });
@@ -454,12 +273,12 @@ describe.skipIf(!DATABASE_URL)("POST /v1/embeddings (integration)", () => {
     });
 
     function appWithBilling(litellm: LiteLLMClient) {
-      const billing = createBillingService(pool, { billing: billingConfig.billing })!;
+      const billing = createBillingService(getPool(), { billing: billingConfig.billing })!;
       return {
         billing,
         app: buildServer({
           config: billingConfig,
-          pool,
+          pool: getPool(),
           litellm,
           safety: new NoopGuard(),
           observability: new NoopObservability(),
@@ -490,7 +309,7 @@ describe.skipIf(!DATABASE_URL)("POST /v1/embeddings (integration)", () => {
       expect(res.json().error.code).toBe("insufficient_credits");
       expect(providerRan).toBe(false);
       // The rejection leaves an audit row, like every other block path.
-      const logs = await pool.query(
+      const logs = await getPool().query(
         `SELECT error FROM request_logs WHERE user_id = 'u_broke'`,
       );
       expect(logs.rows).toEqual([{ error: "insufficient_credits" }]);
@@ -511,7 +330,7 @@ describe.skipIf(!DATABASE_URL)("POST /v1/embeddings (integration)", () => {
       const balance = await billing.getBalance("", "u_paid");
       expect(balance.creditsUsd).toBeCloseTo(1 - 0.00001, 6);
       expect(balance.creditsReservedUsd).toBeCloseTo(0, 6);
-      const leases = await pool.query(`SELECT count(*)::int AS n FROM billing_reservation_leases`);
+      const leases = await getPool().query(`SELECT count(*)::int AS n FROM billing_reservation_leases`);
       expect(leases.rows[0].n).toBe(0);
     });
 
@@ -524,10 +343,10 @@ describe.skipIf(!DATABASE_URL)("POST /v1/embeddings (integration)", () => {
           stripe: { secret_key: "sk_test", meter_event_name: "modelgov_usage" },
         },
       });
-      const billing = createBillingService(pool, { billing: meteredConfig.billing })!;
+      const billing = createBillingService(getPool(), { billing: meteredConfig.billing })!;
       const app = buildServer({
         config: meteredConfig,
-        pool,
+        pool: getPool(),
         litellm: okEmbed,
         safety: new NoopGuard(),
         observability: new NoopObservability(),
@@ -542,7 +361,7 @@ describe.skipIf(!DATABASE_URL)("POST /v1/embeddings (integration)", () => {
         input: ["hello"],
       });
       expect(res.statusCode).toBe(200);
-      const meters = await pool.query(
+      const meters = await getPool().query(
         `SELECT cost_usd::float8 AS cost_usd FROM meter_events WHERE user_id = 'u_metered_embed'`,
       );
       expect(meters.rows).toHaveLength(1);
@@ -578,12 +397,12 @@ describe.skipIf(!DATABASE_URL)("POST /v1/embeddings (integration)", () => {
         return { embeddings: p.input.map(() => [0.1]), model: p.model, actualCostUsd: 0.02, inputTokens: 8, raw: {} };
       });
     function appWithFallbackBilling(litellm: LiteLLMClient) {
-      const billing = createBillingService(pool, { billing: fallbackConfig.billing })!;
+      const billing = createBillingService(getPool(), { billing: fallbackConfig.billing })!;
       return {
         billing,
         app: buildServer({
           config: fallbackConfig,
-          pool,
+          pool: getPool(),
           litellm,
           safety: new NoopGuard(),
           observability: new NoopObservability(),
@@ -611,7 +430,7 @@ describe.skipIf(!DATABASE_URL)("POST /v1/embeddings (integration)", () => {
       const balance = await billing.getBalance("", "u_fb");
       expect(balance.creditsUsd).toBeCloseTo(1 - 0.02, 6); // debited the actual fallback cost
       expect(balance.creditsReservedUsd).toBeCloseTo(0, 6); // base + top-up hold fully released
-      const leases = await pool.query(`SELECT count(*)::int AS n FROM billing_reservation_leases`);
+      const leases = await getPool().query(`SELECT count(*)::int AS n FROM billing_reservation_leases`);
       expect(leases.rows[0].n).toBe(0);
     });
 
@@ -633,7 +452,7 @@ describe.skipIf(!DATABASE_URL)("POST /v1/embeddings (integration)", () => {
       const balance = await billing.getBalance("", "u_fb_broke");
       expect(balance.creditsUsd).toBeCloseTo(0.005, 6); // nothing debited
       expect(balance.creditsReservedUsd).toBeCloseTo(0, 6); // base hold released, not stranded
-      const leases = await pool.query(`SELECT count(*)::int AS n FROM billing_reservation_leases`);
+      const leases = await getPool().query(`SELECT count(*)::int AS n FROM billing_reservation_leases`);
       expect(leases.rows[0].n).toBe(0);
     });
   });
