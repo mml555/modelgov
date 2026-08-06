@@ -69,42 +69,50 @@ export class PresidioPiiGuard implements PiiGuard {
     messages: ChatMessage[],
     policy?: PiiEntityPolicy,
   ): Promise<{ messages: ChatMessage[]; findings: SafetyFinding[] }> {
-    // Screen messages concurrently, but BOUNDED: sequential would incur 2N
-    // round-trips on the hot path, while unbounded would open one socket per
-    // leaf — a 200-cell document table is 200 in-flight analyze calls against a
-    // single Presidio replica. mapLimit preserves order, so masked messages stay
-    // aligned with their originals.
-    const processed = await mapLimit(messages, this.maxConcurrency, async (message) => {
-        // Multimodal message: mask each text part independently (so anonymizer
-        // offsets stay valid) and pass image parts through untouched — Presidio
-        // is text-only and would choke on a data URI.
-        if (Array.isArray(message.content)) {
-          const partResults = await Promise.all(
-            message.content.map(async (part) => {
-              if (part.type !== "text" || !part.text) {
-                return { part, findings: [] as SafetyFinding[] };
-              }
-              return this.maskText(part.text, policy).then((r) => ({
-                part: { ...part, text: r.content },
-                findings: r.findings,
-              }));
-            }),
-          );
-          return {
-            message: { ...message, content: partResults.map((r) => r.part) },
-            findings: partResults.flatMap((r) => r.findings),
-          };
-        }
+    // ONE limiter for every text in the call, not one per message. Bounding
+    // only the top level left a single multimodal message with 200 text parts
+    // free to open 200 sockets — the exact exhaustion the limit exists to stop.
+    // So flatten first: collect every string to screen, mask them under a single
+    // bounded dispatch, then reassemble. Order is preserved throughout, so masked
+    // text stays aligned with its original.
+    //
+    // Image parts are passed through untouched — Presidio is text-only and would
+    // choke on a data URI — and each text part is masked independently so
+    // anonymizer offsets stay valid.
+    const texts: string[] = [];
+    const slots: Array<(masked: string, findings: SafetyFinding[]) => void> = [];
 
-        if (!message.content) return { message, findings: [] as SafetyFinding[] };
-        const { content, findings } = await this.maskText(message.content, policy);
-        return { message: { ...message, content }, findings };
+    const out: ChatMessage[] = messages.map((message) => {
+      if (Array.isArray(message.content)) {
+        const parts = message.content.map((part) => ({ ...part }));
+        parts.forEach((part) => {
+          if (part.type !== "text" || !part.text) return;
+          texts.push(part.text);
+          slots.push((masked) => {
+            part.text = masked;
+          });
+        });
+        return { ...message, content: parts };
+      }
+      if (!message.content) return message;
+      const copy = { ...message };
+      texts.push(message.content);
+      slots.push((masked) => {
+        copy.content = masked;
+      });
+      return copy;
     });
 
-    return {
-      messages: processed.map((p) => p.message),
-      findings: processed.flatMap((p) => p.findings),
-    };
+    const findings: SafetyFinding[] = [];
+    const results = await mapLimit(texts, this.maxConcurrency, (text) =>
+      this.maskText(text, policy),
+    );
+    results.forEach((r, i) => {
+      slots[i]?.(r.content, r.findings);
+      findings.push(...r.findings);
+    });
+
+    return { messages: out, findings };
   }
 
   /** Analyze + anonymize a single text string. Returns the (possibly masked)

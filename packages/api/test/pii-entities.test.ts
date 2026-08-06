@@ -142,6 +142,83 @@ describe("PresidioPiiGuard concurrency", () => {
     // Order must survive the bounded dispatch.
     expect(r.messages.map((m) => m.content)).toEqual(many.map((m) => m.content));
   });
+
+  it("caps a SINGLE multimodal message with many text parts", async () => {
+    // Bounding only the top level left one message with 200 parts free to open
+    // 200 sockets — the exact exhaustion the limit exists to prevent.
+    let inFlight = 0;
+    let peak = 0;
+    const fetchImpl = vi.fn(async (url: unknown) => {
+      inFlight += 1;
+      peak = Math.max(peak, inFlight);
+      await new Promise((r) => setTimeout(r, 1));
+      inFlight -= 1;
+      return String(url).includes("/analyze")
+        ? new Response("[]", { status: 200 })
+        : new Response(JSON.stringify({ text: "x" }), { status: 200 });
+    });
+    const guard = new PresidioPiiGuard({
+      analyzerUrl: "http://a",
+      anonymizerUrl: "http://b",
+      maxConcurrency: 4,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+    const parts = Array.from({ length: 200 }, (_, i) => ({ type: "text" as const, text: `p${i}` }));
+    const r = await guard.process([{ role: "user", content: parts }]);
+    expect(peak).toBeLessThanOrEqual(4);
+    expect(fetchImpl).toHaveBeenCalledTimes(200);
+    expect(r.messages[0]?.content).toEqual(parts);
+  });
+
+  it("passes image parts through and keeps text parts aligned", async () => {
+    // Flattening must not shift a masked string onto the wrong part.
+    const fetchImpl = vi.fn(async (url: unknown, init: unknown) => {
+      if (String(url).includes("/analyze")) {
+        const { text } = JSON.parse(String((init as RequestInit).body)) as { text: string };
+        return new Response(
+          text === "secret" ? JSON.stringify([{ entity_type: "US_SSN", start: 0, end: 6, score: 0.9 }]) : "[]",
+          { status: 200 },
+        );
+      }
+      return new Response(JSON.stringify({ text: "[MASKED]" }), { status: 200 });
+    });
+    const guard = new PresidioPiiGuard({
+      analyzerUrl: "http://a",
+      anonymizerUrl: "http://b",
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+    const r = await guard.process([
+      { role: "user", content: [
+        { type: "text", text: "clean" },
+        { type: "image_url", image_url: { url: "data:image/png;base64,AAA" } },
+        { type: "text", text: "secret" },
+      ] },
+      { role: "user", content: "also clean" },
+    ]);
+    expect(r.messages[0]?.content).toEqual([
+      { type: "text", text: "clean" },
+      { type: "image_url", image_url: { url: "data:image/png;base64,AAA" } },
+      { type: "text", text: "[MASKED]" },
+    ]);
+    expect(r.messages[1]?.content).toBe("also clean");
+    expect(r.findings).toEqual([{ type: "pii", detail: "US_SSN" }]);
+  });
+
+  it("does not mutate the caller's messages", async () => {
+    const fetchImpl = vi.fn(async (url: unknown) =>
+      String(url).includes("/analyze")
+        ? new Response(JSON.stringify([{ entity_type: "US_SSN", start: 0, end: 3, score: 0.9 }]), { status: 200 })
+        : new Response(JSON.stringify({ text: "[MASKED]" }), { status: 200 }),
+    );
+    const guard = new PresidioPiiGuard({
+      analyzerUrl: "http://a",
+      anonymizerUrl: "http://b",
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+    const original = [{ role: "user" as const, content: [{ type: "text" as const, text: "ssn" }] }];
+    await guard.process(original);
+    expect(original[0]?.content).toEqual([{ type: "text", text: "ssn" }]);
+  });
 });
 
 /** A PiiGuard returning fixed findings, to drive CompositeGuard directly. */
