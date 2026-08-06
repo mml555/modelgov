@@ -10,11 +10,40 @@ interface ModelPrice {
 // credentials and returns the real cost via the `x-litellm-response-cost`
 // header — that real cost reconciles the reservation after the call.
 
+/**
+ * Structured-output request, in the OpenAI shape LiteLLM normalises for every
+ * backend (Gemini `responseSchema`, Anthropic tool-forcing, …). Passing the
+ * provider-neutral shape through means the gateway does not have to know which
+ * translation each provider needs — that is exactly what LiteLLM is for.
+ */
+export type ResponseFormat =
+  | { type: "text" }
+  | { type: "json_object" }
+  | {
+      type: "json_schema";
+      jsonSchema: { name: string; schema: Record<string, unknown>; strict?: boolean };
+    };
+
+/** Wire form: camelCase at our boundary, snake_case on the provider request. */
+export function responseFormatToWire(rf: ResponseFormat): Record<string, unknown> {
+  if (rf.type !== "json_schema") return { type: rf.type };
+  return {
+    type: "json_schema",
+    json_schema: {
+      name: rf.jsonSchema.name,
+      schema: rf.jsonSchema.schema,
+      ...(rf.jsonSchema.strict === undefined ? {} : { strict: rf.jsonSchema.strict }),
+    },
+  };
+}
+
 export interface LiteLLMChatParams {
   model: string;
   messages: ChatMessage[];
   maxTokens?: number;
   temperature?: number;
+  /** Force JSON (optionally schema-constrained) output. */
+  responseFormat?: ResponseFormat;
   /** Per-call override of the client default timeout (e.g. a short bound for the tiny injection classifier). */
   timeoutMs?: number;
 }
@@ -223,6 +252,9 @@ export function createLiteLLMClient(
               messages: params.messages,
               max_tokens: params.maxTokens,
               temperature: params.temperature,
+              ...(params.responseFormat
+                ? { response_format: responseFormatToWire(params.responseFormat) }
+                : {}),
             }),
             signal: controller.signal,
           });
@@ -341,6 +373,9 @@ export function createLiteLLMClient(
             messages: params.messages,
             max_tokens: params.maxTokens,
             temperature: params.temperature,
+            ...(params.responseFormat
+              ? { response_format: responseFormatToWire(params.responseFormat) }
+              : {}),
             stream: true,
             // Ask LiteLLM to emit a final usage chunk so we can settle cost.
             stream_options: { include_usage: true },

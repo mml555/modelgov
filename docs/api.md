@@ -102,6 +102,70 @@ Default API keys include `chat:create` only. Add `usage:read` for the usage endp
 
 `feature` is **required** and must exist in `modelgov.yaml`.
 
+### Structured output (`responseFormat`)
+
+Constrain the model's output format instead of relying on the prompt alone:
+
+```json
+{
+  "responseFormat": {
+    "type": "json_schema",
+    "jsonSchema": {
+      "name": "invoice",
+      "strict": true,
+      "schema": {
+        "type": "object",
+        "properties": { "total": { "type": "number" }, "dueDate": { "type": "string" } },
+        "required": ["total", "dueDate"],
+        "additionalProperties": false
+      }
+    }
+  }
+}
+```
+
+**`strict: true` constrains the schema itself.** OpenAI requires every property
+to appear in `required` and `additionalProperties: false` on every object — the
+example above satisfies both. A schema that does not is rejected by the
+provider, not by the gateway. Use `strict: false` (or omit it) for a schema with
+genuinely optional fields; model an optional value as a nullable type rather
+than an absent key.
+
+| `type` | Guarantee |
+| --- | --- |
+| `text` (default) | none — normal completion |
+| `json_object` | output parses as JSON, but the *shape* is whatever the model chose |
+| `json_schema` | output conforms to your schema (`strict: true` on providers that support it) |
+
+Prefer `json_schema` for extraction: valid JSON of the wrong shape still breaks
+the caller, which is the failure the prompt-only approach produces.
+
+**`json_object` does not replace the prompt instruction.** The gateway forwards
+your messages unchanged — it does not inject a "respond in JSON" line. OpenAI
+additionally *requires* the word "JSON" to appear somewhere in the messages when
+`json_object` is set and returns a 400 if it does not. So `json_object` means
+"whatever you produce must parse", not "produce JSON about this". Keep the
+instruction in your prompt, or use `json_schema`, where the schema itself tells
+the model what to emit.
+
+The field is OpenAI-shaped and LiteLLM translates it per provider (Gemini
+`responseSchema`, Anthropic tool-forcing), so one request body works across
+backends. Provider support for advanced JSON Schema keywords varies — the
+gateway forwards the schema unmodified rather than guessing a common subset, so
+an unsupported keyword surfaces as a provider error, not a silent downgrade.
+
+Notes:
+
+- `jsonSchema.schema` is capped at 20,000 serialized characters. It is sent on
+  every call, so keep it tight.
+- Works with `stream: true`; deltas are fragments of the JSON document, so
+  accumulate before parsing.
+- Constrained output still costs output tokens, and the feature's `max_tokens`
+  bounds the *generated* document (not the schema you send). An output longer
+  than that budget truncates mid-document — the usual symptom is a parse error
+  on an otherwise valid-looking response. A large schema tends to produce a
+  large document, so raise `max_tokens` with it.
+
 ### Streaming (`stream: true`)
 
 Set `stream: true` to receive the completion incrementally as

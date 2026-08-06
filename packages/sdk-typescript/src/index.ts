@@ -9,6 +9,7 @@ export {
   type RequestOptions,
 } from "./client";
 export type {
+  ResponseFormat,
   ChatMessage,
   ContentPart,
   TextPart,

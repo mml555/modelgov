@@ -57,6 +57,7 @@ export async function executeSyncChat(
       decision,
       messages,
       temperature: prepared.temperature,
+      responseFormat: prepared.responseFormat,
       safetyCostUsd,
       rejection,
       includeBudgetRemaining: hold.mode === "hierarchical" ? false : undefined,

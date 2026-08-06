@@ -1,3 +1,4 @@
+import type { ResponseFormat } from "../../services/litellm";
 import {
   evaluateAiRequest,
   type ModelgovConfig,
@@ -353,6 +354,7 @@ export async function executeProviderWithFallback(
     decision: PolicyDecision;
     messages: ChatMessage[];
     temperature?: number;
+    responseFormat?: ResponseFormat;
     safetyCostUsd: number;
     rejection: RejectionCtx;
     includeBudgetRemaining?: boolean;
@@ -370,6 +372,7 @@ export async function executeProviderWithFallback(
         messages: ctx.messages,
         maxTokens: ctx.decision.maxOutputTokens,
         temperature: ctx.temperature,
+        responseFormat: ctx.responseFormat,
       });
       return {
         ok: true,
@@ -421,6 +424,7 @@ export async function executeProviderWithFallback(
           messages: ctx.messages,
           maxTokens: fb.maxOutputTokens,
           temperature: ctx.temperature,
+          responseFormat: ctx.responseFormat,
         });
         return {
           ok: true,

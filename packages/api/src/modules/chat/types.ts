@@ -1,3 +1,4 @@
+import type { ResponseFormat } from "../../services/litellm";
 import type {
   ModelgovConfig,
   BudgetRemaining,
@@ -44,6 +45,8 @@ export interface ChatInput {
   context?: string[];
   inputTokensEstimate?: number;
   temperature?: number;
+  /** Force JSON (optionally schema-constrained) output. */
+  responseFormat?: ResponseFormat;
   stream?: boolean;
   budgetNodeId?: string;
   projectId?: string;

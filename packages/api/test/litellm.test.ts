@@ -275,3 +275,116 @@ describe("LiteLLM embeddings", () => {
     ).rejects.toBeInstanceOf(LiteLLMClientError);
   });
 });
+
+describe("structured output (response_format)", () => {
+  /** Capture the JSON body the client actually puts on the wire. */
+  function capturing(): { sent: () => Record<string, unknown>; fetchImpl: typeof fetch } {
+    let body: Record<string, unknown> = {};
+    const fetchImpl: typeof fetch = async (_url, init) => {
+      body = JSON.parse(String((init as RequestInit).body)) as Record<string, unknown>;
+      return jsonResponse(completion);
+    };
+    return { sent: () => body, fetchImpl };
+  }
+
+  it("omits response_format entirely when not requested", async () => {
+    // Absent, not `undefined` — a provider that rejects unknown/null keys must
+    // see the same request it saw before this feature existed.
+    const { sent, fetchImpl } = capturing();
+    const client = createLiteLLMClient({ baseUrl: "http://x", fetchImpl });
+    await client.chat({ model: "m", messages: [{ role: "user", content: "hi" }] });
+    expect("response_format" in sent()).toBe(false);
+  });
+
+  it("sends json_object", async () => {
+    const { sent, fetchImpl } = capturing();
+    const client = createLiteLLMClient({ baseUrl: "http://x", fetchImpl });
+    await client.chat({
+      model: "m",
+      messages: [{ role: "user", content: "hi" }],
+      responseFormat: { type: "json_object" },
+    });
+    expect(sent().response_format).toEqual({ type: "json_object" });
+  });
+
+  it("converts jsonSchema to the provider's snake_case json_schema", async () => {
+    const { sent, fetchImpl } = capturing();
+    const client = createLiteLLMClient({ baseUrl: "http://x", fetchImpl });
+    const schema = { type: "object", properties: { total: { type: "number" } } };
+    await client.chat({
+      model: "m",
+      messages: [{ role: "user", content: "hi" }],
+      responseFormat: { type: "json_schema", jsonSchema: { name: "invoice", schema, strict: true } },
+    });
+    // camelCase at our boundary, snake_case on the provider request.
+    expect(sent().response_format).toEqual({
+      type: "json_schema",
+      json_schema: { name: "invoice", schema, strict: true },
+    });
+  });
+
+  it("sends response_format on the STREAMING request too", async () => {
+    // The non-streaming path is a separate body builder from the streaming one,
+    // so passing on one proves nothing about the other. LiteLLMStreamParams
+    // extends LiteLLMChatParams, which makes it easy to add the field to the
+    // type and forget the second wire body.
+    let body: Record<string, unknown> = {};
+    // Build the frame with JSON.stringify rather than hand-escaping: the delta
+    // content is itself a JSON document, so writing it inline needs two levels
+    // of escaping and silently produces an invalid frame when you get it wrong.
+    const sse = [
+      `data: ${JSON.stringify({ choices: [{ delta: { content: '{"a":1}' } }] })}\n\n`,
+      "data: [DONE]\n\n",
+    ].join("");
+    const fetchImpl: typeof fetch = async (_url, init) => {
+      body = JSON.parse(String((init as RequestInit).body)) as Record<string, unknown>;
+      return new Response(sse, { status: 200, headers: { "content-type": "text/event-stream" } });
+    };
+    const client = createLiteLLMClient({ baseUrl: "http://x", fetchImpl });
+    const schema = { type: "object", properties: { a: { type: "number" } } };
+    const gen = client.chatStream!({
+      model: "m",
+      messages: [{ role: "user", content: "hi" }],
+      responseFormat: { type: "json_schema", jsonSchema: { name: "s", schema, strict: true } },
+    });
+    let step = await gen.next();
+    while (!step.done) step = await gen.next();
+
+    expect(body.stream).toBe(true);
+    expect(body.response_format).toEqual({
+      type: "json_schema",
+      json_schema: { name: "s", schema, strict: true },
+    });
+  });
+
+  it("omits response_format from a stream when not requested", async () => {
+    let body: Record<string, unknown> = {};
+    const fetchImpl: typeof fetch = async (_url, init) => {
+      body = JSON.parse(String((init as RequestInit).body)) as Record<string, unknown>;
+      return new Response("data: [DONE]\n\n", {
+        status: 200,
+        headers: { "content-type": "text/event-stream" },
+      });
+    };
+    const client = createLiteLLMClient({ baseUrl: "http://x", fetchImpl });
+    const gen = client.chatStream!({ model: "m", messages: [{ role: "user", content: "hi" }] });
+    let step = await gen.next();
+    while (!step.done) step = await gen.next();
+    expect("response_format" in body).toBe(false);
+  });
+
+  it("omits strict when the caller did not set it", async () => {
+    // Sending `strict: undefined` would serialize away, but sending `false`
+    // when the caller said nothing would silently opt them out of strict mode
+    // on providers whose default differs.
+    const { sent, fetchImpl } = capturing();
+    const client = createLiteLLMClient({ baseUrl: "http://x", fetchImpl });
+    await client.chat({
+      model: "m",
+      messages: [{ role: "user", content: "hi" }],
+      responseFormat: { type: "json_schema", jsonSchema: { name: "n", schema: {} } },
+    });
+    const rf = sent().response_format as { json_schema: Record<string, unknown> };
+    expect("strict" in rf.json_schema).toBe(false);
+  });
+});
