@@ -239,6 +239,78 @@ describe.skipIf(!DATABASE_URL)("document extraction (integration)", () => {
     expect(body.text).toBe("<MASKED>"); // text still masked + returned
     expect(body.tables).toBeUndefined(); // structured withheld (no leak)
     expect(body.safety.piiMasked).toBe(true);
+    // The caller must be TOLD. Without this flag an empty structured payload is
+    // indistinguishable from a document that genuinely had no tables, so a
+    // config mistake reads as a model-quality problem.
+    expect(body.safety.structuredWithheld).toBe(true);
+
+    // The audit row must record it too — the response tells the caller, the
+    // reason code is what an operator greps for after the fact.
+    const { rows } = await pool.query(
+      "SELECT reason_code FROM request_logs WHERE id = $1",
+      [Number(String(body.requestId).replace("req_", ""))],
+    );
+    expect(rows[0]?.reason_code).toBe("structured_withheld");
+  });
+
+  it("reports structuredWithheld=false when the document simply had no structured content", async () => {
+    // The counterpart to the test above, and the whole point of the flag: this
+    // provider returns no tables at all, so nothing was withheld. Same empty
+    // payload, opposite cause.
+    const a = app({ safety: maskingGuard });
+    const res = await extract(a, {
+      provider: "tesseract", // text-only adapter — emits no structured output
+      feature: "doc_review_masked",
+      document: { base64: "ZmFrZQ==" },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.tables).toBeUndefined();
+    expect(body.safety.piiMasked).toBe(true);
+    expect(body.safety.structuredWithheld).toBe(false);
+
+    // ...and must NOT be tagged: nothing was withheld here.
+    const { rows } = await pool.query(
+      "SELECT reason_code FROM request_logs WHERE id = $1",
+      [Number(String(body.requestId).replace("req_", ""))],
+    );
+    expect(rows[0]?.reason_code).toBeNull();
+  });
+
+  it("reports structuredWithheld=false when the adapter returned EMPTY structures", async () => {
+    // Key presence is not content: `tables: []` means the adapter produced
+    // nothing, so claiming a withholding would send the caller hunting for a
+    // payload that never existed.
+    const a = app({
+      safety: maskingGuard,
+      extract: async () => ({
+        text: "some text",
+        pages: 1,
+        model: "tesseract",
+        tables: [],
+        fields: {},
+        documents: [],
+      }),
+    });
+    const res = await extract(a, {
+      provider: "tesseract",
+      feature: "doc_review_masked",
+      document: { base64: "ZmFrZQ==" },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().safety.structuredWithheld).toBe(false);
+  });
+
+  it("does not withhold structured output when masking is off", async () => {
+    const a = app();
+    const res = await extract(a, {
+      provider: "azure-di",
+      model: "prebuilt-layout",
+      document: { base64: "ZmFrZQ==" },
+    });
+    const body = res.json();
+    expect(body.tables[0].cells[0].content).toBe("cell");
+    expect(body.safety.structuredWithheld).toBe(false);
   });
 
   it("dedupes a retried extract via Idempotency-Key (provider called once, charged once)", async () => {
