@@ -127,7 +127,7 @@ describe.skipIf(!DATABASE_URL)("POST /v1/embeddings — dimensions", () => {
     expect(res.json().dimensions).toBeNull();
   });
 
-  it("accepts the documented maximum and rejects one above it", async () => {
+  it("accepts the documented range end-to-end and rejects one above it", async () => {
     const app = appWith(okEmbed);
     const body = (dimensions: number) => ({
       userId: "svc-bound",
@@ -136,7 +136,10 @@ describe.skipIf(!DATABASE_URL)("POST /v1/embeddings — dimensions", () => {
       input: ["chunk"],
       dimensions,
     });
-    // The bound is documented, so pin both sides of it.
+    // The range is documented, so pin both ends and the far side of the top.
+    // 1 matters on its own: a validator that demanded >= 2 would satisfy every
+    // other assertion here.
+    expect((await post(app, body(1))).statusCode).toBe(200);
     expect((await post(app, body(16_384))).statusCode).toBe(200);
     expect((await post(app, body(16_385))).statusCode).toBe(400);
   });
