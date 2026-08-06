@@ -22,7 +22,14 @@ import {
   reserveHierarchicalOrReject,
 } from "./prep-hierarchical";
 import { fail } from "./mapper";
-import { buildGroundedMessages } from "./grounding";
+import {
+  buildGroundedMessages,
+  citeFields,
+  renderPassages,
+  toPassages,
+  type GroundingOptions,
+  type GroundingPassage,
+} from "./grounding";
 import type { ChatFailure, ChatInput, ChatServiceDeps } from "./types";
 
 export type BudgetHold =
@@ -55,7 +62,7 @@ export interface PreparedCall {
   hold: BudgetHold;
   rejection: RejectionCtx;
   /** Present when grounding=strict: the context to verify the answer against. */
-  grounding?: { context: string[] };
+  grounding?: { context: GroundingPassage[]; options?: GroundingOptions };
 }
 
 function streamSafetyGate(decision: PolicyDecision): ChatFailure | null {
@@ -98,17 +105,52 @@ function groundingContextRequired(
   );
 }
 
+/**
+ * A feature that requires page/section citations can only be honoured if every
+ * passage actually carries those fields — the verifier compares the cited value
+ * against the passage the quote came from, and a passage with no `page` can
+ * never satisfy `cite: [page]`.
+ *
+ * Rejected up front rather than left to fail verification: silently refusing
+ * every answer would look like a flaky model instead of a caller sending plain
+ * strings to a feature configured for structured sources.
+ */
+function groundingCiteFieldsRequired(
+  decision: PolicyDecision,
+  body: ChatInput,
+): ChatFailure | null {
+  const cite = decision.safetyPlan.groundingOptions?.cite;
+  if (decision.safetyPlan.grounding !== "strict" || !cite || cite.length === 0) return null;
+  if (!body.context || body.context.length === 0) return null;
+
+  const passages = toPassages(body.context);
+  const missing = new Set<string>();
+  passages.forEach((p, i) => {
+    for (const f of cite) if (p[f] === undefined) missing.add(`context[${i}].${f}`);
+  });
+  if (missing.size === 0) return null;
+  return fail(
+    400,
+    "grounding_context_missing_fields",
+    { required: cite, missing: [...missing].slice(0, 10) },
+    `This feature requires citations to name ${cite.join(", ")}; every context passage must carry those fields`,
+  );
+}
+
 /** When grounding=strict, replace the messages with the gateway-owned grounded
  * prompt (built from the context); otherwise pass the messages through. */
 function applyGrounding(
   decision: PolicyDecision,
   body: ChatInput,
   messages: ChatMessage[],
-): { messages: ChatMessage[]; grounding?: { context: string[] } } {
+): { messages: ChatMessage[]; grounding?: { context: GroundingPassage[]; options?: GroundingOptions } } {
   if (decision.safetyPlan.grounding === "strict" && body.context && body.context.length > 0) {
+    const options = decision.safetyPlan.groundingOptions;
     return {
-      messages: buildGroundedMessages(messages, body.context),
-      grounding: { context: body.context },
+      messages: buildGroundedMessages(messages, body.context, options),
+      // Normalized once here so the verifier and the audit log see the same
+      // passages the prompt was built from.
+      grounding: { context: toPassages(body.context), options },
     };
   }
   return { messages };
@@ -117,8 +159,9 @@ function applyGrounding(
 /**
  * Screen the retrieved grounding context for prompt injection. RAG context is
  * externally sourced, so a poisoned passage could otherwise hijack the grounded
- * answer (and cite itself past the verifier). Only runs when the feature already
- * blocks injection. PII is deliberately NOT masked here — verbatim citation
+ * answer (and cite itself past the verifier). Screens the rendered passage —
+ * citation metadata included, since that is externally sourced too and lands in
+ * the same system prompt. Only runs when the feature already blocks injection. PII is deliberately NOT masked here — verbatim citation
  * matching needs the raw text — so this screens for injection only.
  *
  * Note: the context is still sent to the provider un-masked by design (grounding
@@ -133,7 +176,14 @@ async function screenGroundingContext(
   if (decision.safetyPlan.promptInjection !== "block") return { costUsd: 0, failure: null };
   if (!body.context || body.context.length === 0) return { costUsd: 0, failure: null };
 
-  const ctxMessages: ChatMessage[] = body.context.map((c) => ({ role: "user", content: c }));
+  // Screen exactly what the prompt will contain — the SAME rendering, metadata
+  // included. Screening only `p.text` would let a poisoned `title` or `url`
+  // reach the model unscreened once `cite` is configured.
+  const rendered = renderPassages(
+    toPassages(body.context),
+    citeFields(decision.safetyPlan.groundingOptions),
+  );
+  const ctxMessages: ChatMessage[] = rendered.map((content) => ({ role: "user", content }));
   const injOnlyPlan: SafetyPlan = { ...decision.safetyPlan, pii: "off", grounding: "off" };
   try {
     const res = await deps.safety.inspectInput(ctxMessages, injOnlyPlan);
@@ -221,7 +271,8 @@ async function prepareFlatCall(
     if (gate) return gate;
   }
 
-  const groundingFail = groundingContextRequired(decision, body);
+  const groundingFail =
+    groundingContextRequired(decision, body) ?? groundingCiteFieldsRequired(decision, body);
   if (groundingFail) return groundingFail;
   // Grounding-context screening runs a billable injection classifier. Screen
   // after the stream gate so a (rejected) streaming request never pays for it,
@@ -313,7 +364,8 @@ async function prepareHierarchicalCall(
     return await rejectHonoredPolicyBlock(rejection, decision);
   }
 
-  const groundingFail = groundingContextRequired(decision, body);
+  const groundingFail =
+    groundingContextRequired(decision, body) ?? groundingCiteFieldsRequired(decision, body);
   if (groundingFail) return groundingFail;
 
   const path = await loadHierarchicalPath(deps.pool, leafNodeId, decision, now, deps.policyMeta?.tenantId);

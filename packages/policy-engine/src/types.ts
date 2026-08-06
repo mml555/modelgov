@@ -17,6 +17,36 @@ export type InjectionMode = "block" | "off";
  * (unverifiable answers are replaced with a safe refusal). `off` = no grounding.
  */
 export type GroundingMode = "off" | "strict";
+/**
+ * Passage metadata a grounded feature can require the model to cite alongside
+ * each verbatim quote. Deliberately a closed set: every field here is verified
+ * against the passage the quote was actually found in, so adding one means
+ * teaching the verifier how to compare it.
+ */
+export type GroundingCitationField = "page" | "section" | "title" | "url";
+
+/**
+ * Prompt copy and citation shape for a grounded feature.
+ *
+ * The gateway owns the grounded prompt — that is what stops an app bypassing
+ * the "answer only from context" contract — but the *wording* is not the
+ * gateway's business. A claims desk, a clinic, and a support team all want the
+ * same enforcement and different words. Only the copy and which citation fields
+ * are required are configurable; whether verification runs is not.
+ */
+export interface GroundingConfig {
+  mode: GroundingMode;
+  /** Opening line of the system prompt. Defaults to a neutral assistant persona. */
+  persona?: string;
+  /** Shown to the user when the answer cannot be verified. */
+  refusal?: string;
+  /**
+   * Metadata fields the model must cite with each quote. When set, a citation
+   * verifies only if its quote appears in a passage whose metadata MATCHES the
+   * cited values — so a cited page number is checked, not just echoed.
+   */
+  cite?: GroundingCitationField[];
+}
 export type ObservabilityProvider = "none" | "langfuse" | "otel";
 export type PolicyDecisionKind = "allow" | "block" | "degrade" | "fallback";
 
@@ -108,15 +138,19 @@ export interface SafetyConfig {
   protect: ProtectConfig;
   /** Model (LiteLLM name) used to classify prompt injection, when enabled. */
   injectionModel?: string;
-  /** Global default grounding mode (features may override). Absent = "off". */
-  grounding?: GroundingMode;
+  /**
+   * Global default grounding. A feature's `grounding` replaces this whole
+   * block rather than merging field-by-field, so a feature that sets its own
+   * persona is not left with a stray refusal string from the global default.
+   */
+  grounding?: GroundingConfig;
 }
 
 /** A feature may set `safety:` to either a preset name or an override object. */
 export interface FeatureSafetyOverride {
   preset?: SafetyPresetName;
   protect?: ProtectConfig;
-  grounding?: GroundingMode;
+  grounding?: GroundingConfig;
 }
 
 export interface FeatureConfig {
@@ -275,6 +309,13 @@ export interface SafetyPlan {
   maxOutputTokens: number;
   /** Resolved grounding mode for this request ("off" when unset). */
   grounding: GroundingMode;
+  /**
+   * Resolved prompt copy and citation shape. Present only when grounding is
+   * strict. Kept beside `grounding` rather than replacing it so the mode stays
+   * a plain string for the many `=== "strict"` checks and for consumers reading
+   * the plan out of /v1/explain.
+   */
+  groundingOptions?: Omit<GroundingConfig, "mode">;
 }
 
 export interface BudgetRemaining {

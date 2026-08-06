@@ -1,3 +1,4 @@
+import type { GroundingCitationField } from "@modelgov/policy-engine";
 import type { ChatMessage } from "../../types";
 
 /**
@@ -7,14 +8,94 @@ import type { ChatMessage } from "../../types";
  * model responds, we deterministically verify the cited quotes actually appear
  * in the supplied context; anything unverifiable is replaced with a safe
  * refusal. No extra model call is involved.
+ *
+ * The gateway owning the prompt is not the same as the gateway owning the
+ * WORDING. A claims desk, a clinic and a support team want identical
+ * enforcement and different copy, so persona/refusal/citation-fields come from
+ * config. What is never configurable is whether verification runs.
  */
 
-/** Shown to the user whenever the answer can't be verified against the context. */
-export const GROUNDING_REFUSAL =
-  "I'm sorry — I couldn't find that in our knowledge base, so I don't want to guess. Let me connect you with a human support agent.";
+/** Neutral default persona — no industry, no channel, no promise of a handoff. */
+export const DEFAULT_GROUNDING_PERSONA =
+  "You are a careful assistant answering strictly from supplied source material.";
 
-function systemPrompt(context: string): string {
-  return `You are a customer-support assistant. Answer the user's question using ONLY the CONTEXT below. Do not use any outside knowledge, and never guess.
+/**
+ * Default refusal, shown whenever the answer can't be verified against the
+ * context. Deliberately says nothing about support agents: a deployment that
+ * has no humans to escalate to would be lying to its users.
+ */
+export const GROUNDING_REFUSAL =
+  "I'm sorry — I couldn't find that in the provided sources, so I don't want to guess.";
+
+/**
+ * A retrieved passage. Callers may pass a bare string (the original shape); the
+ * metadata fields exist so a feature can require citations to name the page or
+ * section a quote came from, and so the gateway can VERIFY that claim rather
+ * than pass it through.
+ */
+export interface GroundingPassage {
+  text: string;
+  page?: number | string;
+  section?: string;
+  title?: string;
+  url?: string;
+}
+
+export interface GroundingOptions {
+  persona?: string;
+  refusal?: string;
+  cite?: GroundingCitationField[];
+}
+
+/** Normalize the mixed string|object context into passages. */
+export function toPassages(context: Array<string | GroundingPassage>): GroundingPassage[] {
+  return context.map((c) => (typeof c === "string" ? { text: c } : c));
+}
+
+/** The passage fields a feature may require, in a stable order for prompts. */
+const CITE_FIELDS: readonly GroundingCitationField[] = ["page", "section", "title", "url"];
+
+export function citeFields(opts: GroundingOptions | undefined): GroundingCitationField[] {
+  const requested = opts?.cite;
+  if (!requested || requested.length === 0) return [];
+  return CITE_FIELDS.filter((f) => requested.includes(f));
+}
+
+/** Render one passage's metadata for the prompt, e.g. `page=12 section="4.2"`. */
+function metaLine(p: GroundingPassage, fields: GroundingCitationField[]): string {
+  const parts = fields
+    .map((f) => (p[f] === undefined ? null : `${f}=${JSON.stringify(p[f])}`))
+    .filter((x): x is string => x !== null);
+  return parts.length > 0 ? ` (${parts.join(" ")})` : "";
+}
+
+/**
+ * Render each passage exactly as it appears in the grounded prompt.
+ *
+ * Injection screening MUST classify this, not the bare `text`. Metadata is
+ * externally sourced like the passage body, and once `cite` is configured it is
+ * rendered into the system prompt — so a passage could otherwise carry an
+ * instruction in its `title` or `url` and reach the model unscreened. One
+ * formatter, used by both, is what keeps the two from drifting apart again.
+ */
+export function renderPassages(
+  passages: GroundingPassage[],
+  fields: GroundingCitationField[],
+): string[] {
+  return passages.map((p, i) => `[${i + 1}]${metaLine(p, fields)} ${p.text}`);
+}
+
+function systemPrompt(
+  context: string,
+  persona: string,
+  fields: GroundingCitationField[],
+): string {
+  // With citation fields configured the model must return objects, so the
+  // required shape and the rules differ. Keeping the two prompts separate is
+  // clearer than one prompt full of conditionals — and the no-fields branch is
+  // byte-for-byte the prompt that shipped, so existing deployments see no drift.
+  if (fields.length === 0) {
+    return `${persona} Answer the user's question using ONLY the CONTEXT below. Do not use any outside knowledge, and never guess.
 
 Respond with a SINGLE JSON object and nothing else, in exactly this shape:
 {"found": true or false, "answer": "plain-language answer for the user", "quotes": ["an exact substring copied verbatim from the CONTEXT that supports the answer"]}
@@ -22,6 +103,22 @@ Respond with a SINGLE JSON object and nothing else, in exactly this shape:
 Rules:
 - If the CONTEXT contains the answer: set "found" to true, write "answer", and include one or more "quotes" copied EXACTLY (character for character) from the CONTEXT.
 - If the CONTEXT does NOT contain the answer: set "found" to false, set "quotes" to [], and put a brief apology in "answer".
+- Never invent facts, prices, policies, names, or steps that are not in the CONTEXT.
+
+CONTEXT:
+${context}`;
+  }
+
+  const fieldList = fields.map((f) => `"${f}"`).join(", ");
+  const example = fields.map((f) => `"${f}": <the ${f} of the passage you quoted>`).join(", ");
+  return `${persona} Answer the user's question using ONLY the CONTEXT below. Do not use any outside knowledge, and never guess.
+
+Respond with a SINGLE JSON object and nothing else, in exactly this shape:
+{"found": true or false, "answer": "plain-language answer for the user", "citations": [{"quote": "an exact substring copied verbatim from the CONTEXT", ${example}}]}
+
+Rules:
+- If the CONTEXT contains the answer: set "found" to true, write "answer", and include one or more "citations". Each "quote" must be copied EXACTLY (character for character) from a single passage, and ${fieldList} must be that same passage's values, shown in parentheses after its number.
+- If the CONTEXT does NOT contain the answer: set "found" to false, set "citations" to [], and put a brief apology in "answer".
 - Never invent facts, prices, policies, names, or steps that are not in the CONTEXT.
 
 CONTEXT:
@@ -35,10 +132,14 @@ ${context}`;
  */
 export function buildGroundedMessages(
   messages: ChatMessage[],
-  context: string[],
+  context: Array<string | GroundingPassage>,
+  opts?: GroundingOptions,
 ): ChatMessage[] {
-  const joined = context.map((c, i) => `[${i + 1}] ${c}`).join("\n---\n");
-  return [{ role: "system", content: systemPrompt(joined) }, ...messages];
+  const passages = toPassages(context);
+  const fields = citeFields(opts);
+  const joined = renderPassages(passages, fields).join("\n---\n");
+  const persona = opts?.persona ?? DEFAULT_GROUNDING_PERSONA;
+  return [{ role: "system", content: systemPrompt(joined, persona, fields) }, ...messages];
 }
 
 export interface GroundingVerdict {
@@ -65,43 +166,62 @@ function stripMarker(q: string): string {
   return q.replace(/^\s*\[\d+\]\s*/, "");
 }
 
+/** Compare a cited metadata value to a passage's. Loose across number/string
+ * (a page is `12` in config and may come back as `"12"`) but nothing else. */
+function metaMatches(cited: unknown, actual: number | string | undefined): boolean {
+  if (actual === undefined) return false;
+  if (typeof cited === "number" || typeof cited === "string") {
+    return normalize(String(cited)) === normalize(String(actual));
+  }
+  return false;
+}
+
+interface Citation {
+  quote: string;
+  meta: Record<string, unknown>;
+}
+
 /**
- * Parse the model's structured answer and verify every cited quote appears in
- * the context. Fails closed (refusal) on unparseable output, `found:false`, no
- * quotes, trivially short quotes, any quote not present in the context, or any
- * numeric claim in the answer that does not appear in the context.
+ * Parse the model's structured answer and verify every citation. Fails closed
+ * (refusal) on unparseable output, `found:false`, no citations, trivially short
+ * quotes, any quote not present in a single passage, any cited metadata that
+ * does not match the passage the quote was found in, or any numeric claim in
+ * the answer that does not appear in the context.
  */
-export function verifyGrounding(rawOutput: string, context: string[]): GroundingVerdict {
-  const refusal: GroundingVerdict = { grounded: false, answer: GROUNDING_REFUSAL, verifiedQuotes: 0 };
+export function verifyGrounding(
+  rawOutput: string,
+  context: Array<string | GroundingPassage>,
+  opts?: GroundingOptions,
+): GroundingVerdict {
+  const refusalText = opts?.refusal ?? GROUNDING_REFUSAL;
+  const fields = citeFields(opts);
+  const passages = toPassages(context);
+  const refusal: GroundingVerdict = { grounded: false, answer: refusalText, verifiedQuotes: 0 };
 
   const parsed = extractJson(rawOutput);
   if (!parsed) return refusal;
 
   const found = parsed.found === true;
   const answer = typeof parsed.answer === "string" ? parsed.answer.trim() : "";
-  // Measure the anti-triviality gate on the marker-STRIPPED text (the same form
-  // that is verified below), so a short quote can't slip past the length gate by
-  // carrying a "[12] " prefix that is discarded before matching.
-  const quotes = Array.isArray(parsed.quotes)
-    ? parsed.quotes.filter(
-        (q): q is string =>
-          typeof q === "string" && normalize(stripMarker(q)).length >= MIN_QUOTE_CHARS,
-      )
-    : [];
+  const citations = readCitations(parsed);
 
-  if (!found || !answer || quotes.length === 0) return refusal;
+  if (!found || !answer || citations.length === 0) return refusal;
 
   // Verify each quote against INDIVIDUAL passages, not a joined blob: joining
   // would let a "quote" that straddles two passages (present in neither) verify.
-  const passages = context.map(normalize);
-  const verified = quotes.filter((q) => {
-    const nq = normalize(stripMarker(q));
-    return passages.some((p) => p.includes(nq));
+  // With citation fields configured the SAME passage must also carry the cited
+  // metadata — checking the quote against one passage and the page against
+  // another would let a real quote be attributed to the wrong page.
+  const verified = citations.filter((c) => {
+    const nq = normalize(stripMarker(c.quote));
+    return passages.some(
+      (p) => normalize(p.text).includes(nq) && fields.every((f) => metaMatches(c.meta[f], p[f])),
+    );
   });
-  // Every non-trivial cited quote must be present — one fabricated citation is
+  // Every non-trivial citation must check out — one fabricated citation is
   // enough to distrust the whole answer.
-  if (verified.length !== quotes.length) {
-    return { grounded: false, answer: GROUNDING_REFUSAL, verifiedQuotes: verified.length };
+  if (verified.length !== citations.length) {
+    return { grounded: false, answer: refusalText, verifiedQuotes: verified.length };
   }
 
   // Quote presence proves a string was copyable from the context, NOT that the
@@ -110,18 +230,63 @@ export function verifyGrounding(rawOutput: string, context: string[]): Grounding
   // consistent with the feature's fail-closed stance, require every numeric run
   // in the answer to also appear in the context. Word↔digit mismatches refuse
   // (safe: the refusal routes to a human).
-  if (!numbersGrounded(answer, context)) {
-    return { grounded: false, answer: GROUNDING_REFUSAL, verifiedQuotes: verified.length };
+  if (!numbersGrounded(answer, passages)) {
+    return { grounded: false, answer: refusalText, verifiedQuotes: verified.length };
   }
   return { grounded: true, answer, verifiedQuotes: verified.length };
 }
 
+/**
+ * Read citations from either shape — `quotes: ["..."]` or
+ * `citations: [{quote, page, ...}]` — and drop trivially short ones.
+ *
+ * Both are accepted regardless of configuration, on purpose: a model handed the
+ * citations prompt sometimes answers with bare `quotes` anyway, and rejecting
+ * that outright would refuse an answer whose quote is perfectly verifiable. It
+ * costs nothing to be lenient here because the metadata check below is what
+ * enforces the contract — a bare quote carries no `page`, so under
+ * `cite: [page]` it simply fails to verify.
+ */
+function readCitations(parsed: ParsedAnswer): Citation[] {
+  const out: Citation[] = [];
+  const push = (quote: unknown, meta: Record<string, unknown>) => {
+    // Measure the anti-triviality gate on the marker-STRIPPED text (the same
+    // form that is verified below), so a short quote can't slip past the length
+    // gate by carrying a "[12] " prefix that is discarded before matching.
+    if (typeof quote === "string" && normalize(stripMarker(quote)).length >= MIN_QUOTE_CHARS) {
+      out.push({ quote, meta });
+    }
+  };
+  if (Array.isArray(parsed.quotes)) {
+    for (const q of parsed.quotes) push(q, {});
+  }
+  if (Array.isArray(parsed.citations)) {
+    for (const c of parsed.citations) {
+      if (c && typeof c === "object") {
+        const obj = c as Record<string, unknown>;
+        push(obj.quote, obj);
+      }
+    }
+  }
+  return out;
+}
+
 /** True when every digit-run in the answer also appears as a digit-run in the
  * context (or the answer has no numbers). Blocks fabricated numeric claims. */
-function numbersGrounded(answer: string, context: string[]): boolean {
+function numbersGrounded(answer: string, passages: GroundingPassage[]): boolean {
   const answerNums = answer.match(/\d+/g);
   if (!answerNums) return true;
-  const contextNums = new Set(context.join(" ").match(/\d+/g) ?? []);
+  // Metadata counts as context: with `cite: [page]` the model is shown page
+  // numbers and may legitimately write "see page 12" in the answer.
+  const haystack = passages
+    .map((p) =>
+      // `!== undefined`, not filter(Boolean): a page of 0 is a real page, and
+      // dropping it would refuse an answer the context actually supports.
+      // Matches the same enumeration in estimateInputTokensFromMessages.
+      [p.text, p.page, p.section, p.title, p.url].filter((v) => v !== undefined).join(" "),
+    )
+    .join(" ");
+  const contextNums = new Set(haystack.match(/\d+/g) ?? []);
   return answerNums.every((n) => contextNums.has(n));
 }
 
@@ -129,6 +294,7 @@ interface ParsedAnswer {
   found?: unknown;
   answer?: unknown;
   quotes?: unknown;
+  citations?: unknown;
 }
 
 /**
@@ -150,7 +316,7 @@ function extractJson(text: string): ParsedAnswer | null {
       if (
         obj &&
         typeof obj === "object" &&
-        ("found" in obj || "answer" in obj || "quotes" in obj)
+        ("found" in obj || "answer" in obj || "quotes" in obj || "citations" in obj)
       ) {
         return obj;
       }

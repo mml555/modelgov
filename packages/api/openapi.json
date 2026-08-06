@@ -4865,7 +4865,10 @@
                     "minItems": 1,
                     "maxItems": 64,
                     "items": {
-                      "type": "string",
+                      "type": [
+                        "string",
+                        "object"
+                      ],
                       "minLength": 1,
                       "maxLength": 100000
                     }

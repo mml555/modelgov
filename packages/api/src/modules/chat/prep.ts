@@ -7,6 +7,7 @@ import {
   type PolicyDecision,
   type UsageSnapshot,
 } from "@modelgov/policy-engine";
+import { toPassages } from "./grounding";
 import { acquireCreditHold } from "../billing/reserve";
 import { SafetyServiceError } from "../../services/safety";
 import {
@@ -65,7 +66,16 @@ export function estimateInputTokensFromMessages(
       }
     }
   }
-  for (const passage of context ?? []) chars += passage.length;
+  // Passages may be structured. Count the metadata too: with citation fields
+  // configured it is rendered into the prompt beside the text, and a floor that
+  // ignored it would under-reserve. (Before the union, `passage.length` on an
+  // object was `undefined` and poisoned the whole sum to NaN.)
+  for (const passage of toPassages(context ?? [])) {
+    chars += passage.text.length;
+    for (const meta of [passage.page, passage.section, passage.title, passage.url]) {
+      if (meta !== undefined) chars += String(meta).length;
+    }
+  }
   return Math.ceil(chars / CHARS_PER_TOKEN) + images * IMAGE_INPUT_TOKENS;
 }
 

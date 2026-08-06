@@ -1,4 +1,5 @@
 import type { ResponseFormat } from "../../services/litellm";
+import type { GroundingPassage } from "./grounding";
 import type {
   ModelgovConfig,
   BudgetRemaining,
@@ -42,7 +43,7 @@ export interface ChatInput {
   modelClass?: string;
   messages: ChatMessage[];
   /** Retrieved passages for a grounded feature (see chatBodySchema.context). */
-  context?: string[];
+  context?: Array<string | GroundingPassage>;
   inputTokensEstimate?: number;
   temperature?: number;
   /** Force JSON (optionally schema-constrained) output. */

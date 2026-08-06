@@ -27,6 +27,7 @@ from .types import (
     DocumentExtractResult,
     EmbeddingsResult,
     ExplainResult,
+    GroundingPassage,
     ProviderHealthResult,
     TransactionsResult,
     UsageResult,
@@ -134,7 +135,7 @@ class ModelgovClient:
         user_type: str,
         feature: str,
         messages: Sequence[ChatMessage],
-        context: Optional[Sequence[str]] = None,
+        context: Optional[Sequence[Union[str, GroundingPassage]]] = None,
         model_class: Optional[str] = None,
         requested_model_class: Optional[str] = None,
         input_tokens_estimate: Optional[int] = None,
@@ -159,6 +160,13 @@ class ModelgovClient:
                 ``grounding: strict``). The gateway answers ONLY from these,
                 forces verbatim citations, and verifies them; unverifiable
                 answers become a safe refusal.
+
+                A passage is a plain ``str``, or a :class:`GroundingPassage`
+                mapping ``{"text", "page", "section", "title", "url"}``. A
+                feature configured with ``cite: [page, ...]`` requires the
+                mapping form on EVERY passage — the gateway verifies the cited
+                value against the passage the quote came from, so plain strings
+                are rejected with ``grounding_context_missing_fields``.
             model_class: Requested model class (e.g. ``"cheap"``). Maps to the
                 API's ``modelClass`` field.
             requested_model_class: Alias for ``model_class``; if both are given,
@@ -224,7 +232,7 @@ class ModelgovClient:
         user_type: str,
         feature: str,
         messages: Sequence[ChatMessage],
-        context: Optional[Sequence[str]] = None,
+        context: Optional[Sequence[Union[str, GroundingPassage]]] = None,
         model_class: Optional[str] = None,
         requested_model_class: Optional[str] = None,
         input_tokens_estimate: Optional[int] = None,
@@ -649,7 +657,7 @@ class ModelgovClient:
         user_type: str,
         feature: str,
         messages: Sequence[ChatMessage],
-        context: Optional[Sequence[str]],
+        context: Optional[Sequence[Union[str, GroundingPassage]]],
         model_class: Optional[str],
         requested_model_class: Optional[str],
         input_tokens_estimate: Optional[int],
@@ -667,7 +675,10 @@ class ModelgovClient:
             "messages": [dict(m) for m in messages],
         }
         if context is not None:
-            body["context"] = list(context)
+            # Passages may be plain strings or mappings carrying page/section
+            # metadata; copy mappings so a caller's dict cannot be aliased into
+            # the request body.
+            body["context"] = [c if isinstance(c, str) else dict(c) for c in context]
         resolved_model_class = model_class or requested_model_class
         if resolved_model_class is not None:
             body["modelClass"] = resolved_model_class

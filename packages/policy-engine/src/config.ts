@@ -7,6 +7,7 @@ import {
   PolicyConfigError,
   type ModelgovConfig,
   type FeatureSafetyOverride,
+  type GroundingConfig,
 } from "./types";
 
 // modelgov.yaml is authored in snake_case; we validate it and transform to the
@@ -101,6 +102,33 @@ const userTypeBudgetSchema = z
   }));
 
 const groundingEnum = z.enum(["off", "strict"]);
+const groundingCiteEnum = z.enum(["page", "section", "title", "url"]);
+
+/**
+ * `grounding: strict` (the original shape) or a block that also carries the
+ * prompt copy and citation shape. The bare string stays valid forever — every
+ * existing config keeps working and keeps today's defaults.
+ */
+const groundingSchema = z.union([
+  groundingEnum,
+  z
+    .object({
+      mode: groundingEnum,
+      persona: z.string().min(1).max(2000).optional(),
+      refusal: z.string().min(1).max(2000).optional(),
+      // Non-empty when present: `cite: []` would read as "require citations"
+      // while meaning the opposite, so make the author write it as absent.
+      cite: z.array(groundingCiteEnum).min(1).max(4).optional(),
+    })
+    .strict(),
+]);
+
+function normalizeGrounding(
+  g: z.infer<typeof groundingSchema> | undefined,
+): GroundingConfig | undefined {
+  if (g == null) return undefined;
+  return typeof g === "string" ? { mode: g } : g;
+}
 
 const featureSafetySchema = z.union([
   presetEnum,
@@ -108,7 +136,7 @@ const featureSafetySchema = z.union([
     .object({
       preset: presetEnum.optional(),
       protect: protectSchema.optional(),
-      grounding: groundingEnum.optional(),
+      grounding: groundingSchema.optional(),
     })
     .strict(),
 ]);
@@ -274,14 +302,14 @@ const safetySchema = z
     preset: presetEnum.default("balanced"),
     protect: protectSchema.optional(),
     injection_model: z.string().optional(),
-    grounding: groundingEnum.optional(),
+    grounding: groundingSchema.optional(),
   })
   .strict()
   .transform((s) => ({
     preset: s.preset,
     protect: s.protect ?? { pii: undefined, promptInjection: undefined },
     injectionModel: s.injection_model,
-    grounding: s.grounding,
+    grounding: normalizeGrounding(s.grounding),
   }));
 
 const observabilitySchema = z.object({
@@ -342,7 +370,7 @@ function normalizeFeatureSafety(
 ): FeatureSafetyOverride | undefined {
   if (s == null) return undefined;
   if (typeof s === "string") return { preset: s };
-  return { preset: s.preset, protect: s.protect, grounding: s.grounding };
+  return { preset: s.preset, protect: s.protect, grounding: normalizeGrounding(s.grounding) };
 }
 
 /** Validate cross-references that zod's per-field schema can't express. */

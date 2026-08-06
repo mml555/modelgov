@@ -258,11 +258,61 @@ routing:
 | `protect.pii` | `mask` \| `block` \| `off` |
 | `protect.prompt_injection` | `block` \| `off` |
 | `injection_model` | LiteLLM model name for injection classifier |
+| `grounding` | `off` \| `strict`, or a block (below) |
 
 Feature-level `safety:` overrides the global preset.
 
 Presidio URLs must be set in the environment for PII enforcement. If missing,
 the API logs a warning and PII rules are not enforced.
+
+### `grounding`
+
+`strict` makes the gateway answer only from the `context` passages the caller
+supplies, require citations, and verify them — anything unverifiable is replaced
+with a refusal. The gateway owns that prompt on purpose: it is what stops an app
+opting out of the contract.
+
+The *wording* is not the gateway's business, so it is configurable:
+
+```yaml
+features:
+  claims_qa:
+    model_class: cheap
+    max_tokens: 500
+    safety:
+      grounding:
+        mode: strict
+        persona: "You are a claims assistant."
+        refusal: "I couldn't find that in the policy documents."
+        cite: [page, section]
+```
+
+| Field | Description |
+| --- | --- |
+| `mode` | `off` \| `strict` |
+| `persona` | Opening line of the system prompt. Default names no industry or channel. |
+| `refusal` | Shown when the answer cannot be verified. Default promises no human handoff. |
+| `cite` | Passage fields each citation must name: `page`, `section`, `title`, `url` |
+
+`grounding: strict` (the bare string) remains valid and keeps the defaults.
+
+A feature's `grounding` block replaces the global one **wholesale** rather than
+merging field-by-field, so a feature that sets its own persona is never left
+carrying a refusal string written for a different desk.
+
+**`cite` is verified, not echoed.** A citation counts only if its quote appears
+in a passage *and* that same passage carries the cited values — a real quote
+attributed to the wrong page is refused. That requires structured passages:
+
+```json
+"context": [
+  { "text": "Claims are settled within 30 days of the loss report.", "page": 12, "section": "4.2" }
+]
+```
+
+Plain strings stay valid everywhere; they just cannot satisfy a `cite` list, so
+sending them to a feature that requires one is rejected up front with
+`grounding_context_missing_fields` rather than left to refuse every answer.
 
 ---
 

@@ -60,8 +60,11 @@ export function resolveSafetyPlan(
       ? PRESET_DEFAULTS[override.preset].promptInjection
       : undefined);
 
-  // Grounding: feature override wins, else the global default, else off.
-  const grounding = override?.grounding ?? config.safety.grounding ?? "off";
+  // Grounding: the feature's block replaces the global one WHOLESALE (not a
+  // field-by-field merge), so a feature that sets its own persona can never be
+  // left carrying a refusal string written for a different desk.
+  const groundingConfig = override?.grounding ?? config.safety.grounding;
+  const grounding = groundingConfig?.mode ?? "off";
 
   // PII scope: same 4-tier precedence as pii/promptInjection —
   // feature-explicit → feature-preset default → global-explicit → global-preset
@@ -82,5 +85,16 @@ export function resolveSafetyPlan(
     injectionModel: config.safety.injectionModel,
     maxOutputTokens: feature.maxTokens,
     grounding,
+    // Only when it can actually apply — carrying copy for an off feature would
+    // suggest, wrongly, that something is enforcing it.
+    ...(grounding === "strict" && groundingConfig
+      ? {
+          groundingOptions: {
+            persona: groundingConfig.persona,
+            refusal: groundingConfig.refusal,
+            cite: groundingConfig.cite,
+          },
+        }
+      : {}),
   };
 }
