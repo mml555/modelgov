@@ -53,7 +53,7 @@ const WIZARD_ANSWERS = {
   mode: "full",
 };
 
-const { main, parseFlags, promptOptions, resolveNonInteractive } = await import("../src/index");
+const { main, parseFlags, promptOptions, resolveNonInteractive } = await import("../src/wizard");
 
 let dir: string;
 beforeEach(() => {

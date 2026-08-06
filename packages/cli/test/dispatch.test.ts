@@ -30,7 +30,7 @@ vi.mock("../src/validate.js", () => ({
   formatValidateResult: mods.formatValidateResult,
 }));
 
-const { dispatch, main } = await import("../src/index");
+const { dispatch, main } = await import("../src/cli");
 
 let log: ReturnType<typeof vi.spyOn>;
 let err: ReturnType<typeof vi.spyOn>;

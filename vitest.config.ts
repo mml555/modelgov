@@ -66,6 +66,12 @@ export default defineConfig({
         "packages/api/src/services/**/index.ts",
         "packages/api/src/modules/**/index.ts",
         "apps/operator-console/src/**/index.ts",
+        // Three-line executable shims: `#!/usr/bin/env node` plus a call into
+        // the module that holds the logic (cli.ts / wizard.ts), both of which
+        // ARE measured. Named explicitly rather than matched by a glob, so a
+        // future index.ts that grows logic is not silently exempted.
+        "packages/cli/src/index.ts",
+        "packages/create-modelgov/src/index.ts",
         "packages/api/src/migrate.ts",
         "packages/api/src/openapiExport.ts",
         "packages/sdk-typescript/src/generated/**",
