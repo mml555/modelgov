@@ -346,11 +346,19 @@ features:
 | Field | Description |
 | --- | --- |
 | `mode` | `off` \| `strict` |
-| `persona` | Opening line of the system prompt. Default names no industry or channel. |
-| `refusal` | Shown when the answer cannot be verified. Default promises no human handoff. |
+| `persona` | Opening line of the system prompt. Defaults to a customer-support voice. |
+| `refusal` | Shown when the answer cannot be verified. The default offers a human handoff. |
 | `cite` | Passage fields each citation must name: `page`, `section`, `title`, `url` |
 
 `grounding: strict` (the bare string) remains valid and keeps the defaults.
+
+**Set `persona` and `refusal` outside a support desk.** The defaults are
+deliberately unchanged from before they were configurable: an upgrade from any
+released version does not change the wording sent to users. But they say
+"customer-support assistant" and offer to "connect you with a human support
+agent". A claims, clinical or legal deployment should not ship either — and the
+refusal's promise only holds if there is a support agent available to take the
+handoff, so set `refusal` unless there is.
 
 A feature's `grounding` block replaces the global one **wholesale** rather than
 merging field-by-field, so a feature that sets its own persona is never left
