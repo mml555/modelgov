@@ -1,0 +1,263 @@
+import { runDoctorProduction } from "./doctorProduction.js";
+import { runExplain, type ExplainFlags } from "./explain.js";
+import { DEFAULT_BASE_URL, flagValue } from "./flags.js";
+import { runKeysCommand } from "./keys.js";
+import { runOps, type OpsCommand } from "./ops.js";
+import { runRequestsCommand, runUsageSummaryCommand } from "./operator.js";
+import { runPolicyTestFile } from "./testPolicy.js";
+import { formatValidateResult, validateConfig } from "./validate.js";
+
+const ROOT_USAGE = `modelgov — Modelgov policy and ops tools
+
+Commands:
+  setup         First-run setup, stack start, readiness wait, and smoke test
+  up            Start a compose stack
+  down          Stop a compose stack
+  status        Show containers plus /health and /ready
+  logs          Follow API logs
+  doctor        Check local prerequisites and runtime health
+  doctor production  Production env posture (pass/fail + fixes)
+  smoke         Run an authenticated chat smoke test
+  reset         Stop and remove local compose volumes
+  reload-providers  Restart the model proxy with keys from .env (after setup wizard)
+  explain       Dry-run a policy decision
+  validate      Validate modelgov.yaml
+  test-policy   Run policy regression tests from a YAML file
+  requests      List or show request audit records
+  usage         Usage summaries from audit logs
+  keys          Manage DB-backed API keys (create, list, rotate, revoke)
+
+Run 'modelgov <command> --help' for command options.
+`;
+
+/**
+ * The CLI. Exported and side-effect-free at import time — `index.ts` invokes it.
+ * This module used to end in a bare top-level call, so importing it RAN the
+ * CLI; that is why none of the dispatch logic could be tested, and why the
+ * blanket index.ts coverage exclusion hid 216 lines of it.
+ */
+export function main(): void {
+  const args = process.argv.slice(2);
+  if (args[0] === "--") args.shift();
+  if (args.length === 0 || args[0] === "-h" || args[0] === "--help") {
+    console.log(ROOT_USAGE);
+    return;
+  }
+
+  const [command, ...rest] = args;
+  // Single top-level handler: every command (sync or async) resolves here, so
+  // errors are logged and the exit code set in exactly one place. Commands may
+  // resolve a numeric exit code to signal a non-error, non-zero outcome
+  // (e.g. `doctor production` reporting failed checks).
+  void dispatch(command, rest)
+    .then((code) => {
+      if (code) process.exit(code);
+    })
+    .catch((err) => {
+      console.error(err instanceof Error ? err.message : err);
+      process.exit(1);
+    });
+}
+
+/**
+ * Run a command. Resolves `void` for the common success/handled path, or a
+ * numeric exit code when the command wants to signal a specific non-zero exit
+ * without it being an error (thrown errors are the normal failure channel).
+ */
+export async function dispatch(command: string, rest: string[]): Promise<number | void> {
+  switch (command) {
+    case "doctor":
+      if (rest[0] === "production") {
+        return runDoctorProduction({
+          envFile: flagValue(rest, "--env-file") ?? ".env.production",
+          strict: rest.includes("--strict"),
+        });
+      }
+      return runOpsCommand(command, rest);
+    case "setup":
+    case "up":
+    case "down":
+    case "status":
+    case "logs":
+    case "smoke":
+    case "reset":
+      return runOpsCommand(command, rest);
+    case "reload-providers":
+      return runOpsCommand(command, rest);
+    case "explain":
+      return runExplainCommand(rest);
+    case "validate":
+      return runValidateCommand(rest);
+    case "test-policy":
+      return runTestPolicyCommand(rest);
+    case "requests":
+      return runRequestsCommand(rest);
+    case "usage":
+      return runUsageCommand(rest);
+    case "keys":
+      return runKeysCommand(rest);
+    default:
+      console.error(`Unknown command: ${command}\n`);
+      console.log(ROOT_USAGE);
+      return 1;
+  }
+}
+
+async function runOpsCommand(command: OpsCommand, args: string[]): Promise<void> {
+  if (args.includes("-h") || args.includes("--help")) {
+    console.log(OPS_USAGE);
+    return;
+  }
+  await runOps(command, args);
+}
+
+async function runExplainCommand(args: string[]): Promise<void> {
+  if (args.includes("-h") || args.includes("--help")) {
+    console.log(EXPLAIN_USAGE);
+    return;
+  }
+  await runExplain(parseExplainFlags(args));
+}
+
+function runValidateCommand(args: string[]): number | void {
+  const configPath = flagValue(args, "--config") ?? "./modelgov.yaml";
+  const production = args.includes("--production");
+  const result = validateConfig({ configPath, production });
+  console.log(formatValidateResult(result));
+  if (!result.ok) return 1;
+}
+
+function runTestPolicyCommand(args: string[]): number | void {
+  const file = flagValue(args, "--file") ?? "./modelgov.policy-tests.yaml";
+  const config = flagValue(args, "--config");
+  const { results, ok } = runPolicyTestFile(file, config);
+  for (const r of results) {
+    console.log(r.passed ? `✓ ${r.name}` : `✗ ${r.name}: ${r.message}`);
+  }
+  if (!ok) return 1;
+  console.log(`\n${results.length} passed`);
+}
+
+async function runUsageCommand(args: string[]): Promise<void> {
+  const sub = args[0];
+  if (sub === "summary") {
+    await runUsageSummaryCommand(args.slice(1));
+    return;
+  }
+  if (!sub || sub === "-h" || sub === "--help") {
+    console.log(`modelgov usage\n\n  usage summary [options]\n\nRun 'modelgov usage summary --help' for filters.`);
+    return;
+  }
+  throw new Error(`Unknown usage subcommand: ${sub}`);
+}
+
+const EXPLAIN_USAGE = `modelgov explain [options]
+
+Options:
+  --userId <id>           User id (default: explain-user)
+  --userType <type>       User type (required)
+  --feature <name>        Feature (required)
+  --modelClass <class>    Model class (optional)
+  --config <path>         modelgov.yaml (default: ./modelgov.yaml)
+  --local                 Offline evaluation (no API)
+  --baseUrl <url>         API URL (default: http://localhost:3090)
+  --apiKey <key>          API key (default: $MODELGOV_API_KEY)
+  --json                  JSON output
+`;
+
+const OPS_USAGE = `modelgov ops commands
+
+Usage:
+  modelgov setup [simple|full|local|cloud|azure] [--json]
+  modelgov up [simple|full|local|cloud|azure|prod]
+  modelgov down [simple|full|local|cloud|azure|prod]
+  modelgov status [simple|full|local|cloud|azure|prod]
+  modelgov logs [simple|full|local|cloud|azure|prod] [--no-follow]
+  modelgov doctor [simple|full|local|cloud|azure|prod] [--strict]
+  modelgov smoke [simple|full|local|cloud|azure|prod]
+  modelgov reset [simple|full|local|cloud|azure|prod] --yes
+`;
+
+function parseExplainFlags(args: string[]): ExplainFlags {
+  const flags: ExplainFlags = {
+    userId: "explain-user",
+    configPath: "./modelgov.yaml",
+    local: false,
+    baseUrl: process.env.MODELGOV_URL ?? DEFAULT_BASE_URL,
+    apiKey: process.env.MODELGOV_API_KEY,
+    json: false,
+  };
+
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    const next = args[i + 1];
+    switch (arg) {
+      case "--userId":
+        flags.userId = requireValue(arg, next);
+        i++;
+        break;
+      case "--userType":
+        flags.userType = requireValue(arg, next);
+        i++;
+        break;
+      case "--feature":
+        flags.feature = requireValue(arg, next);
+        i++;
+        break;
+      case "--modelClass":
+        flags.modelClass = requireValue(arg, next);
+        i++;
+        break;
+      case "--inputTokensEstimate":
+        flags.inputTokensEstimate = requireNumber(arg, requireValue(arg, next));
+        i++;
+        break;
+      case "--config":
+        flags.configPath = requireValue(arg, next);
+        i++;
+        break;
+      case "--baseUrl":
+        flags.baseUrl = requireValue(arg, next);
+        i++;
+        break;
+      case "--apiKey":
+        flags.apiKey = requireValue(arg, next);
+        i++;
+        break;
+      case "--local":
+        flags.local = true;
+        break;
+      case "--json":
+        flags.json = true;
+        break;
+      default:
+        throw new Error(`Unknown flag: ${arg}`);
+    }
+  }
+
+  if (!flags.userType) throw new Error("--userType is required");
+  if (!flags.feature) throw new Error("--feature is required");
+  return flags;
+}
+
+/**
+ * A flag that must be a positive number.
+ *
+ * `Number("abc")` is NaN, which sailed through to JSON.stringify and reached
+ * the API as `inputTokensEstimate: null` — the caller got no error at all for a
+ * typo'd value, just a silently different request.
+ */
+function requireNumber(flag: string, value: string): number {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) {
+    throw new Error(`${flag} requires a positive number (got '${value}')`);
+  }
+  return n;
+}
+
+function requireValue(flag: string, value: string | undefined): string {
+  if (!value || value.startsWith("--")) {
+    throw new Error(`${flag} requires a value`);
+  }
+  return value;
+}
