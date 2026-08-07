@@ -1,4 +1,4 @@
-import { SafetyServiceError } from "../../services/safety";
+import { SafetyServiceError, type OutputSafetyResult } from "../../services/safety";
 import { logRequest } from "../usage/auditLogRepo";
 import { settleActualCostWithRetry } from "../usage/repo";
 import { settlePath } from "../budgets/repo";
@@ -11,6 +11,7 @@ import { createFlatProviderBudget, createHierarchicalProviderBudget } from "./pr
 import { ZERO_USAGE } from "./prep-hierarchical";
 import { auditUnavailableFailure, baseLog, baseObs, chatSuccessBody, fail } from "./mapper";
 import { verifyGrounding } from "./grounding";
+import { maskStructuredOutput } from "./structuredOutput";
 import type { ChatResult, ChatServiceDeps } from "./types";
 import type { PreparedCall } from "./prepare";
 
@@ -148,8 +149,30 @@ export async function executeSyncChat(
     }
   }
 
+  // Structured responses are masked per JSON VALUE, not as a text pass over the
+  // serialized blob — see structuredOutput.ts. `structured` is false when the
+  // model ignored responseFormat and returned prose, in which case we fall
+  // through to the ordinary path rather than skip output safety.
+  let structuredMasked = false;
   try {
-    const outputSafety = await safety.inspectOutput(content, decision.safetyPlan);
+    let outputSafety: OutputSafetyResult;
+    if (prepared.responseFormat) {
+      const s = await maskStructuredOutput(safety, content, decision.safetyPlan);
+      if (s.structured) {
+        structuredMasked = s.masked;
+        outputSafety = {
+          action: s.action,
+          content: s.content,
+          piiMasked: s.masked,
+          findings: s.findings,
+          ...(s.blockReason ? { blockReason: s.blockReason } : {}),
+        };
+      } else {
+        outputSafety = await safety.inspectOutput(content, decision.safetyPlan);
+      }
+    } else {
+      outputSafety = await safety.inspectOutput(content, decision.safetyPlan);
+    }
     if (outputSafety.action === "block") {
       const blocked = await recordRejection(
         { pool, observability },
@@ -236,7 +259,14 @@ export async function executeSyncChat(
       outputTokens: llm.outputTokens,
       piiMasked,
       injectionBlocked,
-      ...(grounded === undefined ? {} : { reasonCode: grounded ? "grounded" : "grounding_refused" }),
+      // Grounding's verdict wins the single reasonCode slot when both apply —
+      // a refused answer is the more consequential fact. structured_masked is
+      // the /chat analogue of the documents path's structured_withheld.
+      ...(grounded !== undefined
+        ? { reasonCode: grounded ? "grounded" : "grounding_refused" }
+        : structuredMasked
+          ? { reasonCode: "structured_masked" as const }
+          : {}),
       traceTags: { ...decision.traceTags, policyDecision: finalDecision },
     });
   } catch {
@@ -291,6 +321,9 @@ export async function executeSyncChat(
     piiMasked,
     injectionBlocked,
     grounded,
+    // Only for responseFormat requests; undefined elsewhere so the field is
+    // absent rather than a misleading `false` on every prose response.
+    ...(prepared.responseFormat ? { structuredMasked } : {}),
     requestId: auditRequestId,
   });
 }

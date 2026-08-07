@@ -73,7 +73,12 @@ export interface ChatSuccess {
      * claim full headroom the caller does not actually have.
      */
     budgetRemaining: BudgetRemaining | null;
-    safety: { piiMasked: boolean; injectionBlocked: boolean; grounded?: boolean };
+    safety: {
+      piiMasked: boolean;
+      injectionBlocked: boolean;
+      grounded?: boolean;
+      structuredMasked?: boolean;
+    };
     /** Audit log id — use with `modelgov requests show <id>`. */
     requestId: string;
   };

@@ -5124,6 +5124,9 @@
                         },
                         "grounded": {
                           "type": "boolean"
+                        },
+                        "structuredMasked": {
+                          "type": "boolean"
                         }
                       }
                     },
