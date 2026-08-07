@@ -319,6 +319,12 @@ export const chatSuccessJsonSchema = {
         injectionBlocked: { type: "boolean" },
         // Present only for grounded features: did the answer's citations verify?
         grounded: { type: "boolean" },
+        // Present only for responseFormat requests: did output PII masking
+        // rewrite a value INSIDE the structured payload? Lets a caller tell a
+        // redacted field from one the model failed to extract — and warns that
+        // a json_schema response may now violate its own schema, since a masked
+        // value is `[REDACTED]`.
+        structuredMasked: { type: "boolean" },
       },
     },
     requestId: { type: "string" },

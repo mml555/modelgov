@@ -65,6 +65,14 @@ export function chatSuccessBody(params: {
   injectionBlocked: boolean;
   /** Present only for grounded features: whether the answer's citations verified. */
   grounded?: boolean;
+  /**
+   * Present only for responseFormat requests: whether output PII masking
+   * rewrote a value inside the structured payload. Lets a caller tell "the
+   * model did not extract this" from "policy redacted it" — and warns that a
+   * `json_schema` response may now violate its own schema, since a masked value
+   * is `[REDACTED]`.
+   */
+  structuredMasked?: boolean;
   requestId: string;
 }): ChatSuccess {
   return {
@@ -93,6 +101,7 @@ export function chatSuccessBody(params: {
         piiMasked: params.piiMasked,
         injectionBlocked: params.injectionBlocked,
         ...(params.grounded === undefined ? {} : { grounded: params.grounded }),
+        ...(params.structuredMasked === undefined ? {} : { structuredMasked: params.structuredMasked }),
       },
       requestId: params.requestId,
     },

@@ -16,7 +16,12 @@ export type RequestReasonCode =
   | "grounding_refused"
   // Document extraction returned OK but its structured payload was dropped
   // because output PII masking was on (see modules/documents/service.ts).
-  | "structured_withheld";
+  | "structured_withheld"
+  // A /chat responseFormat payload came back OK but output PII masking rewrote
+  // a value inside it (see modules/chat/structuredOutput.ts). The /chat analogue
+  // of structured_withheld: the caller must be able to tell a redacted field
+  // from one the model failed to extract.
+  | "structured_masked";
 
 export interface RequestLogRow {
   tenantId?: string;

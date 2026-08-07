@@ -40,6 +40,9 @@ const RAW_CONFIG = {
   },
   features: {
     support_chat: { safety: "dev", model_class: "cheap", max_tokens: 500 },
+    // Blanket output masking + structured output: the combination that used to
+    // rewrite JSON values with nothing on the response to say so.
+    masked_extract: { safety: { protect: { pii: "mask" } }, model_class: "cheap", max_tokens: 500 },
   },
   model_classes: {
     cheap: { primary: "openai/gpt-4o-mini", fallback: "anthropic/claude-haiku" },
@@ -177,6 +180,60 @@ describe.skipIf(!DATABASE_URL)("POST /v1/chat (integration)", () => {
       "SELECT used_usd FROM budget_counters WHERE scope='user_daily' AND key='u1'",
     );
     expect(Number(snap.rows[0].used_usd)).toBeCloseTo(0.0002, 6);
+  });
+
+  it("reports structuredMasked when output masking rewrites a responseFormat payload", async () => {
+    // Parity with /documents' structuredWithheld: a caller must be able to tell
+    // "the model didn't extract this" from "policy redacted it".
+    const redactor: SafetyGuard = {
+      inspectInput: new NoopGuard().inspectInput,
+      async inspectOutput(content: string): Promise<OutputSafetyResult> {
+        return { action: "allow", content, piiMasked: false, findings: [] };
+      },
+      async inspectOutputMany(contents: string[]) {
+        const out = contents.map((c) => c.replace(/\d[\d-]{4,}/g, "[REDACTED]"));
+        return {
+          action: "allow" as const,
+          contents: out,
+          piiMasked: out.some((c, i) => c !== contents[i]),
+          findings: [{ type: "pii" as const, detail: "US_SSN" }],
+        };
+      },
+    };
+    const payload = JSON.stringify({ name: "Jane Roe", ssn: "123-45-6789" });
+    const app = appWith({ chat: async (p) => ({ ...okResult(p.model), content: payload }) }, redactor);
+    const res = await post(app, {
+      userId: "u1",
+      userType: "logged_in",
+      feature: "masked_extract",
+      messages: [{ role: "user", content: "extract" }],
+      responseFormat: { type: "json_object" },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    // Masked per VALUE — still valid JSON, and the untouched field survives.
+    expect(JSON.parse(body.message.content)).toEqual({ name: "Jane Roe", ssn: "[REDACTED]" });
+    expect(body.safety.structuredMasked).toBe(true);
+    expect(body.safety.piiMasked).toBe(true);
+
+    // ...and an operator can grep for it after the fact.
+    const { rows } = await pool.query(
+      "SELECT reason_code FROM request_logs WHERE id = $1",
+      [Number(String(body.requestId).replace("req_", ""))],
+    );
+    expect(rows[0]?.reason_code).toBe("structured_masked");
+  });
+
+  it("omits structuredMasked entirely on a prose response", async () => {
+    // A `false` on every ordinary chat response would be noise.
+    const app = appWith({ chat: async (p) => okResult(p.model) });
+    const res = await post(app, {
+      userId: "u1",
+      userType: "logged_in",
+      feature: "support_chat",
+      messages: [{ role: "user", content: "hi" }],
+    });
+    expect(res.json().safety).not.toHaveProperty("structuredMasked");
   });
 
   it("forwards responseFormat json_schema through the whole pipeline", async () => {
