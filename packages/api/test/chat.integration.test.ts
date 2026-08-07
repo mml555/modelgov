@@ -224,6 +224,39 @@ describe.skipIf(!DATABASE_URL)("POST /v1/chat (integration)", () => {
     expect(rows[0]?.reason_code).toBe("structured_masked");
   });
 
+  it("settles billing when structured masking fails closed", async () => {
+    // The provider call already happened, so its cost is real. A plain Error
+    // here escaped the pipeline's SafetyServiceError handler and left the
+    // reservation unsettled — the hold leaked on every such request.
+    const brokenGuard: SafetyGuard = {
+      inspectInput: new NoopGuard().inspectInput,
+      async inspectOutput(content: string): Promise<OutputSafetyResult> {
+        return { action: "allow", content, piiMasked: false, findings: [] };
+      },
+      // Returns the wrong number of masked values — a contract violation.
+      async inspectOutputMany() {
+        return { action: "allow" as const, contents: ["only-one"], piiMasked: true, findings: [] };
+      },
+    };
+    const payload = JSON.stringify({ a: "111-11-1111", b: "222-22-2222" });
+    const app = appWith({ chat: async (p) => ({ ...okResult(p.model), content: payload }) }, brokenGuard);
+    const res = await post(app, {
+      userId: "u-settle",
+      userType: "logged_in",
+      feature: "masked_extract",
+      messages: [{ role: "user", content: "extract" }],
+      responseFormat: { type: "json_object" },
+    });
+    // Fails closed rather than returning a half-masked payload.
+    expect(res.statusCode).toBe(503);
+
+    // ...and nothing is left reserved.
+    const { rows } = await pool.query(
+      "SELECT reserved_usd FROM budget_counters WHERE scope='user_daily' AND key='u-settle'",
+    );
+    if (rows.length) expect(Number(rows[0].reserved_usd)).toBeCloseTo(0, 6);
+  });
+
   it("omits structuredMasked entirely on a prose response", async () => {
     // A `false` on every ordinary chat response would be noise.
     const app = appWith({ chat: async (p) => okResult(p.model) });

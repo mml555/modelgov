@@ -1,7 +1,7 @@
 import type { SafetyPlan } from "@modelgov/policy-engine";
 import { describe, expect, it, vi } from "vitest";
 import { maskStructuredOutput } from "../src/modules/chat/structuredOutput";
-import type { SafetyGuard } from "../src/services/safety";
+import { SafetyServiceError, type SafetyGuard } from "../src/services/safety";
 
 // Output PII masking for a /chat responseFormat payload. `inspectOutput` treats
 // the completion as prose and rewrites spans in the serialized text; for JSON
@@ -102,10 +102,36 @@ describe("maskStructuredOutput", () => {
     }
   });
 
-  it("falls back when the guard cannot batch", async () => {
+  it("does nothing when the plan would not mask output at all", async () => {
+    // Regression: the fail-closed branch below used to fire regardless of the
+    // plan, so a `pii: off` feature asking for structured output got a 503 from
+    // any guard without the optional batch method.
     const g = guard();
     delete (g as { inspectOutputMany?: unknown }).inspectOutputMany;
-    expect((await maskStructuredOutput(g, JSON.stringify({ a: "x" }), plan())).structured).toBe(false);
+    const body = JSON.stringify({ ssn: "123-45-6789" });
+    for (const p of [plan({ pii: "off" }), plan({ piiScope: "input" })]) {
+      const r = await maskStructuredOutput(g, body, p);
+      expect(r.structured).toBe(false);
+      expect(r.content).toBe(body);
+    }
+  });
+
+  it("FAILS CLOSED when the guard cannot batch a structured payload", async () => {
+    // Falling back to prose masking here would send valid JSON down the exact
+    // path that can corrupt it. SafetyServiceError so the pipeline settles
+    // billing — the provider call has already happened by this point.
+    const g = guard();
+    delete (g as { inspectOutputMany?: unknown }).inspectOutputMany;
+    await expect(
+      maskStructuredOutput(g, JSON.stringify({ a: "x" }), plan()),
+    ).rejects.toThrow(SafetyServiceError);
+  });
+
+  it("still falls back for non-JSON even when the guard cannot batch", async () => {
+    const g = guard();
+    delete (g as { inspectOutputMany?: unknown }).inspectOutputMany;
+    expect((await maskStructuredOutput(g, "just prose", plan())).structured).toBe(false);
+    expect((await maskStructuredOutput(g, "42", plan())).structured).toBe(false);
   });
 
   it("propagates a block without returning the payload", async () => {
@@ -124,7 +150,7 @@ describe("maskStructuredOutput", () => {
     expect(r.masked).toBe(false);
   });
 
-  it("fails closed on a mismatched masked-value count", async () => {
+  it("fails closed on a mismatched masked-value count, as a SafetyServiceError", async () => {
     // Never pair a masked value with the wrong field, and never fall back to
     // the original — it still holds the PII we were asked to redact.
     const g = guard({
@@ -137,7 +163,7 @@ describe("maskStructuredOutput", () => {
     });
     await expect(
       maskStructuredOutput(g, JSON.stringify({ a: "1-1111", b: "2-2222" }), plan()),
-    ).rejects.toThrow(/mismatched/i);
+    ).rejects.toThrow(SafetyServiceError);
   });
 
   it("keeps the payload parseable where a text pass could not", async () => {

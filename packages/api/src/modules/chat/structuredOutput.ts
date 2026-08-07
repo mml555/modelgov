@@ -1,5 +1,5 @@
 import type { SafetyPlan } from "@modelgov/policy-engine";
-import type { OutputSafetyResult, SafetyGuard } from "../../services/safety";
+import { SafetyServiceError, type OutputSafetyResult, type SafetyGuard } from "../../services/safety";
 
 /**
  * Output PII masking for a STRUCTURED chat response.
@@ -74,9 +74,10 @@ function stringLeaves(root: unknown): {
 /**
  * Mask a structured completion value-by-value.
  *
- * Returns `structured: false` when `content` is not JSON (a model can ignore
- * `responseFormat`), so the caller falls back to ordinary prose masking rather
- * than skipping output safety altogether.
+ * Returns `structured: false` ONLY when `content` is not a JSON object/array
+ * (a model can ignore `responseFormat`), so the caller falls back to ordinary
+ * prose masking rather than skipping output safety altogether. A structured
+ * payload the guard cannot mask fails closed instead.
  */
 export async function maskStructuredOutput(
   safety: SafetyGuard,
@@ -84,8 +85,16 @@ export async function maskStructuredOutput(
   plan: SafetyPlan,
 ): Promise<StructuredMaskResult> {
   const none = { content, masked: false, action: "allow" as const, findings: [], structured: false };
-  if (!safety.inspectOutputMany) return none;
 
+  // Nothing would be masked anyway — let the ordinary path no-op. Without this
+  // the fail-closed branch below 503s a `pii: off` feature that merely asked
+  // for structured output, on any guard lacking the optional batch method.
+  if (plan.pii === "off" || plan.piiScope === "input") return none;
+
+  // Parse BEFORE checking for batch support. Bailing out early sent a valid
+  // JSON payload down the prose path, where a mask spanning a delimiter can
+  // invalidate the document — the exact corruption this module exists to
+  // prevent. Only genuinely non-structured content may fall back.
   let parsed: unknown;
   try {
     parsed = JSON.parse(content);
@@ -95,6 +104,17 @@ export async function maskStructuredOutput(
   // A bare JSON scalar has no leaves to walk and is indistinguishable from
   // prose for masking purposes; let the normal path handle it.
   if (parsed === null || typeof parsed !== "object") return none;
+
+  // Structured payload, but the guard cannot mask leaves. Fail closed rather
+  // than prose-mask valid JSON: the built-in CompositeGuard implements this, so
+  // only a custom guard reaches here, and returning a possibly-corrupted
+  // payload is worse than a 503. Matches how the guard already treats "PII
+  // protection enabled but no backend configured".
+  if (!safety.inspectOutputMany) {
+    throw new SafetyServiceError(
+      "output PII masking is enabled for a structured response, but the safety guard cannot mask structured values",
+    );
+  }
 
   const { values, write } = stringLeaves(parsed);
   if (values.length === 0) {
@@ -115,7 +135,11 @@ export async function maskStructuredOutput(
   if (res.contents.length !== values.length) {
     // Never pair a masked value with the wrong field, and never fall back to
     // the original, which still holds the PII we were asked to redact.
-    throw new Error("safety guard returned a mismatched number of masked values");
+    //
+    // SafetyServiceError, not a plain Error: the pipeline's catch settles
+    // billing for that type only, and the provider call has already happened.
+    // A plain Error escaped that handler and left the hold unsettled.
+    throw new SafetyServiceError("safety guard returned a mismatched number of masked values");
   }
   write(res.contents);
   return {
