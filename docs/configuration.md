@@ -353,11 +353,12 @@ features:
 `grounding: strict` (the bare string) remains valid and keeps the defaults.
 
 **Set `persona` and `refusal` outside a support desk.** The defaults are
-deliberately unchanged from before they were configurable, so upgrading from any
-released version never rewords live traffic — but they say "customer-support assistant" and offer to
-"connect you with a human support agent". A claims, clinical or legal
-deployment should not ship either, and one with no support desk cannot honour
-the second.
+deliberately unchanged from before they were configurable: an upgrade from any
+released version does not change the wording sent to users. But they say
+"customer-support assistant" and offer to "connect you with a human support
+agent". A claims, clinical or legal deployment should not ship either — and the
+refusal's promise only holds if there is a support agent available to take the
+handoff, so set `refusal` unless there is.
 
 A feature's `grounding` block replaces the global one **wholesale** rather than
 merging field-by-field, so a feature that sets its own persona is never left
