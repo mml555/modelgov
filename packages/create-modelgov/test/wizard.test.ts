@@ -105,9 +105,11 @@ describe("parseFlags", () => {
     ]);
   });
 
-  it("yields no providers for an empty list rather than [\"\"]", () => {
-    // [""] would scaffold a provider block named "" — worse than none.
-    expect(parseFlags(["--provider", ""]).providers).toEqual([]);
+  it("rejects an empty provider list rather than quietly yielding none", () => {
+    // Earlier this returned []. Silently scaffolding with no providers hides a
+    // malformed command; `--provider ""` is a missing value, not a request for
+    // zero providers (omitting the flag is how you ask for that).
+    expect(() => parseFlags(["--provider", ""])).toThrow(/requires a value/);
   });
 
   it("takes the last positional as the target directory", () => {
@@ -127,6 +129,12 @@ describe("parseFlags", () => {
     }
   });
 
+  it("rejects an EMPTY value, which would otherwise fall through to the default", () => {
+    for (const flag of ["--name", "--framework", "--safety", "--mode", "--template"]) {
+      expect(() => parseFlags([flag, ""]), flag).toThrow(/requires a value/);
+    }
+  });
+
   it("returns an empty object for no arguments", () => {
     expect(parseFlags([])).toEqual({});
   });
@@ -143,6 +151,11 @@ describe("resolveNonInteractive", () => {
       /unknown safety preset/,
     );
     expect(() => validateFlags({ mode: "compose" as never })).toThrow(/unknown mode/);
+    // "" is a supplied value, not an absent one — a truthiness check here let
+    // `--framework ""` silently use the default.
+    for (const k of ["framework", "safety", "mode"] as const) {
+      expect(() => validateFlags({ [k]: "" } as never), k).toThrow(/^unknown /);
+    }
   });
 
   it("returns null without a template, so the wizard prompts", () => {

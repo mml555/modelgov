@@ -27,7 +27,9 @@ export function parseFlags(argv: string[]): Flags {
     // project with a nonsense name. Mirrors requireValue() in @modelgov/cli.
     const val = () => {
       const v = argv[++i];
-      if (v === undefined || v.startsWith("-")) throw new Error(`${a} requires a value`);
+      if (v === undefined || v === "" || v.startsWith("-")) {
+        throw new Error(`${a} requires a value`);
+      }
       return v;
     };
     if (a === "--yes" || a === "-y") f.yes = true;
@@ -72,9 +74,13 @@ function oneOf<T extends string>(value: string, valid: readonly T[], flag: strin
  * the very failure the validation was added to prevent.
  */
 export function validateFlags(flags: Flags): void {
-  if (flags.framework) oneOf(flags.framework, FRAMEWORKS, "framework");
-  if (flags.safety) oneOf(flags.safety, SAFETY_PRESETS, "safety preset");
-  if (flags.mode) oneOf(flags.mode, DEPLOY_MODES, "mode");
+  // `!== undefined`, not truthiness: "" is a SUPPLIED value, and skipping it
+  // here would let `--framework ""` fall through to the default instead of
+  // reporting the malformed command. (parseFlags also rejects an empty value,
+  // so this is the second line of defence for direct callers.)
+  if (flags.framework !== undefined) oneOf(flags.framework, FRAMEWORKS, "framework");
+  if (flags.safety !== undefined) oneOf(flags.safety, SAFETY_PRESETS, "safety preset");
+  if (flags.mode !== undefined) oneOf(flags.mode, DEPLOY_MODES, "mode");
   for (const p of flags.providers ?? []) oneOf(p, WIZARD_PROVIDERS, "provider");
 }
 
