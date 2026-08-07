@@ -353,8 +353,8 @@ features:
 `grounding: strict` (the bare string) remains valid and keeps the defaults.
 
 **Set `persona` and `refusal` outside a support desk.** The defaults are
-deliberately unchanged from before they were configurable, so upgrading never
-rewords live traffic — but they say "customer-support assistant" and offer to
+deliberately unchanged from before they were configurable, so upgrading from any
+released version never rewords live traffic — but they say "customer-support assistant" and offer to
 "connect you with a human support agent". A claims, clinical or legal
 deployment should not ship either, and one with no support desk cannot honour
 the second.

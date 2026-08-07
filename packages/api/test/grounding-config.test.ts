@@ -58,7 +58,11 @@ describe("grounding persona and refusal copy", () => {
     // Unchanged on purpose. It promises a human handoff, which a deployment
     // without a support desk cannot honour — such deployments set `refusal`,
     // and the test above proves that override reaches the user.
-    expect(GROUNDING_REFUSAL).toContain("human support agent");
+    // The full literal, as the persona test does: `toContain` would accept any
+    // other refusal that happened to mention a support agent.
+    expect(GROUNDING_REFUSAL).toBe(
+      "I'm sorry — I couldn't find that in our knowledge base, so I don't want to guess. Let me connect you with a human support agent.",
+    );
   });
 
   it("keeps the enforcement rules regardless of the persona", () => {

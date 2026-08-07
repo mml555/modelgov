@@ -16,8 +16,10 @@ import type { ChatMessage } from "../../types";
  */
 
 /**
- * Default persona. Unchanged from before grounding copy became configurable, so
- * upgrading alters nothing a deployment already ships to its users.
+ * Default persona. Unchanged from BEFORE grounding copy became configurable, so
+ * upgrading from any released version alters nothing a deployment already ships
+ * to its users. (Only a deployment tracking main between the commit that made
+ * this configurable and this one saw the briefly-neutral wording.)
  *
  * It IS a customer-support voice, which is wrong for most deployments — that is
  * the whole reason `persona` exists. Any feature outside a support desk should
