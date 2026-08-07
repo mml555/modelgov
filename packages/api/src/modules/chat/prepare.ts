@@ -88,6 +88,41 @@ function streamSafetyGate(decision: PolicyDecision): ChatFailure | null {
 }
 
 /**
+ * A caller-supplied JSON schema and grounding cannot both own the response.
+ *
+ * `grounding: strict` makes the gateway own the system prompt, which demands
+ * `{found, answer, quotes}`. A caller `json_schema` constrains the provider to
+ * a DIFFERENT shape, so the model returns valid JSON with none of those keys,
+ * `verifyGrounding` fails closed, and every single answer comes back as the
+ * refusal — after a paid model call, and indistinguishable from a genuine "not
+ * in the knowledge base" result.
+ *
+ * Rejected at the door for the same reason streaming is (see streamSafetyGate):
+ * a config conflict the gateway can see up front should never be discovered as
+ * a silent 100% failure rate in production.
+ *
+ * `json_object` is deliberately allowed — grounding already requires JSON, so
+ * asking for JSON agrees with the gateway's prompt rather than fighting it.
+ */
+function groundingResponseFormatGate(
+  decision: PolicyDecision,
+  body: ChatInput,
+): ChatFailure | null {
+  if (decision.safetyPlan.grounding !== "strict") return null;
+  if (body.responseFormat?.type !== "json_schema") return null;
+  return fail(
+    400,
+    "grounding_response_format_conflict",
+    {
+      reason:
+        "grounding is enabled for this feature, so the gateway owns the response shape; a caller-supplied JSON schema would make every answer fail verification",
+      allowed: "json_object",
+    },
+    "A caller-supplied JSON schema cannot be used when grounding is enabled",
+  );
+}
+
+/**
  * A grounded feature MUST be called with a non-empty context block. Rejected
  * before budget is reserved so a misconfigured caller doesn't hold a lease.
  */
@@ -272,7 +307,9 @@ async function prepareFlatCall(
   }
 
   const groundingFail =
-    groundingContextRequired(decision, body) ?? groundingCiteFieldsRequired(decision, body);
+    groundingResponseFormatGate(decision, body) ??
+    groundingContextRequired(decision, body) ??
+    groundingCiteFieldsRequired(decision, body);
   if (groundingFail) return groundingFail;
   // Grounding-context screening runs a billable injection classifier. Screen
   // after the stream gate so a (rejected) streaming request never pays for it,
@@ -365,7 +402,9 @@ async function prepareHierarchicalCall(
   }
 
   const groundingFail =
-    groundingContextRequired(decision, body) ?? groundingCiteFieldsRequired(decision, body);
+    groundingResponseFormatGate(decision, body) ??
+    groundingContextRequired(decision, body) ??
+    groundingCiteFieldsRequired(decision, body);
   if (groundingFail) return groundingFail;
 
   const path = await loadHierarchicalPath(deps.pool, leafNodeId, decision, now, deps.policyMeta?.tenantId);
