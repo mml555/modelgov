@@ -27,7 +27,12 @@ export interface StructuredMaskResult {
   action: "allow" | "block";
   blockReason?: OutputSafetyResult["blockReason"];
   findings: OutputSafetyResult["findings"];
-  /** False when the payload could not be parsed as JSON — caller falls back. */
+  /**
+   * False when this module did not handle the payload and the caller should run
+   * ordinary prose masking: the content is not a JSON object/array, or the plan
+   * would not mask output at all. A structured payload the guard cannot mask
+   * throws instead of returning false.
+   */
   structured: boolean;
 }
 
@@ -74,10 +79,11 @@ function stringLeaves(root: unknown): {
 /**
  * Mask a structured completion value-by-value.
  *
- * Returns `structured: false` ONLY when `content` is not a JSON object/array
- * (a model can ignore `responseFormat`), so the caller falls back to ordinary
- * prose masking rather than skipping output safety altogether. A structured
- * payload the guard cannot mask fails closed instead.
+ * Returns `structured: false` in the two cases where this module has nothing to
+ * do — the content is not a JSON object/array (a model can ignore
+ * `responseFormat`), or the plan would not mask output anyway — so the caller
+ * falls back to ordinary prose masking rather than skipping output safety
+ * altogether. A structured payload the guard cannot mask fails closed instead.
  */
 export async function maskStructuredOutput(
   safety: SafetyGuard,
