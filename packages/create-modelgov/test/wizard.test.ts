@@ -53,7 +53,7 @@ const WIZARD_ANSWERS = {
   mode: "full",
 };
 
-const { main, parseFlags, promptOptions, resolveNonInteractive } = await import("../src/wizard");
+const { main, parseFlags, promptOptions, resolveNonInteractive, validateFlags } = await import("../src/wizard");
 
 let dir: string;
 beforeEach(() => {
@@ -114,12 +114,37 @@ describe("parseFlags", () => {
     expect(parseFlags(["--name", "a", "out"]).dir).toBe("out");
   });
 
+  it("rejects a flag whose value is missing rather than eating the next flag", () => {
+    // `--name --yes` would otherwise set name to "--yes" AND silently drop
+    // --yes, scaffolding a project with a nonsense name.
+    for (const argv of [
+      ["--name", "--yes"],
+      ["--template"],
+      ["--framework", "--mode", "full"],
+      ["--provider"],
+    ]) {
+      expect(() => parseFlags(argv), argv.join(" ")).toThrow(/requires a value/);
+    }
+  });
+
   it("returns an empty object for no arguments", () => {
     expect(parseFlags([])).toEqual({});
   });
 });
 
 describe("resolveNonInteractive", () => {
+  it("validates supplied flags even with no template, before falling through", () => {
+    // The early return used to skip validation entirely, so `--framework next`
+    // with no --template reached the wizard and crashed later in the scaffolder.
+    expect(() => resolveNonInteractive({ framework: "next" as never })).toThrow(
+      /unknown framework 'next'/,
+    );
+    expect(() => resolveNonInteractive({ safety: "bogus" as never })).toThrow(
+      /unknown safety preset/,
+    );
+    expect(() => validateFlags({ mode: "compose" as never })).toThrow(/unknown mode/);
+  });
+
   it("returns null without a template, so the wizard prompts", () => {
     expect(resolveNonInteractive({ name: "acme" })).toBeNull();
   });

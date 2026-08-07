@@ -118,6 +118,29 @@ describe("dispatch — doctor production", () => {
   });
 });
 
+describe("explain flag parsing", () => {
+  it("rejects a non-numeric --inputTokensEstimate instead of sending null", () => {
+    // Number("abc") is NaN, which JSON.stringify writes as null — the caller
+    // got no error for a typo, just a silently different request.
+    return expect(
+      dispatch("explain", ["--userType", "u", "--feature", "f", "--inputTokensEstimate", "abc"]),
+    ).rejects.toThrow(/positive number/);
+  });
+
+  it("rejects a non-positive --inputTokensEstimate", async () => {
+    for (const v of ["0", "-5"]) {
+      await expect(
+        dispatch("explain", ["--userType", "u", "--feature", "f", "--inputTokensEstimate", v]),
+      ).rejects.toThrow(/positive number/);
+    }
+  });
+
+  it("accepts a valid --inputTokensEstimate", async () => {
+    await dispatch("explain", ["--userType", "u", "--feature", "f", "--inputTokensEstimate", "500"]);
+    expect(mods.runExplain.mock.calls[0]?.[0]).toMatchObject({ inputTokensEstimate: 500 });
+  });
+});
+
 describe("main", () => {
   const withArgv = (args: string[], fn: () => void) => {
     const argv = process.argv;

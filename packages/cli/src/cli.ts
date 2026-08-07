@@ -31,7 +31,7 @@ Run 'modelgov <command> --help' for command options.
 `;
 
 /**
- * The CLI. Exported and side-effect-free at import time — `bin.ts` invokes it.
+ * The CLI. Exported and side-effect-free at import time — `index.ts` invokes it.
  * This module used to end in a bare top-level call, so importing it RAN the
  * CLI; that is why none of the dispatch logic could be tested, and why the
  * blanket index.ts coverage exclusion hid 216 lines of it.
@@ -209,7 +209,7 @@ function parseExplainFlags(args: string[]): ExplainFlags {
         i++;
         break;
       case "--inputTokensEstimate":
-        flags.inputTokensEstimate = Number(requireValue(arg, next));
+        flags.inputTokensEstimate = requireNumber(arg, requireValue(arg, next));
         i++;
         break;
       case "--config":
@@ -238,6 +238,21 @@ function parseExplainFlags(args: string[]): ExplainFlags {
   if (!flags.userType) throw new Error("--userType is required");
   if (!flags.feature) throw new Error("--feature is required");
   return flags;
+}
+
+/**
+ * A flag that must be a positive number.
+ *
+ * `Number("abc")` is NaN, which sailed through to JSON.stringify and reached
+ * the API as `inputTokensEstimate: null` — the caller got no error at all for a
+ * typo'd value, just a silently different request.
+ */
+function requireNumber(flag: string, value: string): number {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) {
+    throw new Error(`${flag} requires a positive number (got '${value}')`);
+  }
+  return n;
 }
 
 function requireValue(flag: string, value: string | undefined): string {

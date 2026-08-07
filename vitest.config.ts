@@ -157,8 +157,8 @@ export default defineConfig({
         // 2026-08-06 ratchet: `**/index.ts` stopped being blanket-excluded, so the
         // CLI's 216-line dispatch entrypoint joined the measured surface. It was
         // untestable until then — the module ended in a bare top-level `main()`,
-        // so importing it RAN the CLI; splitting the executable into `bin.ts` is
-        // what made the routing testable. Coverage went UP despite the larger
+        // so importing it RAN the CLI; moving the logic into `cli.ts` and leaving
+        // a three-line shim in `index.ts` is what made the routing testable. Coverage went UP despite the larger
         // denominator: 37.29/38.00/40.14/37.85 → 41.33/46.21/43.19/41.76.
         // Measured 2026-08-06: 41.33 lines / 46.21 functions / 43.19 branches / 41.76 statements.
         "packages/cli/src/**/*.ts": {

@@ -22,12 +22,19 @@ export function parseFlags(argv: string[]): Flags {
   const f: Flags = {};
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]!;
-    const val = () => argv[++i];
+    // Reject a missing value instead of swallowing the next flag: `--name --yes`
+    // would otherwise set name to "--yes" AND silently drop --yes, scaffolding a
+    // project with a nonsense name. Mirrors requireValue() in @modelgov/cli.
+    const val = () => {
+      const v = argv[++i];
+      if (v === undefined || v.startsWith("-")) throw new Error(`${a} requires a value`);
+      return v;
+    };
     if (a === "--yes" || a === "-y") f.yes = true;
     else if (a === "--name") f.name = val();
     else if (a === "--framework") f.framework = val() as Framework;
     else if (a === "--template") f.template = val() as TemplateId;
-    else if (a === "--provider" || a === "--providers") f.providers = (val() ?? "").split(",").map((s) => s.trim()).filter(Boolean) as Provider[];
+    else if (a === "--provider" || a === "--providers") f.providers = val().split(",").map((s) => s.trim()).filter(Boolean) as Provider[];
     else if (a === "--safety") f.safety = val() as SafetyPreset;
     else if (a === "--mode") f.mode = val() as DeployMode;
     else if (!a.startsWith("-")) f.dir = a;
@@ -55,14 +62,30 @@ function oneOf<T extends string>(value: string, valid: readonly T[], flag: strin
 }
 
 /** Non-interactive resolution when enough flags are given (scripts / CI). */
+/**
+ * Reject any bad flag value the caller supplied, whether or not enough flags
+ * were given to skip the wizard.
+ *
+ * Validating inside resolveNonInteractive's post-template path meant
+ * `--framework next` with NO `--template` returned early and fell through to
+ * the interactive wizard, where the bad value crashed later in the scaffolder —
+ * the very failure the validation was added to prevent.
+ */
+export function validateFlags(flags: Flags): void {
+  if (flags.framework) oneOf(flags.framework, FRAMEWORKS, "framework");
+  if (flags.safety) oneOf(flags.safety, SAFETY_PRESETS, "safety preset");
+  if (flags.mode) oneOf(flags.mode, DEPLOY_MODES, "mode");
+  for (const p of flags.providers ?? []) oneOf(p, WIZARD_PROVIDERS, "provider");
+}
+
 export function resolveNonInteractive(flags: Flags): ProjectOptions | null {
+  validateFlags(flags);
   if (!flags.template) return null;
   const template = TEMPLATES[flags.template];
   if (!template) throw new Error(`unknown template '${flags.template}' (one of: ${TEMPLATE_IDS.join(", ")})`);
   const framework = flags.framework ? oneOf(flags.framework, FRAMEWORKS, "framework") : "none";
   const safetyPreset = flags.safety ? oneOf(flags.safety, SAFETY_PRESETS, "safety preset") : "balanced";
   const mode = flags.mode ? oneOf(flags.mode, DEPLOY_MODES, "mode") : "simple";
-  for (const p of flags.providers ?? []) oneOf(p, WIZARD_PROVIDERS, "provider");
   return {
     projectName: flags.name ?? "my-app",
     framework,
@@ -142,7 +165,7 @@ export async function promptOptions(flags: Flags): Promise<ProjectOptions> {
 }
 
 /**
- * The whole wizard. Exported and side-effect-free at import time — `bin.ts` is
+ * The whole wizard. Exported and side-effect-free at import time — `index.ts` is
  * what actually invokes it. This module used to end in a bare top-level call to
  * it, so importing the module RAN the scaffolder; that is why none of this file
  * could be tested, and why the blanket index.ts coverage exclusion hid it.
