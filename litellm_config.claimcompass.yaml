@@ -1,0 +1,57 @@
+# LiteLLM proxy config for ClaimCompass.
+#
+# Every `model_name` here must match a `primary`/`fallback` string in
+# modelgov.yaml's model_classes — that name is what Modelgov sends as `model`,
+# and what it records as `resolved_model` in request_logs.
+#
+# Naming rule that matters: the EMBEDDING entry is named `gemini-embedding-001`
+# with no provider prefix, deliberately. ClaimCompass stores the resolved model
+# id in claim_chunks.embedding_kind as its vector-space identity and never
+# cosine-compares across spaces (lib/ai/policy-retrieval.ts). Every vector
+# already in that table is tagged "gemini-embedding-001", so the name Modelgov
+# resolves has to be byte-identical or the existing corpus silently stops
+# matching newly-embedded chunks.
+
+model_list:
+  # ── Text: bulk extraction workhorse (highest RPD on the free tier) ────────
+  - model_name: gemini/gemini-3.1-flash-lite
+    litellm_params:
+      model: gemini/gemini-3.1-flash-lite
+      api_key: os.environ/GEMINI_API_KEY
+  - model_name: gemini/gemini-2.5-flash-lite
+    litellm_params:
+      model: gemini/gemini-2.5-flash-lite
+      api_key: os.environ/GEMINI_API_KEY
+
+  # ── Text: narrative writing + vision OCR ─────────────────────────────────
+  - model_name: gemini/gemini-2.5-flash
+    litellm_params:
+      model: gemini/gemini-2.5-flash
+      api_key: os.environ/GEMINI_API_KEY
+  - model_name: gemini/gemini-3-flash-preview
+    litellm_params:
+      model: gemini/gemini-3-flash-preview
+      api_key: os.environ/GEMINI_API_KEY
+
+  # ── Text: strongest, for policy interpretation ───────────────────────────
+  - model_name: gemini/gemini-3.5-flash
+    litellm_params:
+      model: gemini/gemini-3.5-flash
+      api_key: os.environ/GEMINI_API_KEY
+
+  # ── Embeddings: name MUST stay bare (see header) ─────────────────────────
+  - model_name: gemini-embedding-001
+    litellm_params:
+      model: gemini/gemini-embedding-001
+      api_key: os.environ/GEMINI_API_KEY
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY
+
+litellm_settings:
+  # Gemini rejects some OpenAI-shaped params outright. Dropping the unsupported
+  # ones is what lets Modelgov speak one OpenAI dialect to every provider.
+  # NOTE: this also silently drops `dimensions` if a Gemini embedding route does
+  # not accept it — the reason ClaimCompass asserts the returned vector width
+  # rather than trusting the request (see lib/ai/provider.ts).
+  drop_params: true

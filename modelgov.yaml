@@ -1,48 +1,170 @@
-# Modelgov policy config. Authored in snake_case; parsed + validated by
-# @modelgov/policy-engine. Provider api_key env/VAR refs are resolved by the API
-# layer at load time (never inside the pure engine).
+# Modelgov policy for ClaimCompass.
+#
+# Feature names are ClaimCompass's `GeminiTask` values verbatim
+# (lib/ai/gemini-model-router.ts) so a request_logs row maps straight back to
+# the call site that made it. Adding a task there means adding a feature here.
 
 project:
-  name: modelgov-demo
+  name: claimcompass
   environment: development
 
 providers:
-  openai:
-    api_key: env/OPENAI_API_KEY
-  anthropic:
-    api_key: env/ANTHROPIC_API_KEY
+  gemini:
+    api_key: env/GEMINI_API_KEY
 
 budgets:
   global:
-    monthly_usd: 500
+    monthly_usd: 200
+    daily_usd: 15
     alert_at_percent: 80
     hard_stop_at_percent: 100
   by_user_type:
-    anonymous:
-      daily_usd: 0.02
-      daily_requests: 5
-      models: ["cheap"]
-    logged_in:
-      daily_usd: 0.25
-      daily_requests: 50
-      models: ["cheap", "standard"]
-    admin:
-      daily_usd: 5.00
+    # Background jobs (document ingestion, indexing, extraction, and the
+    # narrative drafts generated off a queue). Highest volume by far and no
+    # human waiting, so it gets the largest request allowance.
+    #
+    # Every class is permitted here, and the daily USD cap — not the class list —
+    # is the real control. Reason: ClaimCompass does not yet thread a signed-in
+    # actor through lib/ai/provider.ts, so essentially every call arrives as
+    # `system`. Restricting classes by user_type only starts to mean something
+    # once interactive paths pass a real AiActor; until then it just blocks
+    # legitimate work (verified: claim_summary is `standard`, and withholding it
+    # here returned 403 policy_blocked).
+    system:
+      daily_usd: 8.00
+      daily_requests: 4000
+      models: ["cheap", "standard", "premium", "vision", "embedding"]
+    # A logged-in adjuster doing interactive work.
+    adjuster:
+      daily_usd: 3.00
       daily_requests: 500
-      models: ["cheap", "standard", "premium"]
+      models: ["cheap", "standard", "premium", "vision", "embedding"]
+    admin:
+      daily_usd: 10.00
+      daily_requests: 2000
+      models: ["cheap", "standard", "premium", "vision", "embedding"]
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Safety baseline. Features inherit this and override only where they differ.
+#
+# THE IMPORTANT PART: in ClaimCompass the PII *is* the payload. Extracting the
+# named insured, the loss address, the policy number and the mortgagee is the
+# product. A blanket `pii: mask` would hand the model `<PERSON>` where the name
+# should be and make every extraction useless, so this is a per-entity policy:
+# the claim-relevant identifiers are allowed through, and the identifiers a
+# claim file has no business sending upstream are masked.
+#
+# `default: allow` — deny-list semantics — and this is measured, not a guess.
+#
+# Presidio returns EVERY match with a confidence score, and Modelgov does not
+# threshold on it (services/safety/presidio.ts parses `score` and never filters
+# by it). Asking the analyzer about one line of ordinary claim text returns:
+#
+#   US_SSN            "402-88-1173"   0.85   <- real, must mask
+#   PERSON            "Maria Delgado" 0.85   <- payload
+#   LOCATION          "Tampa"         0.85   <- payload
+#   US_DRIVER_LICENSE "882913"        0.40   <- part of policy no. HO3-882913
+#   PHONE_NUMBER      "8829301145"    0.40   <- mortgagee loan number
+#   US_BANK_NUMBER    "8829301145"    0.05   <- same loan number
+#   IN_PAN            "HO3-882913"    0.05   <- an INDIAN tax id, on a policy no.
+#
+# With `default: mask`, that 0.01–0.05 noise redacts the policy number, the
+# claim number and the mortgagee loan number — the exact fields extraction
+# exists to produce. Verified: it returned policy_number: "REDACTED".
+#
+# So the mask list names only entities that fire with HIGH confidence and are
+# genuinely never claim payload. US_SSN — the one that actually matters — scores
+# 0.85, so it is caught reliably without dragging the payload down with it.
+# US_DRIVER_LICENSE / US_PASSPORT / US_BANK_NUMBER are deliberately NOT masked:
+# every one of them false-positives on insurance identifiers.
+#
+# Revisit if Modelgov gains a confidence threshold — with one, `default: mask`
+# becomes the better posture.
+# ─────────────────────────────────────────────────────────────────────────────
+safety:
+  preset: custom
+  protect:
+    pii:
+      mask:
+        - US_SSN # 0.85 confidence, never a claim field
+        - CREDIT_CARD # Luhn-checked, so effectively no false positives
+        - IBAN_CODE # checksummed
+        - CRYPTO # checksummed
+        - MEDICAL_LICENSE
+      default: allow
+    pii_scope: both
+    # Off at the baseline: the injection classifier is a per-request model call,
+    # and the bulk extraction features run it thousands of times a day over
+    # carrier PDFs. Features that take free-typed human input turn it back on.
+    prompt_injection: off
+  injection_model: gemini/gemini-3.1-flash-lite
 
 features:
-  support_chat:
-    safety: strict # pii: block, prompt_injection: block — blocks PII in/out
+  # ── Bulk background extraction: cheap class, high RPD, JSON out ───────────
+  field_extraction:
     model_class: cheap
-    max_tokens: 500
-  notes_helper:
-    safety: balanced # pii: mask — masks PII in input and output instead of blocking
+    max_tokens: 4000
+  policy_extraction:
     model_class: cheap
-    max_tokens: 500
+    max_tokens: 4000
+  document_classification:
+    model_class: cheap
+    max_tokens: 1000
+  document_summary:
+    model_class: cheap
+    max_tokens: 2000
+
+  # ── Narrative writing. Output reaches a carrier or a client, so the
+  #    per-entity allow list above is what keeps the insured's name in the
+  #    letter instead of redacting it. ─────────────────────────────────────
+  claim_summary:
+    model_class: standard
+    max_tokens: 2000
+  carrier_followup:
+    model_class: standard
+    max_tokens: 2000
+  client_status_update:
+    model_class: standard
+    max_tokens: 2000
+
+  # ── Interactive policy Q&A. The one feature where a human types the prompt,
+  #    so injection protection goes back on; and the one that must never
+  #    invent policy language, so grounding is strict and citations must name
+  #    the page the quote came from. ───────────────────────────────────────
+  policy_qa:
+    model_class: premium
+    max_tokens: 2000
+    safety:
+      preset: custom
+      protect:
+        prompt_injection: block
+      grounding:
+        mode: strict
+        persona: >-
+          You are assisting a licensed public adjuster with an insurance claim.
+          Answer only from the policy language and claim records in the CONTEXT.
+          Never infer coverage, deadlines, or dollar amounts that are not
+          written there.
+        refusal: >-
+          I could not find that in this claim's policy or documents, so I am not
+          going to guess. Check the declarations page, or upload the endorsement
+          that would cover it.
+        cite: [page, section]
+
+  # ── Multimodal OCR over rendered PDF pages. ──────────────────────────────
+  document_ocr:
+    model_class: vision
+    max_tokens: 8000
+
+  # ── Embeddings for retrieval indexing. ───────────────────────────────────
+  # max_tokens is required by the schema and feeds the worst-case cost
+  # reservation; an embedding call emits no output tokens, hence 1.
+  embedding:
+    model_class: embedding
+    max_tokens: 1
 
 routing:
-  degrade_at_percent: 80 # downgrade one model class once global spend crosses this
+  degrade_at_percent: 80
   retry:
     max_attempts: 3
     backoff_ms: [500, 2000, 8000]
@@ -51,24 +173,51 @@ routing:
 
 model_classes:
   cheap:
-    primary: openai/gpt-4o-mini
-    fallback: anthropic/claude-haiku
+    primary: gemini/gemini-3.1-flash-lite
+    fallback: gemini/gemini-2.5-flash-lite
   standard:
-    primary: anthropic/claude-sonnet
-    fallback: openai/gpt-4o
+    primary: gemini/gemini-2.5-flash
+    fallback: gemini/gemini-3.1-flash-lite
   premium:
-    primary: openai/gpt-5
-    fallback: anthropic/claude-opus
+    primary: gemini/gemini-3.5-flash
+    fallback: gemini/gemini-2.5-flash
+  vision:
+    primary: gemini/gemini-2.5-flash
+    fallback: gemini/gemini-3-flash-preview
+  # NO fallback, on purpose. Every other class should degrade rather than fail,
+  # but a different embedding model is a different VECTOR SPACE — silently
+  # falling back would write vectors into claim_chunks that can never be
+  # cosine-compared against the existing corpus. A hard failure is recoverable;
+  # a fragmented index is not.
+  embedding:
+    primary: gemini-embedding-001
 
-safety:
-  preset: balanced
-  protect:
-    pii: mask
-    prompt_injection: block
-  # Local sentinel routed to the demo classifier (see litellm_config.yaml). Using
-  # a `local/` name — not a real provider model — keeps the setup wizard from
-  # shadowing your real cheap-tier model when it preserves this boot-only field.
-  injection_model: local/injection-guard
+# Per-1k-token prices. Modelgov reconciles actual spend from LiteLLM's
+# x-litellm-response-cost header; these drive the PRE-call reservation, so
+# over-stating is safe (it over-books) and under-stating is not.
+#
+# VERIFY BEFORE PRODUCTION: only the two Flash tiers below are taken from a
+# published price ($1.50/$9 and $0.30/$2.50 per million). The rest are set to
+# the higher Flash tier as a deliberately conservative guess, not a quoted rate.
+pricing:
+  gemini/gemini-3.5-flash:
+    input_per_1k: 0.0015
+    output_per_1k: 0.009
+  gemini/gemini-3.1-flash-lite:
+    input_per_1k: 0.0003
+    output_per_1k: 0.0025
+  gemini/gemini-2.5-flash-lite:
+    input_per_1k: 0.0003
+    output_per_1k: 0.0025
+  gemini/gemini-2.5-flash:
+    input_per_1k: 0.0015
+    output_per_1k: 0.009
+  gemini/gemini-3-flash-preview:
+    input_per_1k: 0.0015
+    output_per_1k: 0.009
+  gemini-embedding-001:
+    input_per_1k: 0.00015
+    output_per_1k: 0
 
 observability:
-  provider: none # "none" | "langfuse"
+  provider: none

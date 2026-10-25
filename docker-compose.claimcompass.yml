@@ -1,0 +1,42 @@
+# ClaimCompass OVERLAY for the simple stack. Layer it, don't replace:
+#   docker compose -f docker-compose.simple.yml -f docker-compose.claimcompass.yml up -d <services>
+# or just use ./up-claimcompass.sh, which also skips the console (its image
+# cannot currently build — see that script's comment).
+#
+# Adds the self-hosted Tesseract OCR sidecar and points the gateway at it, which
+# turns on Modelgov's `tesseract` document provider (TESSERACT_URL is what gates
+# it — see packages/api/src/config/env.ts).
+name: modelgov
+
+services:
+  tesseract-ocr:
+    build:
+      context: ./tools/tesseract-ocr
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8080/health', timeout=3).status==200 else 1)"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      # Rasterizing at 300dpi on first request can be slow on a cold container.
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          # OCR at 300dpi holds a full-page bitmap per worker thread; 128M (the
+          # demo-llm limit) OOMs on a legal-size scan.
+          memory: 1G
+
+  api:
+    environment:
+      TESSERACT_URL: http://tesseract-ocr:8080
+      # Self-hosted, so no per-page cost to attribute. Request and token budgets
+      # still apply, and every page still gets an audit row.
+      DOCUMENT_PRICE_PER_PAGE_TESSERACT: "0"
+      # ClaimCompass rasterizes PDFs itself and sends ONE page per request so
+      # page numbers survive into claim_chunks.page_number, so a single request
+      # never needs the 30-page default.
+      DOCUMENT_MAX_PAGES: "50"
+    depends_on:
+      tesseract-ocr:
+        condition: service_healthy
